@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
+
+# Generated analysis artifacts
+results/*.csv
+results/*.json
+results/*.png
+openvsp/generated/
+*.adb
+*.history
+*.polar
+
+# Keep result directories in the repository
+!results/.gitkeep

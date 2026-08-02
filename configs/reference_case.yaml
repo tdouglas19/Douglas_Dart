@@ -1,0 +1,53 @@
+case:
+  name: numerical_reference_not_a_design
+  fuel_key: jet_a_reference
+
+environment:
+  altitude_m: 0.0
+  mach: 0.20
+
+selector:
+  circular_intake_diameter_m: 0.300
+  open_fraction: 0.500
+  discharge_coefficient: 0.78
+  total_pressure_recovery: 0.92
+
+nozzle:
+  throat_diameter_m: 0.100
+  exit_to_throat_area_ratio: 2.25
+  discharge_coefficient: 0.96
+
+pulsejet:
+  chamber_volume_m3: 0.025
+  gamma: 1.33
+  gas_constant_j_per_kg_k: 287.05
+  combustion_efficiency: 0.58
+  target_equivalence_ratio: 0.90
+  initial_equivalence_ratio: 0.90
+  burn_duration_s: 0.004
+  minimum_cycle_period_s: 0.018
+  ignition_pressure_ratio_max: 1.03
+  minimum_fresh_air_fraction: 0.30
+  wall_temperature_k: 500.0
+  wall_heat_transfer_w_per_k: 20.0
+  maximum_gas_temperature_k: 2600.0
+
+ramjet:
+  gamma: 1.40
+  gas_constant_j_per_kg_k: 287.05
+  mass_capture_coefficient: 0.90
+  combustor_total_pressure_loss_fraction: 0.06
+  combustor_efficiency: 0.96
+  target_combustor_exit_temperature_k: 1900.0
+  minimum_self_sustaining_mach: 1.50
+
+flight:
+  reference_area_m2: 0.18
+  initial_mass_kg: 45.0
+  zero_lift_drag_coefficient: 0.055
+  induced_drag_factor: 0.18
+  lift_curve_slope_per_rad: 2.50
+
+simulation:
+  pulsejet_duration_s: 0.25
+  time_step_s: 0.00002
