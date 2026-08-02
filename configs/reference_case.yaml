@@ -7,7 +7,7 @@ environment:
   mach: 0.20
 
 selector:
-  circular_intake_diameter_m: 0.300
+  circular_intake_diameter_m: 0.195
   open_fraction: 0.500
   discharge_coefficient: 0.78
   total_pressure_recovery: 0.92
@@ -39,11 +39,12 @@ ramjet:
   combustor_total_pressure_loss_fraction: 0.06
   combustor_efficiency: 0.96
   target_combustor_exit_temperature_k: 1900.0
-  minimum_self_sustaining_mach: 1.50
+  minimum_lightoff_test_mach: 0.80
+  minimum_self_sustaining_mach: 1.10
 
 flight:
   reference_area_m2: 0.18
-  initial_mass_kg: 45.0
+  initial_mass_kg: 21.0
   zero_lift_drag_coefficient: 0.055
   induced_drag_factor: 0.18
   lift_curve_slope_per_rad: 2.50

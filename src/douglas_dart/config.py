@@ -134,6 +134,7 @@ class RamjetConfig:
     combustor_total_pressure_loss_fraction: float
     combustor_efficiency: float
     target_combustor_exit_temperature_k: float
+    minimum_lightoff_test_mach: float
     minimum_self_sustaining_mach: float
 
     def __post_init__(self) -> None:
@@ -147,7 +148,10 @@ class RamjetConfig:
         _positive(
             "target_combustor_exit_temperature_k", self.target_combustor_exit_temperature_k
         )
+        _positive("minimum_lightoff_test_mach", self.minimum_lightoff_test_mach)
         _positive("minimum_self_sustaining_mach", self.minimum_self_sustaining_mach)
+        if self.minimum_self_sustaining_mach < self.minimum_lightoff_test_mach:
+            raise ValueError("self-sustaining Mach cannot be below the light-off test Mach")
 
 
 @dataclass(frozen=True)

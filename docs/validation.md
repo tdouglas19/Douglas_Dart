@@ -6,8 +6,12 @@
 - correct no-flow behavior against a pressure gradient;
 - choked-flow independence from downstream pressure;
 - numerical inversion of the supersonic area-Mach relation;
+- numerical inversion of the subsonic area-Mach relation;
+- mass-flow and thrust continuity at C-D-nozzle choking onset;
+- internal normal-shock location for overexpanded C-D-nozzle operation;
 - explicit enforcement of the half-area selector requirement;
 - finite positive pulsejet state through a short integration;
+- cumulative pulsejet mass and energy ledger closure to floating-point tolerance;
 - subsonic ramjet operability flagging; and
 - flight-model sign conventions for fuel burn and drag.
 
@@ -20,10 +24,10 @@ performance accuracy.
    ranges and uncertainty distributions.
 2. **Pulse frequency:** compare predicted period, pressure ratio, and blowdown shape
    against at least one geometrically relevant published or measured pulsejet case.
-3. **Mass/energy audit:** bound per-cycle mass residual and energy accounting over a
-   converged time-step sweep.
-4. **Nozzle regime:** add normal-shock/separation logic or constrain analysis to cases
-   where the ideal fixed-exit assumption is defensible.
+3. **Mass/energy audit:** the cumulative implementation ledger now closes; next bound
+   per-cycle residuals and physical-model error over a converged time-step sweep.
+4. **Nozzle regime:** validate the new quasi-one-dimensional normal-shock branch and
+   add separation criteria before trusting strongly overexpanded points.
 5. **Ramjet matching:** solve combustor pressure/nozzle flow compatibility instead of
    merely reporting the residual.
 6. **Transition:** model selector timing, trapped volumes, leakage, and ignition during
@@ -40,9 +44,9 @@ performance accuracy.
 - Use a time step at least 100 times smaller than the configured burn duration for
   reference runs.
 - A temperature ceiling currently represents omitted dissociation/variable-property
-  effects; rejected energy is tracked but not yet surfaced in the CLI summary.
-- Pressure-thrust clipping in severe overexpansion prevents a low-order artifact from
-  producing negative gross thrust. The result is flagged and should not be trusted.
+  effects; rejected energy is surfaced in the CLI conservation audit.
+- Internal normal shocks are treated as one-dimensional and stationary. Boundary-layer
+  separation and transient shock motion remain unresolved and flagged.
 - A self-sustaining ramjet flag means only that configured gates passed; it is not a
   combustion-stability prediction.
 - The ramjet spillage treatment bounds flow through an undersized nozzle but is not

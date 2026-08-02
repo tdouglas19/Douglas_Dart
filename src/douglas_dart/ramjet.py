@@ -110,6 +110,10 @@ def evaluate_ramjet(
     )
 
     status: list[str] = []
+    if mach < config.minimum_lightoff_test_mach:
+        status.append("below_configured_lightoff_test_mach")
+    elif mach < config.minimum_self_sustaining_mach:
+        status.append("lightoff_test_only_below_self_sustaining_mach")
     if mach < config.minimum_self_sustaining_mach:
         status.append("below_configured_self_sustaining_mach")
     if combustor_exit_pressure_pa <= atmosphere.pressure_pa:

@@ -47,6 +47,23 @@ class PulsejetTests(unittest.TestCase):
         self.assertTrue(summary.numerical_reference_only)
         self.assertGreater(summary.peak_chamber_pressure_pa, 101_325.0)
 
+    def test_control_volume_mass_and_energy_ledgers_close(self):
+        simulator = PulsejetSimulator(
+            self.case.pulsejet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            self.case.altitude_m,
+            self.case.mach,
+        )
+        simulator.run(0.05, self.case.simulation.time_step_s)
+        audit = simulator.conservation_audit()
+        self.assertLess(abs(audit.relative_mass_balance_residual), 1e-12)
+        self.assertLess(abs(audit.relative_energy_balance_residual), 1e-12)
+        self.assertGreater(audit.cumulative_air_ingested_kg, 0.0)
+        self.assertGreater(audit.cumulative_exhaust_discharged_kg, 0.0)
+        self.assertGreater(audit.cumulative_combustion_heat_added_j, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,8 @@
 - Add mass/energy residual reporting and time-step convergence tests.
 - Build pressure-history, thrust, mass-flow, and fuel-flow plots.
 - Run fuel and intake/nozzle sensitivity studies with uncertainty bounds.
+- Use the handoff sweep to map the throat/body packaging conflict before selecting
+  an intake capture schedule or nozzle geometry.
 
 ## Phase 2 — geometry and external aerodynamics
 
@@ -31,6 +33,9 @@
 
 ## Required owner decisions
 
-The next design branch needs target mission numbers: peak Mach, speed-run duration,
-maximum altitude, launch-site elevation, recovery method, maximum gross mass, and
-hard geometric envelope. Fuel selection follows a scored trade rather than a default.
+The current starting point is a roughly 21 kg loaded vehicle with a 195 mm nominal
+body/intake and a sled → climb → dive → Mach 0.80 light-off test → Mach 1.1–1.3
+handoff search → speed run → zoom/glide profile. The next design branch still needs
+target peak Mach, speed-run duration, maximum altitude, sled release speed, launch
+site elevation, recovery method, and hard length constraints. Fuel selection follows
+a scored trade rather than a default.

@@ -52,18 +52,28 @@ This provides the requested rise, decay, pressure-differential intake, combustio
 and repeat behavior. It does not prove that an acoustic mode will sustain itself;
 that requires calibration or a higher-order gas-dynamics model.
 
+The simulator maintains a cumulative control-volume ledger for air and fuel inflow,
+exhaust outflow, transported enthalpy, released chemical heat, rejected heat, and
+any numerical energy-floor correction. The reported balance residuals test whether
+the implementation closes; they do not validate the underlying lumped assumptions.
+
 ## Fixed C-D nozzle
 
-The nozzle model checks the critical pressure ratio. Below choking, it treats the
-throat as a compressible restriction and expands to ambient. When choked, it solves
-the supersonic area-Mach branch for the specified exit/throat area ratio and uses
+The nozzle model uses the full area-Mach relation to distinguish three regimes:
+fully subsonic flow, a sonic throat followed by an internal normal shock, and a
+supersonic geometric exit. The internal-shock location is solved so the downstream
+subsonic exit pressure matches ambient. For a supersonic exit it uses
 
 \[
 F_g=\dot m V_e+(p_e-p_a)A_e.
 \]
 
-Strong overexpansion is flagged because internal shocks, separation, hysteresis,
-and transient wave interaction are not represented.
+The configured discharge coefficient is treated as an effective-flow-area factor
+for both mass flow and the exit pressure-force term so the low-order solution stays
+momentum-consistent as a normal shock crosses the exit plane.
+
+Boundary-layer separation, oblique-shock structure, hysteresis, and transient wave
+interaction are still not represented and are explicitly flagged.
 
 ## Ramjet
 
@@ -75,9 +85,10 @@ is treated as inlet spillage and only nozzle-compatible flow contributes to thru
 That residual must be driven close to zero through geometry/operating-point
 iteration before the point is credible.
 
-The minimum self-sustaining Mach number is an explicit configuration gate. A point
-below it may still be calculated for continuity, but it is never labeled an
-operable design point.
+The earliest light-off test and minimum self-sustaining Mach numbers are separate
+configuration gates. The current mission concept may test ignition at Mach 0.80,
+while the first sustained-handoff search spans Mach 1.1–1.3. A calculated point
+below the self-sustaining gate is never labeled an operable design point.
 
 ## Flight dynamics
 

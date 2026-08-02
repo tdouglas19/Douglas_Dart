@@ -13,7 +13,7 @@ class RamjetAndFlightTests(unittest.TestCase):
     def setUp(self):
         self.case = load_reference_case(ROOT / "configs" / "reference_case.yaml")
 
-    def test_subsonic_ramjet_point_is_flagged(self):
+    def test_mach_point_eight_is_lightoff_test_not_self_sustaining(self):
         result = evaluate_ramjet(
             self.case.ramjet,
             self.case.selector,
@@ -23,6 +23,7 @@ class RamjetAndFlightTests(unittest.TestCase):
             0.8,
         )
         self.assertIn("below_configured_self_sustaining_mach", result.status)
+        self.assertNotIn("below_configured_lightoff_test_mach", result.status)
         self.assertFalse(result.self_sustaining_candidate)
         self.assertGreater(result.inlet_spillage_fraction, 0.0)
         self.assertAlmostEqual(

@@ -28,7 +28,13 @@ class PulsejetState:
     cycle_count: int
     cumulative_fuel_injected_kg: float
     cumulative_fuel_burned_kg: float
+    cumulative_air_ingested_kg: float
+    cumulative_exhaust_discharged_kg: float
+    cumulative_inlet_enthalpy_j: float
+    cumulative_exhaust_enthalpy_j: float
+    cumulative_combustion_heat_added_j: float
     cumulative_heat_rejected_j: float
+    cumulative_numerical_energy_added_j: float
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,27 @@ class PulsejetSummary:
     peak_chamber_pressure_pa: float
     peak_chamber_temperature_k: float
     final_chamber_pressure_pa: float
+    numerical_reference_only: bool = True
+
+
+@dataclass(frozen=True)
+class PulsejetConservationAudit:
+    initial_total_mass_kg: float
+    final_total_mass_kg: float
+    cumulative_air_ingested_kg: float
+    cumulative_fuel_injected_after_start_kg: float
+    cumulative_exhaust_discharged_kg: float
+    mass_balance_residual_kg: float
+    relative_mass_balance_residual: float
+    initial_internal_energy_j: float
+    final_internal_energy_j: float
+    cumulative_inlet_enthalpy_j: float
+    cumulative_exhaust_enthalpy_j: float
+    cumulative_combustion_heat_added_j: float
+    cumulative_heat_rejected_j: float
+    cumulative_numerical_energy_added_j: float
+    energy_balance_residual_j: float
+    relative_energy_balance_residual: float
     numerical_reference_only: bool = True
 
 
@@ -104,21 +131,30 @@ class PulsejetSimulator:
             / fuel.stoichiometric_air_fuel_ratio
         )
         total_mass_kg = self.initial_air_reference_mass_kg + initial_fuel_mass_kg
+        self.initial_fuel_mass_kg = initial_fuel_mass_kg
+        self.initial_total_mass_kg = total_mass_kg
+        self.initial_internal_energy_j = (
+            total_mass_kg * self.cv_j_per_kg_k * self.atmosphere.temperature_k
+        )
         self.state = PulsejetState(
             time_s=0.0,
             total_mass_kg=total_mass_kg,
             fresh_air_mass_kg=self.initial_air_reference_mass_kg,
             unburned_fuel_mass_kg=initial_fuel_mass_kg,
-            internal_energy_j=total_mass_kg
-            * self.cv_j_per_kg_k
-            * self.atmosphere.temperature_k,
+            internal_energy_j=self.initial_internal_energy_j,
             pending_heat_release_j=0.0,
             burn_time_remaining_s=0.0,
             last_ignition_time_s=-config.minimum_cycle_period_s,
             cycle_count=0,
             cumulative_fuel_injected_kg=initial_fuel_mass_kg,
             cumulative_fuel_burned_kg=0.0,
+            cumulative_air_ingested_kg=0.0,
+            cumulative_exhaust_discharged_kg=0.0,
+            cumulative_inlet_enthalpy_j=0.0,
+            cumulative_exhaust_enthalpy_j=0.0,
+            cumulative_combustion_heat_added_j=0.0,
             cumulative_heat_rejected_j=0.0,
+            cumulative_numerical_energy_added_j=0.0,
         )
 
     @property
@@ -230,6 +266,10 @@ class PulsejetSimulator:
         state.fresh_air_mass_kg += air_in_kg - fresh_air_out_kg
         state.unburned_fuel_mass_kg += fuel_in_kg - unburned_fuel_out_kg
         state.cumulative_fuel_injected_kg += fuel_in_kg
+        state.cumulative_air_ingested_kg += air_in_kg
+        state.cumulative_exhaust_discharged_kg += actual_outflow_kg
+        state.cumulative_inlet_enthalpy_j += energy_in_j
+        state.cumulative_exhaust_enthalpy_j += energy_out_j
         state.internal_energy_j += energy_in_j - energy_out_j
 
         heat_release_j = 0.0
@@ -241,6 +281,7 @@ class PulsejetSimulator:
                 state.burn_time_remaining_s - time_step_s, 0.0
             )
             state.internal_energy_j += heat_release_j
+            state.cumulative_combustion_heat_added_j += heat_release_j
 
         wall_heat_transfer_j = (
             config.wall_heat_transfer_w_per_k
@@ -255,10 +296,11 @@ class PulsejetSimulator:
         state.total_mass_kg = max(state.total_mass_kg, 1e-9)
         state.fresh_air_mass_kg = max(state.fresh_air_mass_kg, 0.0)
         state.unburned_fuel_mass_kg = max(state.unburned_fuel_mass_kg, 0.0)
-        state.internal_energy_j = max(
-            state.internal_energy_j,
-            state.total_mass_kg * self.cv_j_per_kg_k * 100.0,
-        )
+        minimum_energy_j = state.total_mass_kg * self.cv_j_per_kg_k * 100.0
+        if state.internal_energy_j < minimum_energy_j:
+            numerical_energy_added_j = minimum_energy_j - state.internal_energy_j
+            state.internal_energy_j = minimum_energy_j
+            state.cumulative_numerical_energy_added_j += numerical_energy_added_j
 
         maximum_energy_j = (
             state.total_mass_kg * self.cv_j_per_kg_k * config.maximum_gas_temperature_k
@@ -300,6 +342,65 @@ class PulsejetSimulator:
         while self.state.time_s < duration_s - 0.5 * time_step_s:
             samples.append(self.step(min(time_step_s, duration_s - self.state.time_s)))
         return samples
+
+    def conservation_audit(self) -> PulsejetConservationAudit:
+        state = self.state
+        fuel_injected_after_start_kg = (
+            state.cumulative_fuel_injected_kg - self.initial_fuel_mass_kg
+        )
+        expected_final_mass_kg = (
+            self.initial_total_mass_kg
+            + state.cumulative_air_ingested_kg
+            + fuel_injected_after_start_kg
+            - state.cumulative_exhaust_discharged_kg
+        )
+        mass_residual_kg = state.total_mass_kg - expected_final_mass_kg
+        mass_scale_kg = max(
+            abs(self.initial_total_mass_kg)
+            + abs(state.cumulative_air_ingested_kg)
+            + abs(fuel_injected_after_start_kg)
+            + abs(state.cumulative_exhaust_discharged_kg),
+            1e-12,
+        )
+
+        expected_final_energy_j = (
+            self.initial_internal_energy_j
+            + state.cumulative_inlet_enthalpy_j
+            - state.cumulative_exhaust_enthalpy_j
+            + state.cumulative_combustion_heat_added_j
+            - state.cumulative_heat_rejected_j
+            + state.cumulative_numerical_energy_added_j
+        )
+        energy_residual_j = state.internal_energy_j - expected_final_energy_j
+        energy_scale_j = max(
+            abs(self.initial_internal_energy_j)
+            + abs(state.cumulative_inlet_enthalpy_j)
+            + abs(state.cumulative_exhaust_enthalpy_j)
+            + abs(state.cumulative_combustion_heat_added_j)
+            + abs(state.cumulative_heat_rejected_j)
+            + abs(state.cumulative_numerical_energy_added_j),
+            1e-12,
+        )
+        return PulsejetConservationAudit(
+            initial_total_mass_kg=self.initial_total_mass_kg,
+            final_total_mass_kg=state.total_mass_kg,
+            cumulative_air_ingested_kg=state.cumulative_air_ingested_kg,
+            cumulative_fuel_injected_after_start_kg=fuel_injected_after_start_kg,
+            cumulative_exhaust_discharged_kg=state.cumulative_exhaust_discharged_kg,
+            mass_balance_residual_kg=mass_residual_kg,
+            relative_mass_balance_residual=mass_residual_kg / mass_scale_kg,
+            initial_internal_energy_j=self.initial_internal_energy_j,
+            final_internal_energy_j=state.internal_energy_j,
+            cumulative_inlet_enthalpy_j=state.cumulative_inlet_enthalpy_j,
+            cumulative_exhaust_enthalpy_j=state.cumulative_exhaust_enthalpy_j,
+            cumulative_combustion_heat_added_j=state.cumulative_combustion_heat_added_j,
+            cumulative_heat_rejected_j=state.cumulative_heat_rejected_j,
+            cumulative_numerical_energy_added_j=(
+                state.cumulative_numerical_energy_added_j
+            ),
+            energy_balance_residual_j=energy_residual_j,
+            relative_energy_balance_residual=energy_residual_j / energy_scale_j,
+        )
 
 
 def summarize_pulsejet(samples: list[PulsejetSample]) -> PulsejetSummary:
