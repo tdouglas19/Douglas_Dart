@@ -43,6 +43,23 @@ class RamjetAndFlightTests(unittest.TestCase):
         self.assertEqual(derivative.mass_rate_kg_per_s, -0.2)
         self.assertGreater(derivative.drag_n, 0.0)
 
+    def test_throat_limited_ramjet_reports_spillage_without_underfed_failure(self):
+        result = evaluate_ramjet(
+            self.case.ramjet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            self.case.mission.speed_run_altitude_msl_m,
+            self.case.mission.peak_mach,
+        )
+        self.assertGreater(result.inlet_spillage_fraction, 0.5)
+        self.assertIn("fixed_nozzle_requires_inlet_spillage_coupling", result.status)
+        self.assertNotIn("fixed_nozzle_underfed_pressure_match_required", result.status)
+        self.assertAlmostEqual(
+            result.net_thrust_n,
+            result.gross_thrust_n - result.inlet_momentum_drag_n,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

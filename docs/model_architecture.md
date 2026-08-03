@@ -2,109 +2,147 @@
 
 ## Discipline boundary
 
-The propulsion and flight models are connected through explicit, inspectable
-interfaces rather than one monolithic simulation.
-
 ```mermaid
 flowchart TD
-    C["Versioned YAML inputs"] --> P["Pulsejet / ramjet models"]
-    C --> G["OpenVSP geometry generator"]
-    G --> A["VSPAERO aerodynamic tables"]
-    P --> F["Point-mass flight model"]
-    A --> F
+    C["Versioned YAML"] --> P["Pulsejet and ramjet"]
+    C --> G["OpenVSP generator"]
+    G --> A["VSPAERO external aero"]
+    P --> M["Mission integrator"]
+    A --> M
+    M --> R["Fuel, loads, and trajectory"]
 ```
 
-VSPAERO will provide external aerodynamic forces, moments, and stability data. It
-will not be used for combustor or nozzle reacting flow.
+Python owns intake accounting, combustion, internal nozzle flow, thrust, fuel flow,
+and flight dynamics. OpenVSP owns repeatable external geometry. VSPAERO owns inviscid
+external forces and moments. No VSPAERO result is used as reacting internal flow or
+as total drag without additional terms.
 
 ## Intake selector
 
-The user requirement is encoded directly:
+The geometric rule is direct:
 
 \[
-A_{available}=f_{open}A_{circular},\qquad f_{open}=0.5
+A_{available}=f_{open}A_{circular},\qquad f_{open}=0.5.
 \]
 
-The flow restriction then applies a separate discharge coefficient. This prevents
-geometric blockage from being silently combined with loss calibration. Only one
-mode can be selected at a time by `DualModePropulsion`.
+Discharge coefficient and total-pressure recovery are separate inputs. This keeps
+the user-defined half-area selector distinct from blockage and loss calibration.
+`DualModePropulsion` enforces mutually exclusive modes.
 
 ## Pulsejet state and sequence
 
-The chamber is a well-stirred, constant-volume control volume. Its dynamic state is
-total mass, fresh-air mass, unburned-fuel mass, internal energy, and pending
-chemical heat release. The step sequence is:
+The pulsejet is a well-stirred, constant-volume control volume. State includes total
+mass, fresh-air mass, unburned fuel, internal energy, pending heat release, and event
+timing. Each step:
 
-1. Check whether pressure, refill mass, and minimum-period ignition criteria are met.
-2. Schedule a finite-duration heat release for the burnable fuel/air charge.
-3. Calculate forward inlet flow from the recovered freestream stagnation reservoir.
-4. Calculate nozzle blowdown from instantaneous chamber pressure and temperature.
-5. Apply inlet/outlet enthalpy transport, combustion heat release, and wall loss.
-6. Recover pressure from the ideal-gas constant-volume relation.
+1. checks ignition pressure, refill, and minimum-period criteria;
+2. schedules finite heat release for the burnable charge;
+3. computes pressure-driven inlet flow from the recovered freestream reservoir;
+4. computes instantaneous C-D-nozzle exhaust flow and gross thrust;
+5. transports inlet/outlet enthalpy, heat release, and wall loss; and
+6. recovers pressure and temperature from the lumped ideal-gas state.
 
-The governing lumped energy relation is
+The ledger implements
 
 \[
-\frac{dU}{dt}=\dot m_{in}h_{in}-\dot m_{out}h_{out}+\dot Q_{comb}-\dot Q_{wall}.
+\frac{dU}{dt}=\dot m_{in}h_{in}-\dot m_{out}h_{out}
+              +\dot Q_{comb}-\dot Q_{rejected}.
 \]
 
-This provides the requested rise, decay, pressure-differential intake, combustion,
-and repeat behavior. It does not prove that an acoustic mode will sustain itself;
-that requires calibration or a higher-order gas-dynamics model.
+Inlet momentum drag is subtracted from gross nozzle thrust. Instantaneous values are
+retained. Trade studies run through an explicit warmup and average only a later
+measurement window so the initial precharged chamber cannot bias the result.
 
-The simulator maintains a cumulative control-volume ledger for air and fuel inflow,
-exhaust outflow, transported enthalpy, released chemical heat, rejected heat, and
-any numerical energy-floor correction. The reported balance residuals test whether
-the implementation closes; they do not validate the underlying lumped assumptions.
+This mechanism produces the requested pressure rise, decay, refill, combustion, and
+repeat behavior. It does not establish a self-excited acoustic mode, valve life,
+flame stability, or distributed pressure loads.
 
-## Fixed C-D nozzle
+## Shared fixed C-D nozzle
 
-The nozzle model uses the full area-Mach relation to distinguish three regimes:
-fully subsonic flow, a sonic throat followed by an internal normal shock, and a
-supersonic geometric exit. The internal-shock location is solved so the downstream
-subsonic exit pressure matches ambient. For a supersonic exit it uses
+Both modes use the same configured throat and exit area. The quasi-one-dimensional
+solver distinguishes:
+
+- fully subsonic flow;
+- a sonic throat with an internal normal shock; and
+- a supersonic geometric exit.
+
+For a supersonic exit,
 
 \[
 F_g=\dot m V_e+(p_e-p_a)A_e.
 \]
 
-The configured discharge coefficient is treated as an effective-flow-area factor
-for both mass flow and the exit pressure-force term so the low-order solution stays
-momentum-consistent as a normal shock crosses the exit plane.
+The current Mach 1.10 total-pressure ratio strongly penalizes the earlier
+`Ae/At = 2.25` placeholder. Candidate A therefore uses 1.05. The sensitivity remains
+negative at that boundary, so 1.05 is an architecture bound to test—not a converged
+interior optimum. Separation, shock/boundary-layer interaction, hysteresis, and
+transient wave coupling remain outside the model.
 
-Boundary-layer separation, oblique-shock structure, hysteresis, and transient wave
-interaction are still not represented and are explicitly flagged.
+## Ramjet and inlet spillage
 
-## Ramjet
+The steady ramjet calculates potential capture, recovered total pressure, combustor
+loss, fuel/air ratio, fixed-nozzle capacity, gross thrust, and inlet momentum drag.
+If potential capture exceeds nozzle-compatible flow, excess flow is labeled spillage
+and only the compatible portion enters thrust and fuel calculations.
 
-The steady model calculates captured air mass flow, recovered total pressure,
-combustor pressure loss, fuel/air ratio to reach a specified exit temperature, and
-fixed-nozzle performance. It reports the mismatch between captured combustor flow
-and the nozzle's capacity. When the nozzle is undersized, excess potential capture
-is treated as inlet spillage and only nozzle-compatible flow contributes to thrust.
-That residual must be driven close to zero through geometry/operating-point
-iteration before the point is credible.
+That treatment prevents an undersized nozzle from accepting impossible mass flow,
+but it is not a solved inlet. Candidate A is deliberately throat-limited and spills
+about 66% of potential capture. A coupled external/internal inlet analysis must show
+where the terminal shock, separation, and spilled stream actually go.
 
-The earliest light-off test and minimum self-sustaining Mach numbers are separate
-configuration gates. The current mission concept may test ignition at Mach 0.80,
-while the required mission peak is Mach 1.10. A calculated point below the
-self-sustaining gate is never labeled an operable design point.
+Mach 0.80 light-off and Mach 1.10 self-sustaining gates remain separate. They are
+configuration labels, not combustion-stability predictions.
 
-## Flight dynamics
+## Design convergence calculation
 
-The initial flight kernel is two-dimensional and point-mass. It preserves speed,
-flight-path angle, altitude, downrange, and vehicle mass. The current parabolic drag
-polar is only a temporary surrogate; it will be replaced by Mach/angle tables from
-VSPAERO before trajectory conclusions are drawn.
+The shared-nozzle trade combines:
 
-Outer-body diameter and circular selector-intake diameter are distinct configuration
-items. The first peak-Mach trade holds the 195 mm intake fixed, sizes the C-D throat
-to the full-capture low-order flow match, and sweeps only the outer body. Until an
-external-aerodynamics table exists, the prior drag-area ceiling is scaled with body
-diameter squared while preserving geometric similarity. This is a design-budget
-proxy, not a drag prediction.
+- selector and nozzle radial packaging allowances;
+- the prior drag-area budget scaled with body diameter squared;
+- fixed-nozzle ramjet flow and a visible propulsion derate;
+- startup-excluded pulsejet statistics;
+- configured fuel allocation and a linear hold-throttle approximation; and
+- mass and supersonic-duration requirement comparisons.
 
-The speed-run phase has no configured time. At Mach 1.10 and 4,500 m MSL, the model
-first checks whether full-throttle ramjet thrust can counter the drag target. Only a
-passing point receives a hold-time estimate, calculated from the allocated 1.40 kg
-ramjet fuel mass and a labeled linear thrust/fuel scaling assumption.
+`design-convergence` holds altitude, Mach, area ratio, drag proxy, and component
+assumptions fixed. It solves the minimum throat by reevaluating the ramjet through a
+bisection root and derives the largest body that the derated thrust can support under
+the diameter-squared drag proxy. These are local sensitivity bounds, not dimensional
+tolerances.
+
+## OpenVSP geometry
+
+`openvsp_geometry.py` generates:
+
+- five circular fuselage stations from the 195 mm open intake lip through the body to
+  the shared nozzle exit;
+- an OpenVSP flow-through engine surface with open inlet and outlet ends;
+- two independently clocked minimal lifting surfaces; and
+- four independently clocked fins in a 45-degree X arrangement.
+
+Surface counts, clocking, planforms, tessellation, body transitions, allowances, and
+analysis points all come from YAML. Generated `.vsp3` files stay ignored because
+source parameters are authoritative.
+
+The VSPAERO runner uses manual reference quantities derived from the exposed lifting
+surfaces. The flight model uses the same 0.0896 m² area for Candidate A. Each
+nonuniform Mach/alpha/beta combination runs as its own single point; this avoids
+silently replacing the configured list with a linear start/end interpolation.
+
+## Flight and total drag
+
+The current flight kernel is two-dimensional and point-mass. It preserves speed,
+flight-path angle, altitude, downrange, and mass. A phase-based mission manager and
+solver-backed aerodynamic tables are still pending.
+
+The intended total drag composition is
+
+\[
+D=q\left(C_{D,VSPAERO}S_{ref}+C_{D,viscous}S_{ref}
+          +C_{D,wave}S_{ref}+C_{D,base}S_{ref}\right)
+  +D_{inlet/spillage}.
+\]
+
+Terms may use other native reference areas internally, but they must be converted to
+one documented drag area before coupling. The current `CdS` budget bypasses reference
+coefficient ambiguity and remains in force until that accounting closes.

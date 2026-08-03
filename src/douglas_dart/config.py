@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import pi
+from math import isclose, pi
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -236,12 +236,134 @@ class MissionConfig:
 
 
 @dataclass(frozen=True)
+class RequirementsConfig:
+    """Competition constraints kept separate from the working design point."""
+
+    maximum_takeoff_mass_kg: float
+    minimum_time_above_mach_one_s: float
+    minimum_peak_mach: float
+    landing_intact_required: bool
+    reciprocal_flight_same_day_required: bool
+    pulsejet_rule_status: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "maximum_takeoff_mass_kg",
+            "minimum_time_above_mach_one_s",
+            "minimum_peak_mach",
+        ):
+            _positive(name, getattr(self, name))
+        if not self.pulsejet_rule_status.strip():
+            raise ValueError("pulsejet rule status cannot be empty")
+
+
+@dataclass(frozen=True)
+class SurfacePlanformConfig:
+    """One repeated radial surface family for OpenVSP geometry generation."""
+
+    x_location_m: float
+    exposed_semispan_m: float
+    root_chord_m: float
+    tip_chord_m: float
+    sweep_deg: float
+    thickness_to_chord: float
+
+    def __post_init__(self) -> None:
+        if self.x_location_m < 0.0:
+            raise ValueError("surface x location cannot be negative")
+        for name in (
+            "exposed_semispan_m",
+            "root_chord_m",
+            "tip_chord_m",
+            "thickness_to_chord",
+        ):
+            _positive(name, getattr(self, name))
+        if self.tip_chord_m > self.root_chord_m:
+            raise ValueError("surface tip chord cannot exceed root chord")
+        if not 0.0 <= self.sweep_deg < 90.0:
+            raise ValueError("surface sweep must be in [0, 90) degrees")
+        if self.thickness_to_chord >= 0.25:
+            raise ValueError("surface thickness-to-chord must be below 0.25")
+
+    @property
+    def exposed_area_per_surface_m2(self) -> float:
+        return 0.5 * (
+            self.root_chord_m + self.tip_chord_m
+        ) * self.exposed_semispan_m
+
+
+@dataclass(frozen=True)
+class OpenVSPGeometryConfig:
+    """External-geometry and VSPAERO sweep inputs shared by the generator."""
+
+    api_version: str
+    forebody_transition_length_m: float
+    aft_taper_start_m: float
+    selector_radial_allowance_m: float
+    nozzle_radial_allowance_m: float
+    fuselage_tessellation: int
+    surface_tessellation: int
+    lifting_surface_count: int
+    lifting_surface_clocking_offset_deg: float
+    fin_count: int
+    fin_clocking_offset_deg: float
+    lifting_surface: SurfacePlanformConfig
+    fin: SurfacePlanformConfig
+    analysis_method: str
+    mach_values: tuple[float, ...]
+    alpha_deg_values: tuple[float, ...]
+    beta_deg_values: tuple[float, ...]
+    reference_cg_x_m: float
+    wake_iterations: int
+
+    def __post_init__(self) -> None:
+        if not self.api_version.strip():
+            raise ValueError("OpenVSP API version cannot be empty")
+        for name in (
+            "forebody_transition_length_m",
+            "aft_taper_start_m",
+            "reference_cg_x_m",
+        ):
+            _positive(name, getattr(self, name))
+        for name in ("selector_radial_allowance_m", "nozzle_radial_allowance_m"):
+            if getattr(self, name) < 0.0:
+                raise ValueError(f"{name} cannot be negative")
+        if self.fuselage_tessellation < 9 or self.surface_tessellation < 4:
+            raise ValueError("OpenVSP tessellation settings are too small")
+        if self.lifting_surface_count not in (0, 2):
+            raise ValueError("lifting surface count must be zero or two")
+        if self.fin_count not in (3, 4):
+            raise ValueError("fin count must be three or four")
+        for name in (
+            "lifting_surface_clocking_offset_deg",
+            "fin_clocking_offset_deg",
+        ):
+            if not 0.0 <= getattr(self, name) < 360.0:
+                raise ValueError(f"{name} must be in [0, 360) degrees")
+        if self.analysis_method not in {"panel", "vortex_lattice"}:
+            raise ValueError("analysis method must be 'panel' or 'vortex_lattice'")
+        if not self.mach_values or not self.alpha_deg_values or not self.beta_deg_values:
+            raise ValueError("VSPAERO sweep arrays cannot be empty")
+        if any(value < 0.0 for value in self.mach_values):
+            raise ValueError("VSPAERO Mach values cannot be negative")
+        if self.wake_iterations < 1:
+            raise ValueError("VSPAERO wake iterations must be positive")
+
+
+@dataclass(frozen=True)
 class SimulationConfig:
     pulsejet_duration_s: float
+    pulsejet_steady_warmup_s: float
+    pulsejet_steady_measurement_s: float
     time_step_s: float
 
     def __post_init__(self) -> None:
         _positive("pulsejet_duration_s", self.pulsejet_duration_s)
+        _positive("pulsejet_steady_warmup_s", self.pulsejet_steady_warmup_s)
+        _positive(
+            "pulsejet_steady_measurement_s",
+            self.pulsejet_steady_measurement_s,
+        )
         _positive("time_step_s", self.time_step_s)
 
 
@@ -258,6 +380,8 @@ class ReferenceCase:
     flight: FlightConfig
     vehicle: VehicleConfig
     mission: MissionConfig
+    requirements: RequirementsConfig
+    geometry: OpenVSPGeometryConfig
     simulation: SimulationConfig
 
     def __post_init__(self) -> None:
@@ -265,8 +389,38 @@ class ReferenceCase:
             raise ValueError("outer body diameter cannot be smaller than the intake diameter")
         if self.mission.loaded_fuel_mass_kg >= self.flight.initial_mass_kg:
             raise ValueError("loaded fuel mass must be smaller than initial vehicle mass")
+        if self.flight.initial_mass_kg > self.requirements.maximum_takeoff_mass_kg:
+            raise ValueError("initial vehicle mass exceeds the maximum takeoff mass")
         if self.mission.peak_mach < self.ramjet.minimum_self_sustaining_mach:
             raise ValueError("peak Mach cannot be below the ramjet self-sustaining gate")
+        if self.mission.peak_mach <= self.requirements.minimum_peak_mach:
+            raise ValueError(
+                "mission peak Mach must exceed the competition threshold"
+            )
+        if self.geometry.forebody_transition_length_m >= self.geometry.aft_taper_start_m:
+            raise ValueError("forebody transition must end before the aft taper begins")
+        if self.geometry.aft_taper_start_m >= self.vehicle.body_length_m:
+            raise ValueError("aft taper must start before the body ends")
+        if self.geometry.reference_cg_x_m >= self.vehicle.body_length_m:
+            raise ValueError("reference CG must lie within the body length")
+        for surface in (self.geometry.lifting_surface, self.geometry.fin):
+            if surface.x_location_m + surface.root_chord_m > self.vehicle.body_length_m:
+                raise ValueError("surface root chord extends beyond the body length")
+        if self.geometry.lifting_surface_count:
+            vspaero_reference_area_m2 = (
+                self.geometry.lifting_surface_count
+                * self.geometry.lifting_surface.exposed_area_per_surface_m2
+            )
+            if not isclose(
+                self.flight.reference_area_m2,
+                vspaero_reference_area_m2,
+                rel_tol=1e-9,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    "flight reference area must equal the exposed lifting-surface "
+                    "area used by VSPAERO"
+                )
 
 
 def _mapping(data: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -284,6 +438,16 @@ def _read_yaml(path: Path) -> Mapping[str, Any]:
     return data
 
 
+def load_fuels(fuels_path: str | Path) -> dict[str, Fuel]:
+    """Load every provisional fuel entry for transparent comparative trades."""
+
+    fuel_data = _mapping(_read_yaml(Path(fuels_path)), "fuels")
+    return {
+        str(key): Fuel(key=str(key), **_mapping(fuel_data, str(key)))
+        for key in fuel_data
+    }
+
+
 def load_reference_case(
     case_path: str | Path,
     fuels_path: str | Path | None = None,
@@ -291,10 +455,11 @@ def load_reference_case(
     case_path = Path(case_path)
     fuels_path = Path(fuels_path) if fuels_path else case_path.with_name("fuels.yaml")
     data = _read_yaml(case_path)
-    fuel_data = _mapping(_read_yaml(fuels_path), "fuels")
     case_header = _mapping(data, "case")
     fuel_key = str(case_header["fuel_key"])
-    selected_fuel = _mapping(fuel_data, fuel_key)
+    fuels = load_fuels(fuels_path)
+    if fuel_key not in fuels:
+        raise ValueError(f"unknown fuel key: {fuel_key}")
 
     environment = _mapping(data, "environment")
     selector = _mapping(data, "selector")
@@ -304,13 +469,19 @@ def load_reference_case(
     flight = _mapping(data, "flight")
     vehicle = _mapping(data, "vehicle")
     mission = _mapping(data, "mission")
+    requirements = _mapping(data, "requirements")
+    geometry = _mapping(data, "openvsp")
+    body_geometry = _mapping(geometry, "body")
+    lifting_surface = _mapping(geometry, "lifting_surface")
+    fin = _mapping(geometry, "fin")
+    analysis = _mapping(geometry, "analysis")
     simulation = _mapping(data, "simulation")
 
     return ReferenceCase(
         name=str(case_header["name"]),
         altitude_m=float(environment["altitude_m"]),
         mach=float(environment["mach"]),
-        fuel=Fuel(key=fuel_key, **selected_fuel),
+        fuel=fuels[fuel_key],
         selector=SelectorConfig(**selector),
         nozzle=NozzleConfig(**nozzle),
         pulsejet=PulsejetConfig(**pulsejet),
@@ -318,5 +489,39 @@ def load_reference_case(
         flight=FlightConfig(**flight),
         vehicle=VehicleConfig(**vehicle),
         mission=MissionConfig(**mission),
+        requirements=RequirementsConfig(**requirements),
+        geometry=OpenVSPGeometryConfig(
+            api_version=str(geometry["api_version"]),
+            forebody_transition_length_m=float(
+                body_geometry["forebody_transition_length_m"]
+            ),
+            aft_taper_start_m=float(body_geometry["aft_taper_start_m"]),
+            selector_radial_allowance_m=float(
+                body_geometry["selector_radial_allowance_m"]
+            ),
+            nozzle_radial_allowance_m=float(
+                body_geometry["nozzle_radial_allowance_m"]
+            ),
+            fuselage_tessellation=int(body_geometry["fuselage_tessellation"]),
+            surface_tessellation=int(geometry["surface_tessellation"]),
+            lifting_surface_count=int(geometry["lifting_surface_count"]),
+            lifting_surface_clocking_offset_deg=float(
+                geometry["lifting_surface_clocking_offset_deg"]
+            ),
+            fin_count=int(geometry["fin_count"]),
+            fin_clocking_offset_deg=float(geometry["fin_clocking_offset_deg"]),
+            lifting_surface=SurfacePlanformConfig(**lifting_surface),
+            fin=SurfacePlanformConfig(**fin),
+            analysis_method=str(analysis["method"]),
+            mach_values=tuple(float(value) for value in analysis["mach_values"]),
+            alpha_deg_values=tuple(
+                float(value) for value in analysis["alpha_deg_values"]
+            ),
+            beta_deg_values=tuple(
+                float(value) for value in analysis["beta_deg_values"]
+            ),
+            reference_cg_x_m=float(analysis["reference_cg_x_m"]),
+            wake_iterations=int(analysis["wake_iterations"]),
+        ),
         simulation=SimulationConfig(**simulation),
     )

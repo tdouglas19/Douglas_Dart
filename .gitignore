@@ -12,8 +12,15 @@ results/*.json
 results/*.png
 openvsp/generated/
 *.adb
+*.cases
+*.compgeom.csv
+*.fem
+*.group
 *.history
+*.lod
 *.polar
+*.vspaero
+*.vspgeom
 
 # Keep result directories in the repository
 !results/.gitkeep

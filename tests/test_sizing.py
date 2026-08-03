@@ -4,11 +4,16 @@ from pathlib import Path
 
 from douglas_dart.config import load_reference_case
 from douglas_dart.sizing import (
+    evaluate_shared_nozzle_trade,
     evaluate_peak_mach_diameter_trade,
     evaluate_ramjet_handoff_sizing,
     geometrically_scaled_drag_area_target_m2,
+    peak_mach_altitude_trade_sweep,
     peak_mach_diameter_trade_sweep,
     ramjet_handoff_sweep,
+    select_minimum_feasible_shared_nozzle,
+    shared_nozzle_feasibility_bounds,
+    shared_nozzle_trade_sweep,
 )
 
 
@@ -102,6 +107,96 @@ class RamjetSizingTests(unittest.TestCase):
             points[-1].full_throttle_fuel_endurance_s,
             self.case.mission.ramjet_speed_run_fuel_budget_kg
             / points[-1].full_throttle_ramjet_fuel_mass_flow_kg_per_s,
+        )
+
+    def test_shared_nozzle_candidate_closes_explicit_reserve_and_duration(self):
+        candidate = load_reference_case(
+            ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
+        )
+        point = evaluate_shared_nozzle_trade(
+            candidate,
+            candidate.vehicle.body_diameter_m,
+            candidate.nozzle.throat_diameter_m,
+            candidate.nozzle.exit_to_throat_area_ratio,
+            pulsejet_warmup_s=0.05,
+            pulsejet_measurement_s=0.05,
+            pulsejet_time_step_s=0.00004,
+        )
+        self.assertTrue(point.packageable_with_configured_allowances)
+        self.assertTrue(point.can_hold_peak_mach_with_derate)
+        self.assertTrue(
+            point.static_fuel_hold_exceeds_minimum_supersonic_duration
+        )
+        self.assertTrue(point.configured_loaded_mass_within_requirement)
+        self.assertGreater(point.ramjet_derated_thrust_margin_n, 0.0)
+        self.assertGreater(point.pulsejet_mean_net_thrust_n, 0.0)
+        self.assertEqual(point.pulsejet_warmup_duration_s, 0.05)
+        self.assertEqual(point.pulsejet_measurement_duration_s, 0.05)
+
+    def test_minimum_feasible_selector_uses_explicit_lexicographic_rule(self):
+        candidate = load_reference_case(
+            ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
+        )
+        points = shared_nozzle_trade_sweep(
+            candidate,
+            body_diameters_m=(0.205,),
+            throat_diameters_m=(0.120, 0.130),
+            exit_to_throat_area_ratios=(1.05,),
+            pulsejet_warmup_s=0.05,
+            pulsejet_measurement_s=0.05,
+            pulsejet_time_step_s=0.00004,
+        )
+        selected = select_minimum_feasible_shared_nozzle(points)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.throat_diameter_m, 0.130)
+
+    def test_candidate_has_narrow_local_body_and_throat_feasibility_margins(self):
+        candidate = load_reference_case(
+            ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
+        )
+        bounds = shared_nozzle_feasibility_bounds(candidate)
+        self.assertTrue(bounds.fixed_architecture_has_body_feasibility_interval)
+        self.assertAlmostEqual(bounds.minimum_packageable_body_diameter_m, 0.205)
+        self.assertGreater(
+            bounds.maximum_body_diameter_for_derated_drag_budget_m,
+            candidate.vehicle.body_diameter_m,
+        )
+        self.assertLess(
+            bounds.maximum_body_diameter_for_derated_drag_budget_m,
+            0.211,
+        )
+        self.assertIsNotNone(
+            bounds.minimum_throat_diameter_for_derated_drag_budget_m
+        )
+        self.assertGreater(
+            bounds.minimum_throat_diameter_for_derated_drag_budget_m,
+            0.126,
+        )
+        self.assertLess(
+            bounds.minimum_throat_diameter_for_derated_drag_budget_m,
+            0.128,
+        )
+
+    def test_altitude_trade_includes_endpoints_and_exposes_static_endurance(self):
+        candidate = load_reference_case(
+            ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
+        )
+        points = peak_mach_altitude_trade_sweep(
+            candidate,
+            3000.0,
+            6500.0,
+            500.0,
+        )
+        self.assertEqual(points[0].altitude_m, 3000.0)
+        self.assertEqual(points[-1].altitude_m, 6500.0)
+        self.assertTrue(all(point.can_hold_peak_mach_with_derate for point in points))
+        self.assertLess(
+            points[-1].ramjet_fuel_mass_flow_kg_per_s,
+            points[0].ramjet_fuel_mass_flow_kg_per_s,
+        )
+        self.assertGreater(
+            points[-1].ramjet_fuel_limited_hold_duration_s,
+            points[0].ramjet_fuel_limited_hold_duration_s,
         )
 
 

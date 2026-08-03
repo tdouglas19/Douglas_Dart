@@ -1,48 +1,65 @@
 # Development roadmap
 
-## Phase 1 — trustworthy low-order kernel
+## Completed foundation
 
-- Close baseline requirements and unit conventions.
-- Add mass/energy residual reporting and time-step convergence tests.
-- Build pressure-history, thrust, mass-flow, and fuel-flow plots.
-- Run fuel and intake/nozzle sensitivity studies with uncertainty bounds.
-- Use the handoff sweep to map the throat/body packaging conflict before selecting
-  an intake capture schedule or nozzle geometry.
-- Use the peak-Mach diameter trade to bound the drag-area reduction or propulsion
-  improvement needed before promoting an outer diameter.
+- Requirements, owner direction, and provisional assumptions are separate in config.
+- Pulsejet mass/energy ledgers and C-D-nozzle regime continuity are implemented.
+- Pulsejet trade averages exclude startup and have an automated time-step check.
+- Ramjet full-capture sizing exposed the original throat/body conflict.
+- A fixed shared-nozzle/spillage trade produced Candidate A and local body/throat
+  bounds.
+- Fuel-limited Mach 1.10 hold replaces prescribed speed-run duration.
+- A 3,000–6,500 m static altitude sweep keeps the speed-run altitude open and shows
+  the current model's high-altitude endurance preference.
+- Local pulsejet and ramjet key-variable sensitivities are repeatable.
+- A performance-only fuel trade supports Jet-A/JP-8-class kerosene as the baseline
+  while keeping hardware, operability, and safety criteria open.
+- Parameter-driven OpenVSP geometry and explicit-point VSPAERO runner are implemented
+  against the official 3.51.2 API contract.
 
-## Phase 2 — geometry and external aerodynamics
+## Next: live external-aerodynamics closure
 
-- Install a pinned OpenVSP version in a reproducible environment.
-- Generate the axisymmetric body, intake reference, fins, and minimal lifting surfaces
-  from versioned parameters.
-- Run VSPAERO sweeps in Mach, angle of attack, sideslip, and control state.
-- Export aerodynamic tables with geometry/configuration provenance.
+1. Run `openvsp-build` in a functional OpenVSP 3.51.2 Python environment.
+2. Inspect open inlet/outlet topology, body/surface intersections, surface clocking,
+   trailing edges, and tessellation in the GUI.
+3. Run panel mesh and wake-iteration convergence at Mach 0.2, 0.8, 1.0, and 1.1.
+4. Add OpenVSP Parasite Drag and Wave Drag workflows with explicit surface properties.
+5. Establish a base-drag and inlet/spillage-drag model; convert every contribution to
+   one documented drag area.
+6. Replace the diameter-squared budget with a conservative solver-backed table only
+   after cross-checking it.
 
-## Phase 3 — coupled mission model
+## Next: inlet and propulsion closure
 
-- Couple cycle-averaged pulsejet maps and steady ramjet maps to the trajectory model.
-- Implement sled release, climb, gravity-assisted acceleration, mode transition,
-  speed run, zoom climb, and glide/recovery phases.
-- Track CG, propellant mass, dynamic pressure, heat-load proxies, stability margin,
-  and landing reserve.
+1. Promote ramjet total-pressure recovery and spillage into an inlet/back-pressure
+   map with unstart margin.
+2. Replace the pulsejet's lumped acoustic assumption with the minimum fidelity needed
+   to match a relevant pressure trace.
+3. Sweep chamber volume, selector effective area, equivalence ratio, heat release,
+   throat, and expansion ratio over altitude and Mach—not only the local point.
+4. Trade representative Jet-A/JP-8 against other permitted fuels for light-off,
+   atomization, safety, storage, energy density, and hardware mass.
+5. Model transition timing, leakage, trapped volume, and igniter/flameholder behavior.
 
-## Phase 4 — higher-fidelity closure
+## Coupled mission model
 
-- Promote the largest sensitivities to quasi-1D gas dynamics or CFD.
-- Add thermal soak, structural loads, controls, and test uncertainty.
-- Define a safe, instrumented subscale validation sequence with independent review.
+1. Build a phase manager for sled release → pulsejet climb → dive/acceleration →
+   light-off experiment → ramjet handoff → fuel-limited run → zoom/glide → landing.
+2. Interpolate cycle-averaged pulsejet maps, ramjet maps, and aerodynamic tables.
+3. Track fuel by phase, CG, dynamic pressure, heat proxies, stability/control margins,
+   and recovery reserve.
+4. Optimize speed-run altitude and mode-transition schedule rather than treating
+   4,500 m as closed.
+5. Evaluate off-nominal atmosphere, propulsion derate, drag growth, and failed-lightoff
+   cases before judging the five-second and reciprocal-flight requirements.
 
-## Required owner decisions
+## Decisions still owned by the user
 
-The current starting point is a roughly 21 kg loaded vehicle with a 195 mm selector
-intake and initially 195 mm outer body. The mission is sled release at 39–42 m/s TAS
-near 900 m MSL → climb to 6,000–6,500 m MSL → dive → Mach 0.80 light-off experiment
-→ Mach 1.10 peak near 4,500 m MSL → fuel-limited speed run → zoom/glide. Loaded fuel
-is 3.80 kg, with 1.40 kg allocated to the ramjet phase. There is no hard maximum body
-diameter and no prescribed speed-run duration.
+- recovery method;
+- any hard length, transport, or launch-rail envelope;
+- whether 21 kg and the 3.8/1.4 kg fuel allocations become hard bounds or remain
+  optimization variables; and
+- final fuel choice after a sourced scored trade.
 
-The next owner decisions are recovery method and any hard length constraint. Fuel
-selection still follows a scored trade rather than a default. The next engineering
-closures are actual Mach-dependent drag, inlet recovery/operability, radial hardware
-allowance around the nozzle, and the coupled fuel/mass trajectory.
+None blocks the current software/aerodynamics work. Pulsejet rule confirmation is an
+external rules gate and should be obtained before committing to hardware.

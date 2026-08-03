@@ -1,55 +1,85 @@
 # Assumption register
 
-Every consequential input is labeled so a convenient demonstration value cannot
-quietly become a design requirement.
+`shared_nozzle_candidate_a.yaml` is the active trade point. A value in that file is
+not automatically a user requirement or a validated parameter.
 
-| Item | Current value | Status | Closure path |
-|---|---:|---|---|
-| Intake paths | Mutually exclusive | User requirement | Confirm selector leakage and transition behavior later |
-| Available area | 50% of circular intake | User requirement | Retain; characterize additional blockage separately |
-| Circular selector intake diameter | 0.195 m | Prior project baseline, not closed | Keep separate from the outer body during packaging trades |
-| Nominal outer body diameter | 0.195 m; no hard maximum | User trade instruction / prior baseline | Increase only when packaging benefit outweighs drag penalty |
-| Reference body length | 2.20 m | Midpoint of prior 2.0–2.4 m range | Close with fineness, packaging, stability, and structural trades |
-| Peak drag-area ceiling | 0.0095 m² at 0.200 m reference diameter | Prior project target, not an aero prediction | Replace diameter-squared similarity proxy with VSPAERO tables |
-| Reference chamber volume | 0.025 m³ | Numerical placeholder | Sweep against frequency, residence time, and packaging |
-| Throat diameter | 0.100 m | Numerical placeholder | Match transient pulse flow and ramjet steady-flow residual |
-| Exit/throat area ratio | 2.25 | Numerical placeholder | Optimize across altitude and pressure histories |
-| Fuel | Jet-A representative | Candidate, not selected | Compare operability, atomization, safety, storage, and energy density |
-| Fuel LHV / stoichiometric AFR | 43 MJ/kg / 14.7 | Provisional | Replace with cited property ranges and sensitivity bounds |
-| Pulsejet gamma / R | 1.33 / 287.05 J/(kg·K) | Low-order approximation | Add temperature/composition dependence |
-| Combustion efficiency | 0.58 | Numerical placeholder | Calibrate against relevant hardware or literature data |
-| Burn duration | 4 ms | Numerical placeholder | Calibrate to pressure trace and characteristic length |
-| Wall heat conductance | 20 W/K | Numerical placeholder | Replace with geometry/material thermal network |
-| Maximum gas temperature | 2600 K | Numerical limiter | Replace with equilibrium chemistry / variable properties |
-| Ramjet target combustor exit | 1900 K | Numerical placeholder | Close with materials, equivalence ratio, and stability limits |
-| Earliest ramjet light-off test | Mach 0.80 | User mission concept | Treat as an experiment, not an assumed sustainable handoff |
-| Peak Mach | 1.10 | User requirement | Treat as a cap and prove thrust/drag closure at 4,500 m MSL |
-| Speed-run termination | Consume allocated ramjet fuel; no prescribed duration | User requirement | Duration is a model output, never a mission input |
-| Loaded / ramjet-phase fuel | 3.80 kg / 1.40 kg | Prior project mass allocation | Reclose after trajectory integration and reserve definition |
-| Field / sled release | 900 m MSL / 39–42 m/s TAS | Prior project baseline | Confirm actual launch site and sled performance |
-| Top of climb / speed-run altitude | 6,000–6,500 m / 4,500 m MSL | Prior project baseline | Optimize dive and dynamic-pressure limits in coupled mission model |
-| Loaded mass / aero reference area | 21 kg / 0.18 m² | Prior mass baseline / area placeholder | Close after engine, fuel, structure, recovery, and aero sizing |
+## Requirements and owner direction
 
-## Handoff throat-sizing interpretation
+| Item | Current value | Status |
+|---|---:|---|
+| Intake modes | Pulsejet or ramjet, never both open | User requirement |
+| Available geometric intake area | 50% of the 195 mm circular intake for either mode | User requirement / prior baseline diameter |
+| Peak Mach | 1.10 | User requirement |
+| Speed-run termination | Fuel depletion; no prescribed duration | User requirement |
+| Body diameter | No hard maximum; trade against drag and Mach capability | User direction |
+| Maximum takeoff mass | 25 kg | Competition requirement |
+| Minimum supersonic time | More than Mach 1 for at least 5 s | Competition requirement |
+| Recovery | Land intact; reciprocal same-day flight required | Competition requirement |
+| Pulsejet eligibility | Organizer confirmation required | Unresolved rule interpretation |
 
-The `ramjet-sweep` command calculates the throat diameter that would pass all
-potential flow captured by the configured half-intake. Intake diameter and outer
-body diameter are now separate variables. Increasing both together does not cure the
-packaging conflict because both captured flow and required hot-gas throat area scale
-with diameter squared. The initial outer-body trade therefore keeps the 0.195 m
-intake fixed and grows only the outer mold line.
+## Candidate A geometry and mission inputs
 
-The `diameter-trade` command compares the flow-matched throat against each outer-body
-diameter and scales the prior drag-area ceiling with diameter squared under a
-geometric-similarity assumption. Packaging uses zero radial clearance, so a passing
-point is only a mathematical lower bound. If full-throttle ramjet thrust cannot
-counter the scaled drag target at Mach 1.10, the command reports the required
-drag-area reduction and does not invent a speed-run duration. If it can, hold time is
-derived from the 1.40 kg ramjet fuel allocation using an explicitly labeled linear
-thrust/fuel turndown approximation.
+| Item | Value | Status and closure path |
+|---|---:|---|
+| Loaded reference mass | 21.0 kg | Prior mass baseline; reclose with real hardware and recovery system |
+| Loaded / ramjet-phase fuel | 3.80 / 1.40 kg | Prior allocation; replace with integrated trajectory fuel ledger |
+| Fuel | Jet-A/JP-8-class representative | Recommended baseline family; see `fuel_trade.md` and close exact grade, atomization, light-off, safety, and property ranges |
+| Body diameter / length | 0.205 / 2.30 m | Candidate A; diameter is at the packaging boundary |
+| Shared throat diameter | 0.130 m | Candidate A; only 3.17 mm above the local modeled thrust boundary |
+| Exit/throat area ratio | 1.05 | Provisional lower-bound C-D architecture; not optimized or validated |
+| Selector radial allowance | 0.005 m | Packaging budget, not a detailed mechanism thickness |
+| Nozzle radial allowance | 0.012 m | Packaging budget for wall, insulation, and structure |
+| Lifting surfaces | Two; 0.16 m exposed semispan, 0.42/0.14 m chords | OpenVSP starting geometry |
+| Fins | Four at 45°, 135°, 225°, and 315°; 0.10 m exposed span | OpenVSP starting geometry |
+| Aero coefficient reference | 0.0896 m² exposed lifting area, 0.525 m span, 0.3033 m MAC | Explicit convention shared by flight and VSPAERO |
+| Field / sled release | 900 m MSL / 39–42 m/s TAS | Prior mission baseline |
+| Top of climb | 6,000–6,500 m MSL | Prior mission baseline; optimize with trajectory and loads |
+| Speed-run analysis point | 4,500 m MSL, Mach 1.10 | Current trade point, not yet altitude-optimized |
+| Drag-area ceiling | 0.0095 m² at 0.200 m body | Prior conservative target, not an aerodynamic prediction |
+| Ramjet propulsion reserve | 15% reduction in modeled net thrust | Explicit trade margin, not an uncertainty distribution |
 
-## Interpretation rule
+The candidate's diameter-scaled drag-area budget is 0.009981 m² at 205 mm. Until
+the external-aerodynamics work is complete, changing diameter scales this budget with
+diameter squared while intake diameter remains fixed.
 
-A placeholder may be swept to learn sensitivity. It may not be cited as expected
-vehicle performance. Results should retain the case name
-`numerical_reference_not_a_design` until the minimum validation gates are closed.
+## Propulsion-model assumptions
+
+| Item | Current value | Status and closure path |
+|---|---:|---|
+| Chamber volume | 0.025 m³ | Placeholder; packaging and acoustic-length closure required |
+| Fuel LHV / stoichiometric AFR | 43 MJ/kg / 14.7 | Representative Jet-A values; replace with cited ranges |
+| Pulsejet gamma / gas constant | 1.33 / 287.05 J/(kg·K) | Constant-property approximation |
+| Pulsejet combustion efficiency | 0.58 | High-sensitivity placeholder; calibration required |
+| Target equivalence ratio | 0.90 | High-sensitivity placeholder; operability bounds required |
+| Burn duration / minimum period | 4 / 18 ms | Placeholder timing model; calibrate to pressure histories |
+| Wall heat conductance | 20 W/K | Placeholder; replace with a thermal network |
+| Maximum gas temperature | 2,600 K | Numerical limiter for omitted chemistry/variable properties |
+| Ramjet total-pressure recovery | 0.92 | High-sensitivity placeholder; couple to inlet/shock geometry |
+| Ramjet combustor pressure loss | 6% | Placeholder |
+| Ramjet target combustor exit | 1,900 K | Placeholder; close with fuel schedule and material limits |
+| Light-off experiment / self-sustaining gate | Mach 0.80 / 1.10 | Separate mission concepts, not demonstrated operability |
+
+Pulsejet trade statistics discard the first 0.25 s and average the next 0.25 s.
+This prevents the initially charged chamber from dominating a short run. The
+configured 20 µs time step changes the steady-window mean thrust by about 0.27%
+relative to a 10 µs run for Candidate A.
+
+## Interpretation of current outputs
+
+The static Mach 1.10 calculation predicts 603 N ramjet net thrust, 513 N after the
+15% derate, and 488 N against the diameter-scaled drag budget. It also predicts 66%
+potential-capture spillage. That spillage is a capacity bound, not a solved
+inlet/back-pressure flowfield.
+
+Fuel at a linearly scaled hold condition lasts about 29 s, which is longer than the
+five-second rule. This is not a trajectory or compliance result: it omits the fuel
+and time used accelerating through Mach 1 and assumes thrust and fuel flow scale
+linearly at the hold point.
+
+The steady-window pulsejet model predicts about 185 N net thrust at sea level and
+Mach 0.20. Its mean thrust-to-weight ratio is about 0.90 for the full 21 kg vehicle;
+that ratio alone neither proves nor disproves climb because the flight-path force
+balance also includes aerodynamic drag, lift orientation, and gravity.
+
+Every result remains `numerical_reference_only` until the gates in
+[validation.md](validation.md) are closed.

@@ -1,5 +1,5 @@
 case:
-  name: numerical_reference_not_a_design
+  name: shared_nozzle_candidate_a_unvalidated
   fuel_key: jet_a_reference
 
 environment:
@@ -13,8 +13,8 @@ selector:
   total_pressure_recovery: 0.92
 
 nozzle:
-  throat_diameter_m: 0.100
-  exit_to_throat_area_ratio: 2.25
+  throat_diameter_m: 0.130
+  exit_to_throat_area_ratio: 1.05
   discharge_coefficient: 0.96
 
 pulsejet:
@@ -43,15 +43,15 @@ ramjet:
   minimum_self_sustaining_mach: 1.10
 
 flight:
-  reference_area_m2: 0.0810
+  reference_area_m2: 0.0896
   initial_mass_kg: 21.0
   zero_lift_drag_coefficient: 0.055
   induced_drag_factor: 0.18
   lift_curve_slope_per_rad: 2.50
 
 vehicle:
-  body_diameter_m: 0.195
-  body_length_m: 2.20
+  body_diameter_m: 0.205
+  body_length_m: 2.30
   drag_area_reference_body_diameter_m: 0.200
   peak_mach_drag_area_ceiling_m2: 0.0095
 
@@ -77,10 +77,10 @@ requirements:
 openvsp:
   api_version: "3.51.2"
   body:
-    forebody_transition_length_m: 0.14
-    aft_taper_start_m: 1.75
-    selector_radial_allowance_m: 0.0
-    nozzle_radial_allowance_m: 0.0
+    forebody_transition_length_m: 0.18
+    aft_taper_start_m: 1.80
+    selector_radial_allowance_m: 0.005
+    nozzle_radial_allowance_m: 0.012
     fuselage_tessellation: 49
   surface_tessellation: 16
   lifting_surface_count: 2
@@ -88,25 +88,25 @@ openvsp:
   fin_count: 4
   fin_clocking_offset_deg: 45.0
   lifting_surface:
-    x_location_m: 0.95
-    exposed_semispan_m: 0.15
-    root_chord_m: 0.40
+    x_location_m: 1.00
+    exposed_semispan_m: 0.16
+    root_chord_m: 0.42
     tip_chord_m: 0.14
-    sweep_deg: 52.0
+    sweep_deg: 54.0
     thickness_to_chord: 0.06
   fin:
-    x_location_m: 1.70
+    x_location_m: 1.78
     exposed_semispan_m: 0.10
-    root_chord_m: 0.30
+    root_chord_m: 0.32
     tip_chord_m: 0.10
-    sweep_deg: 50.0
+    sweep_deg: 52.0
     thickness_to_chord: 0.05
   analysis:
     method: panel
     mach_values: [0.20, 0.60, 0.80, 1.00, 1.10]
     alpha_deg_values: [-2.0, 0.0, 2.0, 4.0, 6.0]
     beta_deg_values: [-3.0, 0.0, 3.0]
-    reference_cg_x_m: 1.18
+    reference_cg_x_m: 1.24
     wake_iterations: 5
 
 simulation:

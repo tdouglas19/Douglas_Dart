@@ -15,6 +15,14 @@ from .compressible import (
 from .config import Fuel, NozzleConfig, PulsejetConfig, SelectorConfig
 
 
+# The inlet stream is treated as calorically perfect ambient air. Fuel sensible
+# enthalpy is a small constant-cp placeholder relative to its chemical heat release;
+# both become explicit calibration inputs when variable properties are introduced.
+_INLET_AIR_GAMMA = 1.4
+_INLET_AIR_GAS_CONSTANT_J_PER_KG_K = 287.05287
+_FUEL_SENSIBLE_SPECIFIC_HEAT_J_PER_KG_K = 2_000.0
+
+
 @dataclass
 class PulsejetState:
     time_s: float
@@ -34,6 +42,8 @@ class PulsejetState:
     cumulative_exhaust_enthalpy_j: float
     cumulative_combustion_heat_added_j: float
     cumulative_heat_rejected_j: float
+    cumulative_wall_heat_rejected_j: float
+    cumulative_temperature_limit_heat_rejected_j: float
     cumulative_numerical_energy_added_j: float
 
 
@@ -46,6 +56,8 @@ class PulsejetSample:
     fuel_mass_flow_kg_per_s: float
     exhaust_mass_flow_kg_per_s: float
     gross_thrust_n: float
+    inlet_momentum_drag_n: float
+    net_thrust_n: float
     phase: str
     event: str | None
     cycle_count: int
@@ -54,10 +66,14 @@ class PulsejetSample:
 
 @dataclass(frozen=True)
 class PulsejetSummary:
+    window_start_s: float
+    window_end_s: float
     duration_s: float
     completed_cycles: int
     mean_gross_thrust_n: float
     peak_gross_thrust_n: float
+    mean_net_thrust_n: float
+    peak_net_thrust_n: float
     mean_fuel_mass_flow_kg_per_s: float
     peak_chamber_pressure_pa: float
     peak_chamber_temperature_k: float
@@ -80,6 +96,8 @@ class PulsejetConservationAudit:
     cumulative_exhaust_enthalpy_j: float
     cumulative_combustion_heat_added_j: float
     cumulative_heat_rejected_j: float
+    cumulative_wall_heat_rejected_j: float
+    cumulative_temperature_limit_heat_rejected_j: float
     cumulative_numerical_energy_added_j: float
     energy_balance_residual_j: float
     relative_energy_balance_residual: float
@@ -110,6 +128,9 @@ class PulsejetSimulator:
         self.fuel = fuel
         self.atmosphere: Atmosphere = standard_atmosphere(altitude_m)
         self.mach = mach
+        self.freestream_velocity_m_per_s = (
+            mach * self.atmosphere.speed_of_sound_m_per_s
+        )
         self.inlet_total_temperature_k = stagnation_temperature(
             self.atmosphere.temperature_k, mach
         )
@@ -154,6 +175,8 @@ class PulsejetSimulator:
             cumulative_exhaust_enthalpy_j=0.0,
             cumulative_combustion_heat_added_j=0.0,
             cumulative_heat_rejected_j=0.0,
+            cumulative_wall_heat_rejected_j=0.0,
+            cumulative_temperature_limit_heat_rejected_j=0.0,
             cumulative_numerical_energy_added_j=0.0,
         )
 
@@ -221,8 +244,8 @@ class PulsejetSimulator:
             chamber_pressure_pa,
             self.selector.available_area_m2,
             self.selector.discharge_coefficient,
-            1.4,
-            287.05287,
+            _INLET_AIR_GAMMA,
+            _INLET_AIR_GAS_CONSTANT_J_PER_KG_K,
         )
         nozzle_result = fixed_cd_nozzle(
             chamber_pressure_pa,
@@ -257,8 +280,14 @@ class PulsejetSimulator:
         )
 
         energy_in_j = (
-            air_in_kg * 1.4 * 287.05287 / 0.4 * self.inlet_total_temperature_k
-            + fuel_in_kg * 2_000.0 * self.atmosphere.temperature_k
+            air_in_kg
+            * _INLET_AIR_GAMMA
+            * _INLET_AIR_GAS_CONSTANT_J_PER_KG_K
+            / (_INLET_AIR_GAMMA - 1.0)
+            * self.inlet_total_temperature_k
+            + fuel_in_kg
+            * _FUEL_SENSIBLE_SPECIFIC_HEAT_J_PER_KG_K
+            * self.atmosphere.temperature_k
         )
         energy_out_j = actual_outflow_kg * self.cp_j_per_kg_k * chamber_temperature_k
 
@@ -292,6 +321,7 @@ class PulsejetSimulator:
             wall_heat_transfer_j = min(wall_heat_transfer_j, 0.25 * state.internal_energy_j)
             state.internal_energy_j -= wall_heat_transfer_j
             state.cumulative_heat_rejected_j += wall_heat_transfer_j
+            state.cumulative_wall_heat_rejected_j += wall_heat_transfer_j
 
         state.total_mass_kg = max(state.total_mass_kg, 1e-9)
         state.fresh_air_mass_kg = max(state.fresh_air_mass_kg, 0.0)
@@ -309,9 +339,14 @@ class PulsejetSimulator:
             rejected_j = state.internal_energy_j - maximum_energy_j
             state.internal_energy_j = maximum_energy_j
             state.cumulative_heat_rejected_j += rejected_j
+            state.cumulative_temperature_limit_heat_rejected_j += rejected_j
 
         state.time_s += time_step_s
         gross_thrust_n = nozzle_result.gross_thrust_n * exhaust_scale
+        inlet_momentum_drag_n = (
+            inlet_air_mass_flow_kg_per_s * self.freestream_velocity_m_per_s
+        )
+        net_thrust_n = gross_thrust_n - inlet_momentum_drag_n
         if heat_release_j > 0.0:
             phase = "combustion"
         elif exhaust_mass_flow_kg_per_s > inlet_air_mass_flow_kg_per_s:
@@ -329,6 +364,8 @@ class PulsejetSimulator:
             fuel_mass_flow_kg_per_s=fuel_mass_flow_kg_per_s,
             exhaust_mass_flow_kg_per_s=exhaust_mass_flow_kg_per_s,
             gross_thrust_n=gross_thrust_n,
+            inlet_momentum_drag_n=inlet_momentum_drag_n,
+            net_thrust_n=net_thrust_n,
             phase=phase,
             event=event,
             cycle_count=state.cycle_count,
@@ -395,6 +432,12 @@ class PulsejetSimulator:
             cumulative_exhaust_enthalpy_j=state.cumulative_exhaust_enthalpy_j,
             cumulative_combustion_heat_added_j=state.cumulative_combustion_heat_added_j,
             cumulative_heat_rejected_j=state.cumulative_heat_rejected_j,
+            cumulative_wall_heat_rejected_j=(
+                state.cumulative_wall_heat_rejected_j
+            ),
+            cumulative_temperature_limit_heat_rejected_j=(
+                state.cumulative_temperature_limit_heat_rejected_j
+            ),
             cumulative_numerical_energy_added_j=(
                 state.cumulative_numerical_energy_added_j
             ),
@@ -403,19 +446,36 @@ class PulsejetSimulator:
         )
 
 
-def summarize_pulsejet(samples: list[PulsejetSample]) -> PulsejetSummary:
+def summarize_pulsejet(
+    samples: list[PulsejetSample],
+    *,
+    minimum_time_s: float = 0.0,
+) -> PulsejetSummary:
+    """Average equal-step samples at or after an explicit startup cutoff."""
+
     if not samples:
         raise ValueError("at least one sample is required")
-    duration_s = samples[-1].time_s - samples[0].time_s
+    if minimum_time_s < 0.0:
+        raise ValueError("summary minimum time cannot be negative")
+    window = [sample for sample in samples if sample.time_s >= minimum_time_s]
+    if not window:
+        raise ValueError("summary window begins after the final sample")
+    duration_s = window[-1].time_s - window[0].time_s
     return PulsejetSummary(
+        window_start_s=window[0].time_s,
+        window_end_s=window[-1].time_s,
         duration_s=max(duration_s, 0.0),
-        completed_cycles=samples[-1].cycle_count,
-        mean_gross_thrust_n=fmean(sample.gross_thrust_n for sample in samples),
-        peak_gross_thrust_n=max(sample.gross_thrust_n for sample in samples),
+        completed_cycles=sum(sample.event == "ignition" for sample in window),
+        mean_gross_thrust_n=fmean(sample.gross_thrust_n for sample in window),
+        peak_gross_thrust_n=max(sample.gross_thrust_n for sample in window),
+        mean_net_thrust_n=fmean(sample.net_thrust_n for sample in window),
+        peak_net_thrust_n=max(sample.net_thrust_n for sample in window),
         mean_fuel_mass_flow_kg_per_s=fmean(
-            sample.fuel_mass_flow_kg_per_s for sample in samples
+            sample.fuel_mass_flow_kg_per_s for sample in window
         ),
-        peak_chamber_pressure_pa=max(sample.chamber_pressure_pa for sample in samples),
-        peak_chamber_temperature_k=max(sample.chamber_temperature_k for sample in samples),
-        final_chamber_pressure_pa=samples[-1].chamber_pressure_pa,
+        peak_chamber_pressure_pa=max(sample.chamber_pressure_pa for sample in window),
+        peak_chamber_temperature_k=max(
+            sample.chamber_temperature_k for sample in window
+        ),
+        final_chamber_pressure_pa=window[-1].chamber_pressure_pa,
     )

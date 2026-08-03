@@ -23,6 +23,8 @@ class RamjetResult:
     nozzle_capacity_kg_per_s: float
     nozzle_mass_flow_residual_fraction: float
     inlet_spillage_fraction: float
+    inlet_momentum_drag_n: float
+    gross_thrust_n: float
     net_thrust_n: float
     specific_thrust_n_s_per_kg_air: float
     self_sustaining_candidate: bool
@@ -118,8 +120,14 @@ def evaluate_ramjet(
         status.append("below_configured_self_sustaining_mach")
     if combustor_exit_pressure_pa <= atmosphere.pressure_pa:
         status.append("insufficient_nozzle_pressure_ratio")
-    if abs(residual_fraction) > 0.20:
-        status.append("fixed_nozzle_mass_flow_mismatch")
+    if residual_fraction < -0.20:
+        # A throat-limited flowpath can operate only if the external inlet spills
+        # the uncaptured streamtube and the resulting back-pressure remains stable.
+        # This is an unresolved inlet-matching requirement, but it is not the same
+        # failure mode as an under-fed nozzle at the assumed combustor pressure.
+        status.append("fixed_nozzle_requires_inlet_spillage_coupling")
+    elif residual_fraction > 0.20:
+        status.append("fixed_nozzle_underfed_pressure_match_required")
     if nozzle_result.warning:
         status.append(nozzle_result.warning)
     self_sustaining_candidate = not any(
@@ -127,7 +135,7 @@ def evaluate_ramjet(
         in {
             "below_configured_self_sustaining_mach",
             "insufficient_nozzle_pressure_ratio",
-            "fixed_nozzle_mass_flow_mismatch",
+            "fixed_nozzle_underfed_pressure_match_required",
         }
         for flag in status
     )
@@ -144,6 +152,8 @@ def evaluate_ramjet(
         nozzle_capacity_kg_per_s=nozzle_result.mass_flow_kg_per_s,
         nozzle_mass_flow_residual_fraction=residual_fraction,
         inlet_spillage_fraction=inlet_spillage_fraction,
+        inlet_momentum_drag_n=air_mass_flow_kg_per_s * velocity_m_per_s,
+        gross_thrust_n=gross_thrust_n,
         net_thrust_n=net_thrust_n,
         specific_thrust_n_s_per_kg_air=specific_thrust,
         self_sustaining_candidate=self_sustaining_candidate,
