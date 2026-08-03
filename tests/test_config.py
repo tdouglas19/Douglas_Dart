@@ -20,6 +20,10 @@ class ConfigTests(unittest.TestCase):
         case = load_reference_case(ROOT / "configs" / "reference_case.yaml")
         self.assertEqual(case.fuel.key, "jet_a_reference")
         self.assertGreater(case.nozzle.exit_area_m2, case.nozzle.throat_area_m2)
+        self.assertEqual(case.mission.peak_mach, 1.10)
+        self.assertEqual(case.mission.ramjet_speed_run_fuel_budget_kg, 1.40)
+        self.assertEqual(case.vehicle.body_diameter_m, 0.195)
+        self.assertEqual(case.selector.circular_intake_diameter_m, 0.195)
 
 
 if __name__ == "__main__":

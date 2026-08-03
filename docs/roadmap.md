@@ -8,6 +8,8 @@
 - Run fuel and intake/nozzle sensitivity studies with uncertainty bounds.
 - Use the handoff sweep to map the throat/body packaging conflict before selecting
   an intake capture schedule or nozzle geometry.
+- Use the peak-Mach diameter trade to bound the drag-area reduction or propulsion
+  improvement needed before promoting an outer diameter.
 
 ## Phase 2 — geometry and external aerodynamics
 
@@ -33,9 +35,14 @@
 
 ## Required owner decisions
 
-The current starting point is a roughly 21 kg loaded vehicle with a 195 mm nominal
-body/intake and a sled → climb → dive → Mach 0.80 light-off test → Mach 1.1–1.3
-handoff search → speed run → zoom/glide profile. The next design branch still needs
-target peak Mach, speed-run duration, maximum altitude, sled release speed, launch
-site elevation, recovery method, and hard length constraints. Fuel selection follows
-a scored trade rather than a default.
+The current starting point is a roughly 21 kg loaded vehicle with a 195 mm selector
+intake and initially 195 mm outer body. The mission is sled release at 39–42 m/s TAS
+near 900 m MSL → climb to 6,000–6,500 m MSL → dive → Mach 0.80 light-off experiment
+→ Mach 1.10 peak near 4,500 m MSL → fuel-limited speed run → zoom/glide. Loaded fuel
+is 3.80 kg, with 1.40 kg allocated to the ramjet phase. There is no hard maximum body
+diameter and no prescribed speed-run duration.
+
+The next owner decisions are recovery method and any hard length constraint. Fuel
+selection still follows a scored trade rather than a default. The next engineering
+closures are actual Mach-dependent drag, inlet recovery/operability, radial hardware
+allowance around the nozzle, and the coupled fuel/mass trajectory.

@@ -11,7 +11,7 @@ from pathlib import Path
 from .config import load_reference_case
 from .pulsejet import PulsejetSimulator, summarize_pulsejet
 from .ramjet import evaluate_ramjet
-from .sizing import ramjet_handoff_sweep
+from .sizing import peak_mach_diameter_trade_sweep, ramjet_handoff_sweep
 
 
 def _write_samples(path: Path, samples: list) -> None:
@@ -64,10 +64,29 @@ def _ramjet_sweep(args: argparse.Namespace) -> int:
     case = load_reference_case(args.config, args.fuels)
     points = ramjet_handoff_sweep(
         case,
-        case.altitude_m if args.altitude is None else args.altitude,
+        case.mission.speed_run_altitude_msl_m if args.altitude is None else args.altitude,
         args.minimum_mach,
         args.maximum_mach,
         args.mach_step,
+    )
+    if args.csv:
+        _write_samples(Path(args.csv), points)
+    print(json.dumps([asdict(point) for point in points], indent=2))
+    return 0
+
+
+def _diameter_trade(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    minimum_body_diameter_m = (
+        case.vehicle.body_diameter_m
+        if args.minimum_body_diameter is None
+        else args.minimum_body_diameter
+    )
+    points = peak_mach_diameter_trade_sweep(
+        case,
+        minimum_body_diameter_m,
+        args.maximum_body_diameter,
+        args.body_diameter_step,
     )
     if args.csv:
         _write_samples(Path(args.csv), points)
@@ -103,10 +122,30 @@ def build_parser() -> argparse.ArgumentParser:
     ramjet_sweep.add_argument("--fuels", default=None)
     ramjet_sweep.add_argument("--altitude", type=float, default=None)
     ramjet_sweep.add_argument("--minimum-mach", type=float, default=0.80)
-    ramjet_sweep.add_argument("--maximum-mach", type=float, default=1.30)
+    ramjet_sweep.add_argument("--maximum-mach", type=float, default=1.10)
     ramjet_sweep.add_argument("--mach-step", type=float, default=0.05)
     ramjet_sweep.add_argument("--csv", default=None)
     ramjet_sweep.set_defaults(func=_ramjet_sweep)
+
+    diameter_trade = subparsers.add_parser(
+        "diameter-trade",
+        help=(
+            "trade outer-body throat packaging and scaled drag target at peak Mach; "
+            "speed-run duration is derived from the allocated ramjet fuel"
+        ),
+    )
+    diameter_trade.add_argument("--config", default="configs/reference_case.yaml")
+    diameter_trade.add_argument("--fuels", default=None)
+    diameter_trade.add_argument("--minimum-body-diameter", type=float, default=None)
+    diameter_trade.add_argument(
+        "--maximum-body-diameter",
+        type=float,
+        required=True,
+        help="analysis sweep bound in meters, not a vehicle diameter constraint",
+    )
+    diameter_trade.add_argument("--body-diameter-step", type=float, default=0.005)
+    diameter_trade.add_argument("--csv", default=None)
+    diameter_trade.set_defaults(func=_diameter_trade)
     return parser
 
 

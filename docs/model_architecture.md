@@ -87,8 +87,8 @@ iteration before the point is credible.
 
 The earliest light-off test and minimum self-sustaining Mach numbers are separate
 configuration gates. The current mission concept may test ignition at Mach 0.80,
-while the first sustained-handoff search spans Mach 1.1–1.3. A calculated point
-below the self-sustaining gate is never labeled an operable design point.
+while the required mission peak is Mach 1.10. A calculated point below the
+self-sustaining gate is never labeled an operable design point.
 
 ## Flight dynamics
 
@@ -96,3 +96,15 @@ The initial flight kernel is two-dimensional and point-mass. It preserves speed,
 flight-path angle, altitude, downrange, and vehicle mass. The current parabolic drag
 polar is only a temporary surrogate; it will be replaced by Mach/angle tables from
 VSPAERO before trajectory conclusions are drawn.
+
+Outer-body diameter and circular selector-intake diameter are distinct configuration
+items. The first peak-Mach trade holds the 195 mm intake fixed, sizes the C-D throat
+to the full-capture low-order flow match, and sweeps only the outer body. Until an
+external-aerodynamics table exists, the prior drag-area ceiling is scaled with body
+diameter squared while preserving geometric similarity. This is a design-budget
+proxy, not a drag prediction.
+
+The speed-run phase has no configured time. At Mach 1.10 and 4,500 m MSL, the model
+first checks whether full-throttle ramjet thrust can counter the drag target. Only a
+passing point receives a hold-time estimate, calculated from the allocated 1.40 kg
+ramjet fuel mass and a labeled linear thrust/fuel scaling assumption.

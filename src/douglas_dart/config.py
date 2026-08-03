@@ -174,6 +174,68 @@ class FlightConfig:
 
 
 @dataclass(frozen=True)
+class VehicleConfig:
+    """Outer mold-line inputs kept separate from the selector intake geometry."""
+
+    body_diameter_m: float
+    body_length_m: float
+    drag_area_reference_body_diameter_m: float
+    peak_mach_drag_area_ceiling_m2: float
+
+    def __post_init__(self) -> None:
+        for name in (
+            "body_diameter_m",
+            "body_length_m",
+            "drag_area_reference_body_diameter_m",
+            "peak_mach_drag_area_ceiling_m2",
+        ):
+            _positive(name, getattr(self, name))
+
+    @property
+    def fineness_ratio(self) -> float:
+        return self.body_length_m / self.body_diameter_m
+
+
+@dataclass(frozen=True)
+class MissionConfig:
+    """User mission requirements and recovered prior sizing allocations."""
+
+    field_elevation_msl_m: float
+    sled_release_speed_min_m_per_s: float
+    sled_release_speed_max_m_per_s: float
+    top_of_climb_altitude_min_msl_m: float
+    top_of_climb_altitude_max_msl_m: float
+    speed_run_altitude_msl_m: float
+    peak_mach: float
+    loaded_fuel_mass_kg: float
+    ramjet_speed_run_fuel_budget_kg: float
+
+    def __post_init__(self) -> None:
+        for name in (
+            "sled_release_speed_min_m_per_s",
+            "sled_release_speed_max_m_per_s",
+            "peak_mach",
+            "loaded_fuel_mass_kg",
+            "ramjet_speed_run_fuel_budget_kg",
+        ):
+            _positive(name, getattr(self, name))
+        for name in (
+            "field_elevation_msl_m",
+            "top_of_climb_altitude_min_msl_m",
+            "top_of_climb_altitude_max_msl_m",
+            "speed_run_altitude_msl_m",
+        ):
+            if getattr(self, name) < 0.0:
+                raise ValueError(f"{name} cannot be negative")
+        if self.sled_release_speed_max_m_per_s < self.sled_release_speed_min_m_per_s:
+            raise ValueError("maximum sled release speed cannot be below the minimum")
+        if self.top_of_climb_altitude_max_msl_m < self.top_of_climb_altitude_min_msl_m:
+            raise ValueError("maximum top-of-climb altitude cannot be below the minimum")
+        if self.ramjet_speed_run_fuel_budget_kg > self.loaded_fuel_mass_kg:
+            raise ValueError("ramjet speed-run fuel budget cannot exceed loaded fuel mass")
+
+
+@dataclass(frozen=True)
 class SimulationConfig:
     pulsejet_duration_s: float
     time_step_s: float
@@ -194,7 +256,17 @@ class ReferenceCase:
     pulsejet: PulsejetConfig
     ramjet: RamjetConfig
     flight: FlightConfig
+    vehicle: VehicleConfig
+    mission: MissionConfig
     simulation: SimulationConfig
+
+    def __post_init__(self) -> None:
+        if self.vehicle.body_diameter_m < self.selector.circular_intake_diameter_m:
+            raise ValueError("outer body diameter cannot be smaller than the intake diameter")
+        if self.mission.loaded_fuel_mass_kg >= self.flight.initial_mass_kg:
+            raise ValueError("loaded fuel mass must be smaller than initial vehicle mass")
+        if self.mission.peak_mach < self.ramjet.minimum_self_sustaining_mach:
+            raise ValueError("peak Mach cannot be below the ramjet self-sustaining gate")
 
 
 def _mapping(data: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -230,6 +302,8 @@ def load_reference_case(
     pulsejet = _mapping(data, "pulsejet")
     ramjet = _mapping(data, "ramjet")
     flight = _mapping(data, "flight")
+    vehicle = _mapping(data, "vehicle")
+    mission = _mapping(data, "mission")
     simulation = _mapping(data, "simulation")
 
     return ReferenceCase(
@@ -242,5 +316,7 @@ def load_reference_case(
         pulsejet=PulsejetConfig(**pulsejet),
         ramjet=RamjetConfig(**ramjet),
         flight=FlightConfig(**flight),
+        vehicle=VehicleConfig(**vehicle),
+        mission=MissionConfig(**mission),
         simulation=SimulationConfig(**simulation),
     )

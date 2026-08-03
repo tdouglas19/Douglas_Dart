@@ -24,6 +24,8 @@ This repository is intentionally an engineering notebook in code:
 - steady ramjet cycle estimate with intake recovery, combustor loss, fixed-nozzle
   mass-flow residual, and minimum-Mach operability flag
 - handoff-envelope throat sizing with body-diameter feasibility and spillage reporting
+- separate intake and outer-body geometry with a Mach 1.10 packaging/drag sweep
+- fuel-limited peak-Mach hold estimates with no prescribed speed-run duration
 - mutually exclusive intake-selector interface implementing
   `available area = 0.5 * circular intake area`
 - longitudinal point-mass flight-equation kernel
@@ -41,7 +43,9 @@ python -m unittest discover -s tests -v
 douglas-dart pulsejet --config configs/reference_case.yaml --duration 0.25
 douglas-dart ramjet --config configs/reference_case.yaml --mach 2.0
 douglas-dart ramjet-sweep --config configs/reference_case.yaml \
-  --minimum-mach 0.8 --maximum-mach 1.3 --mach-step 0.05
+  --minimum-mach 0.8 --maximum-mach 1.1 --mach-step 0.05
+douglas-dart diameter-trade --config configs/reference_case.yaml \
+  --maximum-body-diameter 0.300 --body-diameter-step 0.005
 ```
 
 To write the pulsejet trace:

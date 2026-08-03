@@ -49,6 +49,23 @@ flight:
   induced_drag_factor: 0.18
   lift_curve_slope_per_rad: 2.50
 
+vehicle:
+  body_diameter_m: 0.195
+  body_length_m: 2.20
+  drag_area_reference_body_diameter_m: 0.200
+  peak_mach_drag_area_ceiling_m2: 0.0095
+
+mission:
+  field_elevation_msl_m: 900.0
+  sled_release_speed_min_m_per_s: 39.0
+  sled_release_speed_max_m_per_s: 42.0
+  top_of_climb_altitude_min_msl_m: 6000.0
+  top_of_climb_altitude_max_msl_m: 6500.0
+  speed_run_altitude_msl_m: 4500.0
+  peak_mach: 1.10
+  loaded_fuel_mass_kg: 3.80
+  ramjet_speed_run_fuel_budget_kg: 1.40
+
 simulation:
   pulsejet_duration_s: 0.25
   time_step_s: 0.00002
