@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "C:\Users\dougl\Documents\GitHub\Douglas_Dart\src\douglas_dart\pipeline.py", line 566, in execute
+    outputs = function()
+              ^^^^^^^^^^
+  File "C:\Users\dougl\Documents\GitHub\Douglas_Dart\src\douglas_dart\pipeline.py", line 829, in openvsp_stage
+    summary = build_openvsp_geometry(case, openvsp_model_path)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dougl\Documents\GitHub\Douglas_Dart\src\douglas_dart\openvsp_geometry.py", line 318, in build_openvsp_geometry
+    vsp = load_openvsp_api(case.geometry.api_version) if vsp is None else vsp
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dougl\Documents\GitHub\Douglas_Dart\src\douglas_dart\openvsp_geometry.py", line 89, in load_openvsp_api
+    validate_openvsp_api(vsp, expected_version)
+  File "C:\Users\dougl\Documents\GitHub\Douglas_Dart\src\douglas_dart\openvsp_geometry.py", line 102, in validate_openvsp_api
+    raise RuntimeError(
+RuntimeError: The imported 'openvsp' module is not a functional OpenVSP API; missing: AddGeom, ChangeXSecShape, ClearVSPModel, ENGINE_GEOM_FLOWTHROUGH, ENGINE_GEOM_INLET_OUTLET, ENGINE_LOC_INDEX, ENGINE_MODE_FLOWTHROUGH, GetNumXSec, GetVSPVersion, GetXSec, GetXSecParm, GetXSecSurf, ROOTC_WSECT_DRIVER, SET_ALL, SPAN_WSECT_DRIVER, SYM_NONE, SetDriverGroup, SetGeomName, SetParmVal, TIPC_WSECT_DRIVER, Update, WriteVSPFile, XS_CIRCLE

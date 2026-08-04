@@ -1,0 +1,21 @@
+{
+  "altitude_m": 4500.0,
+  "configured_body_diameter_m": 0.205,
+  "configured_body_margin_above_packaging_minimum_m": 0.0,
+  "configured_body_margin_below_drag_maximum_m": 0.0051153859420368375,
+  "configured_throat_diameter_m": 0.13,
+  "configured_throat_margin_above_thrust_minimum_m": 0.0031649150848388763,
+  "fixed_architecture_has_body_feasibility_interval": true,
+  "fixed_exit_to_throat_area_ratio": 1.05,
+  "maximum_body_diameter_for_derated_drag_budget_m": 0.21011538594203683,
+  "minimum_packageable_body_diameter_m": 0.20500000000000002,
+  "minimum_throat_diameter_for_derated_drag_budget_m": 0.12683508491516113,
+  "numerical_reference_only": true,
+  "peak_mach": 1.1,
+  "propulsion_derate_fraction": 0.15,
+  "status": [
+    "fixed_nozzle_requires_inlet_spillage_coupling",
+    "overexpanded_external_shock_or_separation_not_modeled",
+    "bounds_hold_altitude_mach_area_ratio_and_drag_proxy_fixed"
+  ]
+}

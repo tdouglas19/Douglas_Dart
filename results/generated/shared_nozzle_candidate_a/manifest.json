@@ -1,0 +1,161 @@
+{
+  "case_name": "shared_nozzle_candidate_a_unvalidated",
+  "completed_at_utc": "2026-08-04T00:32:17+00:00",
+  "config_path": "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\configs\\shared_nozzle_candidate_a.yaml",
+  "fuels_path": "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\configs\\fuels.yaml",
+  "note": "The pipeline executes every currently implemented low-order analysis. A phase-based coupled flight mission integrator is not yet implemented.",
+  "openvsp_model_path": "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\openvsp\\generated\\shared_nozzle_candidate_a.vsp3",
+  "output_directory": "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a",
+  "stages": [
+    {
+      "duration_s": 1.5917996999341995,
+      "message": null,
+      "name": "pulsejet",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\csv\\pulsejet_timeseries.csv",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\pulsejet_summary.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 0.001660600071772933,
+      "message": null,
+      "name": "ramjet_peak_mach",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\ramjet_peak_mach.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 0.007760600186884403,
+      "message": null,
+      "name": "ramjet_handoff_sweep",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\csv\\ramjet_handoff_sweep.csv",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\ramjet_handoff_sweep.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 0.01103210006840527,
+      "message": null,
+      "name": "diameter_trade",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\csv\\diameter_trade.csv",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\diameter_trade.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 105.49663579999469,
+      "message": null,
+      "name": "shared_nozzle_trade",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\csv\\shared_nozzle_trade.csv",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\shared_nozzle_trade.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 0.0016079000197350979,
+      "message": null,
+      "name": "design_convergence",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\design_convergence.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 1.5282811999786645,
+      "message": null,
+      "name": "fuel_trade",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\csv\\fuel_trade.csv",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\fuel_trade.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 0.0028973999433219433,
+      "message": null,
+      "name": "altitude_trade",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\csv\\altitude_trade.csv",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\altitude_trade.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 47.288897699909285,
+      "message": null,
+      "name": "key_variables",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\csv\\key_variables.csv",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\json\\key_variables.json"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 9.203183900099248,
+      "message": null,
+      "name": "plots",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\pulsejet_thrust_history.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\pulsejet_chamber_pressure.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\pulsejet_chamber_temperature.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\ramjet_handoff_thrust.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\ramjet_handoff_throat.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\diameter_trade_thrust_margin.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\diameter_trade_hold_duration.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\shared_nozzle_thrust_margin.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\shared_nozzle_spillage.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\altitude_trade_thrust_margin.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\altitude_trade_hold_duration.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\fuel_trade_ramjet_thrust.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\fuel_trade_loaded_volume.png",
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\plots\\key_variable_sensitivities.png"
+      ],
+      "required": true,
+      "status": "completed"
+    },
+    {
+      "duration_s": 0.0028490000404417515,
+      "message": "The imported 'openvsp' module is not a functional OpenVSP API; missing: AddGeom, ChangeXSecShape, ClearVSPModel, ENGINE_GEOM_FLOWTHROUGH, ENGINE_GEOM_INLET_OUTLET, ENGINE_LOC_INDEX, ENGINE_MODE_FLOWTHROUGH, GetNumXSec, GetVSPVersion, GetXSec, GetXSecParm, GetXSecSurf, ROOTC_WSECT_DRIVER, SET_ALL, SPAN_WSECT_DRIVER, SYM_NONE, SetDriverGroup, SetGeomName, SetParmVal, TIPC_WSECT_DRIVER, Update, WriteVSPFile, XS_CIRCLE",
+      "name": "openvsp_geometry",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\logs\\openvsp_geometry.txt"
+      ],
+      "required": true,
+      "status": "failed"
+    },
+    {
+      "duration_s": 0.0,
+      "message": "OpenVSP geometry stage did not complete.",
+      "name": "vspaero_sweep",
+      "output_files": [],
+      "required": true,
+      "status": "blocked"
+    },
+    {
+      "duration_s": 0.0,
+      "message": null,
+      "name": "summary_report",
+      "output_files": [
+        "C:\\Users\\dougl\\Documents\\GitHub\\Douglas_Dart\\results\\generated\\shared_nozzle_candidate_a\\summary.md"
+      ],
+      "required": true,
+      "status": "completed"
+    }
+  ],
+  "started_at_utc": "2026-08-04T00:29:32+00:00",
+  "successful": false
+}

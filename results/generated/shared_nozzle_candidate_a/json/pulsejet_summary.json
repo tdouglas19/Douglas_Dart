@@ -1,0 +1,38 @@
+{
+  "conservation_audit": {
+    "cumulative_air_ingested_kg": 0.2959623284968334,
+    "cumulative_combustion_heat_added_j": 423885.3154649053,
+    "cumulative_exhaust_discharged_kg": 0.3375094942965027,
+    "cumulative_exhaust_enthalpy_j": 514372.3582274019,
+    "cumulative_fuel_injected_after_start_kg": 0.018120142561030707,
+    "cumulative_heat_rejected_j": 6759.3161232056955,
+    "cumulative_inlet_enthalpy_j": 96809.17973273185,
+    "cumulative_numerical_energy_added_j": 0.0,
+    "cumulative_temperature_limit_heat_rejected_j": 0.0,
+    "cumulative_wall_heat_rejected_j": 6759.3161232056955,
+    "energy_balance_residual_j": 1.000444171950221e-08,
+    "final_internal_energy_j": 7708.924743143434,
+    "final_total_mass_kg": 0.009073302185607401,
+    "initial_internal_energy_j": 8146.103896103896,
+    "initial_total_mass_kg": 0.03250032542424292,
+    "mass_balance_residual_kg": 3.030561912531482e-15,
+    "numerical_reference_only": true,
+    "relative_energy_balance_residual": 9.528291339240276e-15,
+    "relative_mass_balance_residual": 4.4300483332186114e-15
+  },
+  "summary": {
+    "completed_cycles": 14,
+    "duration_s": 0.2499800000000315,
+    "final_chamber_pressure_pa": 101757.80660949336,
+    "mean_fuel_mass_flow_kg_per_s": 0.03656365194181578,
+    "mean_gross_thrust_n": 225.84348368503396,
+    "mean_net_thrust_n": 185.19833996051136,
+    "numerical_reference_only": true,
+    "peak_chamber_pressure_pa": 146318.4807881913,
+    "peak_chamber_temperature_k": 2058.01271177591,
+    "peak_gross_thrust_n": 1043.117226056418,
+    "peak_net_thrust_n": 1043.117226056418,
+    "window_end_s": 0.5,
+    "window_start_s": 0.2500199999999685
+  }
+}

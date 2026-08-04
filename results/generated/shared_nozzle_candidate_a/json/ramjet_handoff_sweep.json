@@ -1,0 +1,159 @@
+[
+  {
+    "altitude_m": 4500.0,
+    "current_air_mass_flow_kg_per_s": 0.8788316350757093,
+    "current_inlet_spillage_fraction": 0.6737592088381881,
+    "current_net_thrust_n": 310.81488837586187,
+    "current_throat_diameter_m": 0.13,
+    "intake_diameter_m": 0.195,
+    "mach": 0.8,
+    "matched_fuel_mass_flow_kg_per_s": 0.11053268779208197,
+    "matched_net_thrust_n": 952.7162047056863,
+    "matched_nozzle_mass_flow_residual_fraction": 0.0,
+    "matched_status": [
+      "lightoff_test_only_below_self_sustaining_mach",
+      "below_configured_self_sustaining_mach"
+    ],
+    "nominal_body_diameter_m": 0.205,
+    "numerical_reference_only": true,
+    "potential_captured_air_mass_flow_kg_per_s": 2.6938128489267243,
+    "required_matched_throat_diameter_m": 0.22760102914970953,
+    "required_throat_to_body_diameter_ratio": 1.11024892268151,
+    "required_throat_within_nominal_body": false
+  },
+  {
+    "altitude_m": 4500.0,
+    "current_air_mass_flow_kg_per_s": 0.9503479698424846,
+    "current_inlet_spillage_fraction": 0.6679631443426326,
+    "current_net_thrust_n": 359.36976057532496,
+    "current_throat_diameter_m": 0.13,
+    "intake_diameter_m": 0.195,
+    "mach": 0.8500000000000001,
+    "matched_fuel_mass_flow_kg_per_s": 0.11712897674656271,
+    "matched_net_thrust_n": 1082.3188885578493,
+    "matched_nozzle_mass_flow_residual_fraction": 0.0,
+    "matched_status": [
+      "lightoff_test_only_below_self_sustaining_mach",
+      "below_configured_self_sustaining_mach"
+    ],
+    "nominal_body_diameter_m": 0.205,
+    "numerical_reference_only": true,
+    "potential_captured_air_mass_flow_kg_per_s": 2.8621761519846443,
+    "required_matched_throat_diameter_m": 0.22560577169722873,
+    "required_throat_to_body_diameter_ratio": 1.1005159594986769,
+    "required_throat_within_nominal_body": false
+  },
+  {
+    "altitude_m": 4500.0,
+    "current_air_mass_flow_kg_per_s": 1.0077243620001515,
+    "current_inlet_spillage_fraction": 0.6674769040464454,
+    "current_net_thrust_n": 396.4505182799797,
+    "current_throat_diameter_m": 0.13,
+    "intake_diameter_m": 0.195,
+    "mach": 0.9,
+    "matched_fuel_mass_flow_kg_per_s": 0.1236685376951299,
+    "matched_net_thrust_n": 1192.2495703436925,
+    "matched_nozzle_mass_flow_residual_fraction": -2.8158524160267277e-16,
+    "matched_status": [
+      "lightoff_test_only_below_self_sustaining_mach",
+      "below_configured_self_sustaining_mach",
+      "boundary_layer_separation_not_modeled"
+    ],
+    "nominal_body_diameter_m": 0.205,
+    "numerical_reference_only": true,
+    "potential_captured_air_mass_flow_kg_per_s": 3.0305394550425646,
+    "required_matched_throat_diameter_m": 0.2254407624838423,
+    "required_throat_to_body_diameter_ratio": 1.099711036506548,
+    "required_throat_within_nominal_body": false
+  },
+  {
+    "altitude_m": 4500.0,
+    "current_air_mass_flow_kg_per_s": 1.062327882497411,
+    "current_inlet_spillage_fraction": 0.6679086665553337,
+    "current_net_thrust_n": 439.4730899031771,
+    "current_throat_diameter_m": 0.13,
+    "intake_diameter_m": 0.195,
+    "mach": 0.9500000000000001,
+    "matched_fuel_mass_flow_kg_per_s": 0.13014803369625927,
+    "matched_net_thrust_n": 1323.3500716344438,
+    "matched_nozzle_mass_flow_residual_fraction": -1.3339814788778883e-16,
+    "matched_status": [
+      "lightoff_test_only_below_self_sustaining_mach",
+      "below_configured_self_sustaining_mach",
+      "overexpanded_external_shock_or_separation_not_modeled"
+    ],
+    "nominal_body_diameter_m": 0.205,
+    "numerical_reference_only": true,
+    "potential_captured_air_mass_flow_kg_per_s": 3.198902758100485,
+    "required_matched_throat_diameter_m": 0.22558726623488282,
+    "required_throat_to_body_diameter_ratio": 1.1004256889506479,
+    "required_throat_within_nominal_body": false
+  },
+  {
+    "altitude_m": 4500.0,
+    "current_air_mass_flow_kg_per_s": 1.1222547968745777,
+    "current_inlet_spillage_fraction": 0.6667163281750002,
+    "current_net_thrust_n": 489.5335497266531,
+    "current_throat_diameter_m": 0.13,
+    "intake_diameter_m": 0.195,
+    "mach": 1.0,
+    "matched_fuel_mass_flow_kg_per_s": 0.13656412780842642,
+    "matched_net_thrust_n": 1468.8194805525802,
+    "matched_nozzle_mass_flow_residual_fraction": -2.5348786094055003e-16,
+    "matched_status": [
+      "lightoff_test_only_below_self_sustaining_mach",
+      "below_configured_self_sustaining_mach",
+      "overexpanded_external_shock_or_separation_not_modeled"
+    ],
+    "nominal_body_diameter_m": 0.205,
+    "numerical_reference_only": true,
+    "potential_captured_air_mass_flow_kg_per_s": 3.367266061158405,
+    "required_matched_throat_diameter_m": 0.22518338002823857,
+    "required_throat_to_body_diameter_ratio": 1.0984555123328712,
+    "required_throat_within_nominal_body": false
+  },
+  {
+    "altitude_m": 4500.0,
+    "current_air_mass_flow_kg_per_s": 1.1879454962230938,
+    "current_inlet_spillage_fraction": 0.6640073452703652,
+    "current_net_thrust_n": 544.0156392517331,
+    "current_throat_diameter_m": 0.13,
+    "intake_diameter_m": 0.195,
+    "mach": 1.05,
+    "matched_fuel_mass_flow_kg_per_s": 0.1429134830901071,
+    "matched_net_thrust_n": 1619.1295601074655,
+    "matched_nozzle_mass_flow_residual_fraction": 0.0,
+    "matched_status": [
+      "lightoff_test_only_below_self_sustaining_mach",
+      "below_configured_self_sustaining_mach",
+      "overexpanded_external_shock_or_separation_not_modeled"
+    ],
+    "nominal_body_diameter_m": 0.205,
+    "numerical_reference_only": true,
+    "potential_captured_air_mass_flow_kg_per_s": 3.5356293642163252,
+    "required_matched_throat_diameter_m": 0.22427375821542164,
+    "required_throat_to_body_diameter_ratio": 1.0940183327581545,
+    "required_throat_within_nominal_body": false
+  },
+  {
+    "altitude_m": 4500.0,
+    "current_air_mass_flow_kg_per_s": 1.2598805174575356,
+    "current_inlet_spillage_fraction": 0.659858798158832,
+    "current_net_thrust_n": 603.16006374126,
+    "current_throat_diameter_m": 0.13,
+    "intake_diameter_m": 0.195,
+    "mach": 1.1,
+    "matched_fuel_mass_flow_kg_per_s": 0.14919276259977693,
+    "matched_net_thrust_n": 1773.263751866528,
+    "matched_nozzle_mass_flow_residual_fraction": -3.4575746581543194e-16,
+    "matched_status": [
+      "overexpanded_external_shock_or_separation_not_modeled"
+    ],
+    "nominal_body_diameter_m": 0.205,
+    "numerical_reference_only": true,
+    "potential_captured_air_mass_flow_kg_per_s": 3.7039926672742456,
+    "required_matched_throat_diameter_m": 0.22290187996654248,
+    "required_throat_to_body_diameter_ratio": 1.0873262437392317,
+    "required_throat_within_nominal_body": false
+  }
+]

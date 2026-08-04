@@ -1,0 +1,116 @@
+case:
+  name: shared_nozzle_candidate_a_unvalidated
+  fuel_key: jet_a_reference
+
+environment:
+  altitude_m: 0.0
+  mach: 0.20
+
+selector:
+  circular_intake_diameter_m: 0.195
+  open_fraction: 0.500
+  discharge_coefficient: 0.78
+  total_pressure_recovery: 0.92
+
+nozzle:
+  throat_diameter_m: 0.130
+  exit_to_throat_area_ratio: 1.05
+  discharge_coefficient: 0.96
+
+pulsejet:
+  chamber_volume_m3: 0.025
+  gamma: 1.33
+  gas_constant_j_per_kg_k: 287.05
+  combustion_efficiency: 0.58
+  target_equivalence_ratio: 0.90
+  initial_equivalence_ratio: 0.90
+  burn_duration_s: 0.004
+  minimum_cycle_period_s: 0.018
+  ignition_pressure_ratio_max: 1.03
+  minimum_fresh_air_fraction: 0.30
+  wall_temperature_k: 500.0
+  wall_heat_transfer_w_per_k: 20.0
+  maximum_gas_temperature_k: 2600.0
+
+ramjet:
+  gamma: 1.40
+  gas_constant_j_per_kg_k: 287.05
+  mass_capture_coefficient: 0.90
+  combustor_total_pressure_loss_fraction: 0.06
+  combustor_efficiency: 0.96
+  target_combustor_exit_temperature_k: 1900.0
+  minimum_lightoff_test_mach: 0.80
+  minimum_self_sustaining_mach: 1.10
+
+flight:
+  reference_area_m2: 0.0896
+  initial_mass_kg: 21.0
+  zero_lift_drag_coefficient: 0.055
+  induced_drag_factor: 0.18
+  lift_curve_slope_per_rad: 2.50
+
+vehicle:
+  body_diameter_m: 0.205
+  body_length_m: 2.30
+  drag_area_reference_body_diameter_m: 0.200
+  peak_mach_drag_area_ceiling_m2: 0.0095
+
+mission:
+  field_elevation_msl_m: 900.0
+  sled_release_speed_min_m_per_s: 39.0
+  sled_release_speed_max_m_per_s: 42.0
+  top_of_climb_altitude_min_msl_m: 6000.0
+  top_of_climb_altitude_max_msl_m: 6500.0
+  speed_run_altitude_msl_m: 4500.0
+  peak_mach: 1.10
+  loaded_fuel_mass_kg: 3.80
+  ramjet_speed_run_fuel_budget_kg: 1.40
+
+requirements:
+  maximum_takeoff_mass_kg: 25.0
+  minimum_time_above_mach_one_s: 5.0
+  minimum_peak_mach: 1.0
+  landing_intact_required: true
+  reciprocal_flight_same_day_required: true
+  pulsejet_rule_status: organizer_confirmation_required
+
+openvsp:
+  api_version: "3.51.2"
+  body:
+    forebody_transition_length_m: 0.18
+    aft_taper_start_m: 1.80
+    selector_radial_allowance_m: 0.005
+    nozzle_radial_allowance_m: 0.012
+    fuselage_tessellation: 49
+  surface_tessellation: 16
+  lifting_surface_count: 2
+  lifting_surface_clocking_offset_deg: 0.0
+  fin_count: 4
+  fin_clocking_offset_deg: 45.0
+  lifting_surface:
+    x_location_m: 1.00
+    exposed_semispan_m: 0.16
+    root_chord_m: 0.42
+    tip_chord_m: 0.14
+    sweep_deg: 54.0
+    thickness_to_chord: 0.06
+  fin:
+    x_location_m: 1.78
+    exposed_semispan_m: 0.10
+    root_chord_m: 0.32
+    tip_chord_m: 0.10
+    sweep_deg: 52.0
+    thickness_to_chord: 0.05
+  analysis:
+    method: panel
+    mach_values: [0.20, 0.60, 0.80, 1.00, 1.10]
+    alpha_deg_values: [-2.0, 0.0, 2.0, 4.0, 6.0]
+    beta_deg_values: [-3.0, 0.0, 3.0]
+    reference_cg_x_m: 1.24
+    wake_iterations: 5
+
+simulation:
+  pulsejet_duration_s: 0.25
+  pulsejet_steady_warmup_s: 0.25
+  pulsejet_steady_measurement_s: 0.25
+  time_step_s: 0.00002
