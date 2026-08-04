@@ -10,12 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ConfigTests(unittest.TestCase):
     def test_user_half_area_requirement(self):
-        selector = SelectorConfig(0.3, 0.5, 0.8, 0.9)
+        selector = SelectorConfig(0.3, 0.5, 0.8, 0.99, 0.9)
         self.assertAlmostEqual(selector.available_area_m2, 0.5 * selector.circular_area_m2)
 
     def test_more_than_half_open_is_rejected(self):
         with self.assertRaises(ValueError):
-            SelectorConfig(0.3, 0.6, 0.8, 0.9)
+            SelectorConfig(0.3, 0.6, 0.8, 0.99, 0.9)
 
     def test_reference_case_loads(self):
         case = load_reference_case(ROOT / "configs" / "reference_case.yaml")

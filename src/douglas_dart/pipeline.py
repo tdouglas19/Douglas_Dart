@@ -12,6 +12,7 @@ import json
 import math
 import platform
 import shutil
+import subprocess
 import traceback
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ from .fuel_trade import fuel_performance_trade
 from .openvsp_geometry import build_openvsp_geometry
 from .pulsejet import PulsejetSimulator, summarize_pulsejet
 from .ramjet import evaluate_ramjet
+from .robustness import run_robustness_trade
 from .sensitivity import (
     pulsejet_local_sensitivities,
     ramjet_local_sensitivities,
@@ -69,6 +71,31 @@ class PipelineRunSummary:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _git_provenance(repository_root: Path) -> dict[str, Any]:
+    """Return revision metadata without making pipeline execution depend on Git."""
+
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repository_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        dirty = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=repository_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+        return {"git_commit_sha": commit, "git_worktree_dirty": dirty}
+    except (OSError, subprocess.CalledProcessError):
+        return {"git_commit_sha": None, "git_worktree_dirty": None}
 
 
 def _json_ready(value: Any) -> Any:
@@ -439,6 +466,7 @@ def _write_summary_markdown(
     ramjet_result: Any | None,
     convergence: Any | None,
     selected_nozzle: Any | None,
+    robustness_result: Any | None,
 ) -> Path:
     lines = [
         f"# Douglas Dart analysis run: {case.name}",
@@ -483,12 +511,30 @@ def _write_summary_markdown(
     if selected_nozzle is not None:
         lines.extend(
             [
-                f"- Selected feasible shared-nozzle throat: {1000.0 * selected_nozzle.throat_diameter_m:.1f} mm",
+                f"- Nominal-only grid selected feasible throat: {1000.0 * selected_nozzle.throat_diameter_m:.1f} mm",
                 f"- Selected exit/throat area ratio: {selected_nozzle.exit_to_throat_area_ratio:.2f}",
             ]
         )
     else:
         lines.append("- No feasible point was selected from the configured shared-nozzle grid.")
+    if robustness_result is not None:
+        selected_robust = robustness_result.selected_candidate
+        lines.extend(
+            [
+                f"- Component mass estimate / high-side total: {robustness_result.mass_budget.current_total_mass_kg:.1f} / {robustness_result.mass_budget.high_total_mass_kg:.1f} kg",
+            ]
+        )
+        if selected_robust is not None:
+            lines.append(
+                "- Robustness-selected body / throat: "
+                f"{1000.0 * selected_robust.body_diameter_m:.0f} / "
+                f"{1000.0 * selected_robust.throat_diameter_m:.0f} mm"
+            )
+            for scenario in selected_robust.scenarios:
+                lines.append(
+                    f"- {scenario.scenario.title()} excess thrust: "
+                    f"{scenario.excess_thrust_n:.1f} N"
+                )
 
     lines.extend(
         [
@@ -505,11 +551,12 @@ def _write_summary_markdown(
 
 
 def run_all_analyses(
-    config_path: str | Path = "configs/shared_nozzle_candidate_a.yaml",
+    config_path: str | Path = "configs/shared_nozzle_candidate_b.yaml",
     *,
     fuels_path: str | Path | None = None,
-    output_directory: str | Path = "results/generated/shared_nozzle_candidate_a",
-    openvsp_model_path: str | Path = "openvsp/generated/shared_nozzle_candidate_a.vsp3",
+    robustness_path: str | Path = "configs/robustness_candidate_b.yaml",
+    output_directory: str | Path = "results/generated/shared_nozzle_candidate_b",
+    openvsp_model_path: str | Path = "openvsp/generated/shared_nozzle_candidate_b.vsp3",
     body_diameter_max_m: float = 0.300,
     body_diameter_step_m: float = 0.005,
     altitude_min_m: float = 3000.0,
@@ -523,6 +570,7 @@ def run_all_analyses(
 
     started_at_utc = _utc_now()
     config_path = Path(config_path)
+    robustness_path = Path(robustness_path)
     resolved_fuels_path = (
         Path(fuels_path) if fuels_path is not None else config_path.with_name("fuels.yaml")
     )
@@ -539,15 +587,21 @@ def run_all_analyses(
     case = load_reference_case(config_path, resolved_fuels_path)
     shutil.copy2(config_path, input_dir / config_path.name)
     shutil.copy2(resolved_fuels_path, input_dir / resolved_fuels_path.name)
+    shutil.copy2(robustness_path, input_dir / robustness_path.name)
+    environment_record = {
+        "generated_at_utc": started_at_utc,
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "config_path": str(config_path),
+        "fuels_path": str(resolved_fuels_path),
+        "robustness_path": str(robustness_path),
+    }
+    environment_record.update(
+        _git_provenance(Path(__file__).resolve().parents[2])
+    )
     _write_json(
         output_directory / "environment.json",
-        {
-            "generated_at_utc": started_at_utc,
-            "python_version": platform.python_version(),
-            "platform": platform.platform(),
-            "config_path": str(config_path),
-            "fuels_path": str(resolved_fuels_path),
-        },
+        environment_record,
     )
 
     stage_records: list[PipelineStageRecord] = []
@@ -555,6 +609,7 @@ def run_all_analyses(
     ramjet_result = None
     convergence = None
     selected_nozzle = None
+    robustness_result = None
 
     def execute(
         name: str,
@@ -744,6 +799,22 @@ def run_all_analyses(
 
     execute("design_convergence", True, convergence_stage)
 
+    def robustness_stage() -> Sequence[Path]:
+        nonlocal robustness_result
+        robustness_result = run_robustness_trade(case, robustness_path)
+        return (
+            _write_csv(
+                csv_dir / "robustness_trade.csv",
+                robustness_result.points,
+            ),
+            _write_json(
+                json_dir / "robustness_trade.json",
+                robustness_result,
+            ),
+        )
+
+    execute("robustness_trade", True, robustness_stage)
+
     fuel_points: list[Any] = []
 
     def fuel_stage() -> Sequence[Path]:
@@ -887,6 +958,7 @@ def run_all_analyses(
         ramjet_result=ramjet_result,
         convergence=convergence,
         selected_nozzle=selected_nozzle,
+        robustness_result=robustness_result,
     )
     stage_records.append(
         PipelineStageRecord(

@@ -46,16 +46,24 @@ class SelectorConfig:
     circular_intake_diameter_m: float
     open_fraction: float
     discharge_coefficient: float
-    total_pressure_recovery: float
+    pulsejet_total_pressure_recovery: float
+    ramjet_total_pressure_recovery: float
 
     def __post_init__(self) -> None:
         _positive("circular_intake_diameter_m", self.circular_intake_diameter_m)
         if not 0.0 < self.open_fraction <= 0.5:
             raise ValueError(
                 "open_fraction must be in (0, 0.5] for mutually exclusive half-intakes"
-            )
+        )
         _fraction("discharge_coefficient", self.discharge_coefficient)
-        _fraction("total_pressure_recovery", self.total_pressure_recovery)
+        _fraction(
+            "pulsejet_total_pressure_recovery",
+            self.pulsejet_total_pressure_recovery,
+        )
+        _fraction(
+            "ramjet_total_pressure_recovery",
+            self.ramjet_total_pressure_recovery,
+        )
 
     @property
     def circular_area_m2(self) -> float:

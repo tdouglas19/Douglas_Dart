@@ -8,7 +8,9 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
-from douglas_dart.pipeline import _json_ready, _write_csv, _write_json
+from douglas_dart.pipeline import _git_provenance, _json_ready, _write_csv, _write_json
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,11 @@ class ExampleRow:
 
 
 class PipelineArtifactTests(unittest.TestCase):
+    def test_git_provenance_identifies_repository_revision(self):
+        provenance = _git_provenance(ROOT)
+        self.assertRegex(provenance["git_commit_sha"], r"^[0-9a-f]{40}$")
+        self.assertIsInstance(provenance["git_worktree_dirty"], bool)
+
     def test_json_ready_converts_dataclasses_paths_and_nonfinite_values(self) -> None:
         converted = _json_ready(
             {

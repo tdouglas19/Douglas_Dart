@@ -11,15 +11,19 @@ The current suite covers implementation and limiting behavior for:
 - C-D-nozzle continuity at choking onset and as an internal normal shock reaches the
   exit;
 - exact enforcement of the mutually exclusive half-area selector;
+- conventional pulsejet and ramjet total-pressure recovery ratios with separate
+  configuration inputs;
 - finite pulsejet states, ignition/blowdown/refill sequencing, and instantaneous net
   thrust accounting;
 - cumulative mass and energy closure, including separate wall and temperature-limit
   rejection ledgers;
 - removal of the initially charged pulsejet startup transient from trade averages;
 - less than 2% steady mean-thrust change between 40 µs and 20 µs time steps for
-  Candidate A;
+  Candidate B;
 - ramjet light-off/self-sustaining flag separation and throat-limited spillage;
 - fuel-derived hold duration and explicit shared-nozzle feasibility selection;
+- component mass-budget reconciliation, high-side mass margin, and named robustness
+  scenario selection without hiding the adverse-case failure;
 - OpenVSP geometry station, surface-count, clocking, flow-through, and reference-area
   call contracts; and
 - one VSPAERO single-point execution per configured nonuniform Mach/alpha/beta entry.
@@ -27,23 +31,19 @@ The current suite covers implementation and limiting behavior for:
 These checks show that code paths behave consistently with their stated equations.
 They do not establish engine, aerodynamic, structural, or mission accuracy.
 
-## Candidate A numerical checks
+## Candidate B numerical checks
 
 For a 0.25 s warmup plus 0.25 s measurement window:
 
 | Time step | Mean net thrust | Peak pressure in measurement window | Cycles |
 |---:|---:|---:|---:|
-| 40 µs | 186.91 N | 146.68 kPa | 14 |
-| 20 µs | 185.20 N | 146.32 kPa | 14 |
-| 10 µs | 184.70 N | 146.11 kPa | 14 |
+| 40 µs | 121.76 N | 124.86 kPa | 14 |
+| 20 µs | 122.01 N | 124.66 kPa | 14 |
+| 10 µs | 121.65 N | 124.58 kPa | 14 |
 
-The 20-to-10 µs mean-thrust change is about 0.27%. Over the full 0.50 s, mass and
-energy ledgers close to floating-point tolerance. The run rejects about 6.76 kJ
-through the provisional wall-loss term and zero energy through the 2,600 K numerical
-temperature limiter, so that limiter is not creating Candidate A's steady result.
-
-This is numerical convergence of a lumped model, not physical validation of its
-pressure amplitude, frequency, or thrust.
+The prior Candidate A convergence values no longer apply because the inlet recovery
+definition and shared throat changed. Candidate B's 20-to-10 µs mean-thrust change is
+about 0.30%. This is numerical convergence of a lumped model, not physical validation.
 
 ## OpenVSP/VSPAERO verification state
 
@@ -56,7 +56,7 @@ functional Python API and VSPAERO binaries shipped with OpenVSP. Consequently:
 
 - no generated `.vsp3` file is claimed as visually inspected;
 - no VSPAERO mesh, convergence history, polar, or stability derivative is claimed;
-- the 205 mm body and surface arrangement have not passed interference or mesh QA;
+- the 210 mm body and surface arrangement have not passed interference or mesh QA;
 - the OpenVSP flow-through settings must be smoke-tested in the pinned application;
   and
 - panel results must be checked for wake convergence and compared with an independent
@@ -76,7 +76,7 @@ functional Python API and VSPAERO binaries shipped with OpenVSP. Consequently:
 5. **Nozzle:** validate the quasi-one-dimensional shock branch and add separation and
    side-load limits before trusting expansion-ratio selection.
 6. **Ramjet inlet coupling:** solve external compression, terminal-shock position,
-   distortion, unstart margin, back-pressure compatibility, and the current 66%
+   distortion, unstart margin, back-pressure compatibility, and the current 50.5%
    spillage stream.
 7. **Combustion and transition:** establish light-off, flameholding, pressure loss,
    selector timing, trapped-volume, and transient mode-change behavior.
@@ -91,13 +91,14 @@ functional Python API and VSPAERO binaries shipped with OpenVSP. Consequently:
 
 ## Known interpretation cautions
 
-- Candidate A's 24.7 N derated Mach 1.10 margin is small relative to unresolved drag
-  and inlet uncertainty.
-- The 205–210.1 mm body interval uses a diameter-squared drag budget, not VSPAERO data.
-- The 126.84 mm throat boundary holds area ratio, altitude, Mach, and component
-  assumptions fixed.
-- The 29 s fuel estimate assumes linear thrust/fuel turndown and excludes acceleration
-  fuel.
+- Candidate B passes its conservative static screen by only about 1.5 N over the
+  provisional 50 N excess-thrust budget and fails the adverse screen by about 154 N.
+- The 210 mm body drag uses a diameter-squared budget, not VSPAERO data.
+- The 160 mm throat is a static robustness compromise; its pulsejet/ramjet transition
+  performance is not closed.
+- The 19 s full-throttle endurance excludes acceleration fuel and transition losses.
+- The 23.9 kg high-side mass is an allocation sum, not a weighed or statistically
+  validated vehicle mass.
 - A self-sustaining flag checks configured thresholds only; it is not a stability
   prediction.
 - VSPAERO drag is labeled inviscid and cannot replace total drag by itself.

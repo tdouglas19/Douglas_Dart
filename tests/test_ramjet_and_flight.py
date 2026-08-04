@@ -1,6 +1,8 @@
 import unittest
 from pathlib import Path
 
+from douglas_dart.atmosphere import standard_atmosphere
+from douglas_dart.compressible import stagnation_pressure
 from douglas_dart.config import load_reference_case
 from douglas_dart.flight import PointMassState, longitudinal_derivative
 from douglas_dart.ramjet import evaluate_ramjet
@@ -58,6 +60,25 @@ class RamjetAndFlightTests(unittest.TestCase):
         self.assertAlmostEqual(
             result.net_thrust_n,
             result.gross_thrust_n - result.inlet_momentum_drag_n,
+        )
+
+    def test_ramjet_recovery_is_total_pressure_ratio(self):
+        altitude_m = self.case.mission.speed_run_altitude_msl_m
+        mach = self.case.mission.peak_mach
+        atmosphere = standard_atmosphere(altitude_m)
+        ideal_total_pressure_pa = stagnation_pressure(atmosphere.pressure_pa, mach)
+        result = evaluate_ramjet(
+            self.case.ramjet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            altitude_m,
+            mach,
+        )
+        self.assertAlmostEqual(
+            result.combustor_inlet_total_pressure_pa / ideal_total_pressure_pa,
+            self.case.selector.ramjet_total_pressure_recovery,
+            places=12,
         )
 
 

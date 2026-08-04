@@ -15,31 +15,33 @@ engine model into validated hardware performance.
 
 ## Current convergence point
 
-`configs/shared_nozzle_candidate_a.yaml` is the first coupled candidate, not a frozen
-design.
+`configs/shared_nozzle_candidate_b.yaml` is the active static-screen candidate, not a
+frozen design and not a closed mission.
 
-| Parameter or result | Candidate A numerical value |
+| Parameter or result | Candidate B numerical value |
 |---|---:|
-| Loaded reference mass / maximum allowed | 21.0 / 25.0 kg |
-| Body diameter / length | 205 mm / 2.30 m |
+| Current / high-side loaded mass / maximum allowed | 21.0 / 23.9 / 25.0 kg |
+| Body diameter / length | 210 mm / 2.30 m |
 | Circular intake / area available to one mode | 195 mm / 50% |
-| Shared throat / exit-to-throat area ratio | 130 mm / 1.05 |
+| Shared throat / exit-to-throat area ratio | 160 mm / 1.05 |
 | Mach 1.10 altitude | 4,500 m MSL |
-| Ramjet net thrust / 15%-derated net thrust | 603 / 513 N |
-| Conservative drag-budget force | 488 N |
-| Derated thrust margin | 24.7 N |
-| Ramjet potential-capture spillage | 66.0% |
-| Fuel-limited static hold estimate | 29.0 s / 10.3 km |
-| Steady-window pulsejet net thrust at sea level, Mach 0.20 | about 185 N |
+| Nominal ramjet net thrust / drag | 832 / 512 N |
+| Existing 15%-derated static margin | 195 N |
+| Conservative-screen excess thrust | 51.5 N against a 50 N budget |
+| Adverse-screen excess thrust | -153.7 N; fails |
+| Ramjet potential-capture spillage | 50.5% nominal |
+| Full-throttle ramjet fuel endurance | 19.0 s |
+| Pulsejet net thrust at sea level, Mach 0.20 | about 122 N |
 
-The local fixed-architecture bounds are narrow: approximately 205–210.1 mm body
-diameter and a minimum 126.84 mm throat at the 205 mm body point. Candidate A has no
-extra body margin beyond its configured 5 mm radial selector allowance and about
-3.17 mm of throat-diameter margin above the modeled derated-thrust boundary.
+The earlier 205/130 mm Candidate A is retained as a rejected regression case. Its
+ramjet result had treated 0.92 total-pressure recovery as recovery of only the ram
+pressure rise; after correcting recovery to the conventional total-pressure ratio,
+Candidate A misses the original 15% reserve by about 21 N.
 
-The 29-second result only says the static low-order fuel balance exceeds the
-five-second requirement. Acceleration through Mach 1, inlet operability, drag closure,
-and the coupled trajectory are not yet demonstrated. See
+Candidate B passes the named nominal and conservative static screens and retains
+2.5 mm of radial selector packaging margin, but it fails the adverse screen. None of
+these static points demonstrates acceleration through Mach 1, inlet operability,
+drag closure, stability, control, or recovery. See
 [docs/design_convergence.md](docs/design_convergence.md) for the decision record.
 
 ## Current capability
@@ -52,6 +54,8 @@ and the coupled trajectory are not yet demonstrated. See
   momentum drag, and explicit spillage reporting;
 - shared-nozzle body/throat/area-ratio trades with packaging allowances, drag budget,
   propulsion derate, fuel depletion, and requirement checks;
+- component-level current/high-side mass accounting and named nominal, conservative,
+  and adverse static robustness scenarios with visible objective weights;
 - local normalized pulsejet and ramjet key-variable sensitivities;
 - performance-only multi-fuel comparison with tank volume and explicit omitted-system
   flags;
@@ -72,23 +76,27 @@ python -m pip install -e .
 python -m unittest discover -s tests -v
 
 douglas-dart design-convergence \
-  --config configs/shared_nozzle_candidate_a.yaml
+  --config configs/shared_nozzle_candidate_b.yaml
 
 douglas-dart shared-nozzle-trade \
-  --config configs/shared_nozzle_candidate_a.yaml
+  --config configs/shared_nozzle_candidate_b.yaml
 
 douglas-dart key-variables \
-  --config configs/shared_nozzle_candidate_a.yaml --engine both
+  --config configs/shared_nozzle_candidate_b.yaml --engine both
 
 douglas-dart fuel-trade \
-  --config configs/shared_nozzle_candidate_a.yaml
+  --config configs/shared_nozzle_candidate_b.yaml
+
+douglas-dart robustness-trade \
+  --config configs/shared_nozzle_candidate_b.yaml \
+  --robustness configs/robustness_candidate_b.yaml
 
 douglas-dart altitude-trade \
-  --config configs/shared_nozzle_candidate_a.yaml \
+  --config configs/shared_nozzle_candidate_b.yaml \
   --minimum-altitude 3000 --maximum-altitude 6500 --altitude-step 500
 
 douglas-dart pulsejet \
-  --config configs/shared_nozzle_candidate_a.yaml \
+  --config configs/shared_nozzle_candidate_b.yaml \
   --duration 0.50 --summary-start 0.25
 ```
 
@@ -96,9 +104,9 @@ CSV output is optional and generated files are ignored by Git:
 
 ```bash
 douglas-dart pulsejet \
-  --config configs/shared_nozzle_candidate_a.yaml \
+  --config configs/shared_nozzle_candidate_b.yaml \
   --duration 0.50 --summary-start 0.25 \
-  --csv results/pulsejet_candidate_a.csv
+  --csv results/pulsejet_candidate_b.csv
 ```
 
 ## One-command pipeline
@@ -112,7 +120,7 @@ python run_all.py
 ```
 
 The default result package is written to
-`results/generated/shared_nozzle_candidate_a/` with this structure:
+`results/generated/shared_nozzle_candidate_b/` with this structure:
 
 ```text
 inputs/       copied YAML inputs used for the run
@@ -126,7 +134,7 @@ summary.md
 ```
 
 The generated geometry is written to
-`openvsp/generated/shared_nozzle_candidate_a.vsp3`. The manifest remains available
+`openvsp/generated/shared_nozzle_candidate_b.vsp3`. The manifest remains available
 even if OpenVSP or VSPAERO fails, so completed Python results are not lost and the
 blocked external stage is explicit.
 
@@ -158,13 +166,13 @@ an empty module or mismatched API version rather than producing a false-success 
 
 ```bash
 douglas-dart openvsp-build \
-  --config configs/shared_nozzle_candidate_a.yaml \
-  --output openvsp/generated/shared_nozzle_candidate_a.vsp3
+  --config configs/shared_nozzle_candidate_b.yaml \
+  --output openvsp/generated/shared_nozzle_candidate_b.vsp3
 
 douglas-dart vspaero-sweep \
-  --config configs/shared_nozzle_candidate_a.yaml \
-  --model openvsp/generated/shared_nozzle_candidate_a.vsp3 \
-  --csv results/vspaero_candidate_a.csv
+  --config configs/shared_nozzle_candidate_b.yaml \
+  --model openvsp/generated/shared_nozzle_candidate_b.vsp3 \
+  --csv results/vspaero_candidate_b.csv
 ```
 
 This repository tests the OpenVSP API call contract against the current official

@@ -135,10 +135,9 @@ class PulsejetSimulator:
             self.atmosphere.temperature_k, mach
         )
         ideal_total_pressure_pa = stagnation_pressure(self.atmosphere.pressure_pa, mach)
-        # Recovery is applied to ram rise above ambient, avoiding an artificial loss at M=0.
-        self.inlet_total_pressure_pa = self.atmosphere.pressure_pa + (
-            ideal_total_pressure_pa - self.atmosphere.pressure_pa
-        ) * selector.total_pressure_recovery
+        self.inlet_total_pressure_pa = (
+            ideal_total_pressure_pa * selector.pulsejet_total_pressure_recovery
+        )
         self.cv_j_per_kg_k = config.gas_constant_j_per_kg_k / (config.gamma - 1.0)
         self.cp_j_per_kg_k = config.gamma * self.cv_j_per_kg_k
         self.initial_air_reference_mass_kg = (

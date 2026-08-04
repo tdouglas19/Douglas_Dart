@@ -80,7 +80,7 @@ class RamjetSizingTests(unittest.TestCase):
                 peak_mach_drag_area_ceiling_m2=0.003,
             ),
         )
-        one_budget = evaluate_peak_mach_diameter_trade(low_drag_case, 0.225)
+        one_budget = evaluate_peak_mach_diameter_trade(low_drag_case, 0.230)
         two_budget_case = replace(
             low_drag_case,
             mission=replace(
@@ -88,7 +88,7 @@ class RamjetSizingTests(unittest.TestCase):
                 ramjet_speed_run_fuel_budget_kg=2.80,
             ),
         )
-        two_budget = evaluate_peak_mach_diameter_trade(two_budget_case, 0.225)
+        two_budget = evaluate_peak_mach_diameter_trade(two_budget_case, 0.230)
         self.assertTrue(one_budget.can_hold_peak_mach_against_scaled_drag_target)
         self.assertIsNotNone(one_budget.fuel_limited_peak_mach_hold_duration_s)
         self.assertAlmostEqual(
@@ -97,7 +97,7 @@ class RamjetSizingTests(unittest.TestCase):
         )
 
     def test_reference_trade_reports_packaging_and_drag_separately(self):
-        points = peak_mach_diameter_trade_sweep(self.case, 0.195, 0.225, 0.005)
+        points = peak_mach_diameter_trade_sweep(self.case, 0.195, 0.235, 0.005)
         self.assertFalse(points[0].throat_packageable_without_radial_allowance)
         self.assertTrue(points[-1].throat_packageable_without_radial_allowance)
         self.assertGreater(points[-1].available_radial_clearance_m, 0.0)
@@ -109,7 +109,7 @@ class RamjetSizingTests(unittest.TestCase):
             / points[-1].full_throttle_ramjet_fuel_mass_flow_kg_per_s,
         )
 
-    def test_shared_nozzle_candidate_closes_explicit_reserve_and_duration(self):
+    def test_candidate_a_is_rejected_after_total_pressure_recovery_correction(self):
         candidate = load_reference_case(
             ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
         )
@@ -123,24 +123,40 @@ class RamjetSizingTests(unittest.TestCase):
             pulsejet_time_step_s=0.00004,
         )
         self.assertTrue(point.packageable_with_configured_allowances)
-        self.assertTrue(point.can_hold_peak_mach_with_derate)
-        self.assertTrue(
-            point.static_fuel_hold_exceeds_minimum_supersonic_duration
-        )
+        self.assertFalse(point.can_hold_peak_mach_with_derate)
+        self.assertFalse(point.static_fuel_hold_exceeds_minimum_supersonic_duration)
         self.assertTrue(point.configured_loaded_mass_within_requirement)
-        self.assertGreater(point.ramjet_derated_thrust_margin_n, 0.0)
+        self.assertLess(point.ramjet_derated_thrust_margin_n, 0.0)
         self.assertGreater(point.pulsejet_mean_net_thrust_n, 0.0)
         self.assertEqual(point.pulsejet_warmup_duration_s, 0.05)
         self.assertEqual(point.pulsejet_measurement_duration_s, 0.05)
 
+    def test_candidate_b_closes_nominal_static_reserve_and_duration(self):
+        candidate = load_reference_case(
+            ROOT / "configs" / "shared_nozzle_candidate_b.yaml"
+        )
+        point = evaluate_shared_nozzle_trade(
+            candidate,
+            candidate.vehicle.body_diameter_m,
+            candidate.nozzle.throat_diameter_m,
+            candidate.nozzle.exit_to_throat_area_ratio,
+            pulsejet_warmup_s=0.05,
+            pulsejet_measurement_s=0.05,
+            pulsejet_time_step_s=0.00004,
+        )
+        self.assertTrue(point.packageable_with_configured_allowances)
+        self.assertTrue(point.can_hold_peak_mach_with_derate)
+        self.assertTrue(point.static_fuel_hold_exceeds_minimum_supersonic_duration)
+        self.assertGreater(point.ramjet_derated_thrust_margin_n, 190.0)
+
     def test_minimum_feasible_selector_uses_explicit_lexicographic_rule(self):
         candidate = load_reference_case(
-            ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
+            ROOT / "configs" / "shared_nozzle_candidate_b.yaml"
         )
         points = shared_nozzle_trade_sweep(
             candidate,
             body_diameters_m=(0.205,),
-            throat_diameters_m=(0.120, 0.130),
+            throat_diameters_m=(0.130, 0.140, 0.160),
             exit_to_throat_area_ratios=(1.05,),
             pulsejet_warmup_s=0.05,
             pulsejet_measurement_s=0.05,
@@ -148,11 +164,11 @@ class RamjetSizingTests(unittest.TestCase):
         )
         selected = select_minimum_feasible_shared_nozzle(points)
         self.assertIsNotNone(selected)
-        self.assertEqual(selected.throat_diameter_m, 0.130)
+        self.assertEqual(selected.throat_diameter_m, 0.140)
 
     def test_candidate_has_narrow_local_body_and_throat_feasibility_margins(self):
         candidate = load_reference_case(
-            ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
+            ROOT / "configs" / "shared_nozzle_candidate_b.yaml"
         )
         bounds = shared_nozzle_feasibility_bounds(candidate)
         self.assertTrue(bounds.fixed_architecture_has_body_feasibility_interval)
@@ -161,25 +177,25 @@ class RamjetSizingTests(unittest.TestCase):
             bounds.maximum_body_diameter_for_derated_drag_budget_m,
             candidate.vehicle.body_diameter_m,
         )
-        self.assertLess(
+        self.assertGreater(
             bounds.maximum_body_diameter_for_derated_drag_budget_m,
-            0.211,
+            0.240,
         )
         self.assertIsNotNone(
             bounds.minimum_throat_diameter_for_derated_drag_budget_m
         )
         self.assertGreater(
             bounds.minimum_throat_diameter_for_derated_drag_budget_m,
-            0.126,
+            0.135,
         )
         self.assertLess(
             bounds.minimum_throat_diameter_for_derated_drag_budget_m,
-            0.128,
+            0.138,
         )
 
     def test_altitude_trade_includes_endpoints_and_exposes_static_endurance(self):
         candidate = load_reference_case(
-            ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
+            ROOT / "configs" / "shared_nozzle_candidate_b.yaml"
         )
         points = peak_mach_altitude_trade_sweep(
             candidate,

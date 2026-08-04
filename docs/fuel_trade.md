@@ -21,7 +21,7 @@ restart, and transition must be demonstrated.
 The command
 
 ```bash
-douglas-dart fuel-trade --config configs/shared_nozzle_candidate_a.yaml
+douglas-dart fuel-trade --config configs/shared_nozzle_candidate_b.yaml
 ```
 
 uses the provisional properties in `configs/fuels.yaml`. It holds geometry,
@@ -29,10 +29,10 @@ temperature targets, fuel mass allocations, and every non-fuel parameter fixed.
 
 | Fuel reference | Volume for 3.8 kg | Chemical energy | Pulsejet steady net | Ramjet net | Static hold |
 |---|---:|---:|---:|---:|---:|
-| Jet-A | 4.75 L | 163.4 MJ | 185.2 N | 603.2 N | 29.0 s |
-| Gasoline | 5.14 L | 167.2 MJ | 190.5 N | 602.7 N | 29.6 s |
-| Liquid propane | 7.71 L | 176.3 MJ | 187.8 N | 601.8 N | 31.2 s |
-| Ethanol | 4.82 L | 101.8 MJ | 187.0 N | 614.2 N | 18.3 s |
+| Jet-A | 4.75 L | 163.4 MJ | 122.0 N | 832.1 N | 26.2 s |
+| Gasoline | 5.14 L | 167.2 MJ | 126.0 N | 831.5 N | 26.8 s |
+| Liquid propane | 7.71 L | 176.3 MJ | 125.5 N | 830.2 N | 28.2 s |
+| Ethanol | 4.82 L | 101.8 MJ | 128.5 N | 848.2 N | 16.6 s |
 
 Ethanol's higher modeled ramjet net thrust is not a free benefit. At a fixed nozzle
 capacity and target combustor temperature, its higher required fuel fraction reduces
@@ -48,7 +48,7 @@ repository values remain representative rather than specification-certified.
 
 FAA fuel-approval guidance explicitly calls for evaluating density, energy content,
 combustion behavior, starting/restarting, material compatibility, vapor pressure,
-flammability/flash point, water/icing, viscosity, and pump pressure drop. Candidate A
+flammability/flash point, water/icing, viscosity, and pump pressure drop. Candidate B
 also needs criteria specific to this architecture:
 
 - pulsejet pressure-cycle repeatability and acoustic coupling;

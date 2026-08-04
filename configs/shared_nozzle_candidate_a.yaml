@@ -10,7 +10,8 @@ selector:
   circular_intake_diameter_m: 0.195
   open_fraction: 0.500
   discharge_coefficient: 0.78
-  total_pressure_recovery: 0.92
+  pulsejet_total_pressure_recovery: 0.99
+  ramjet_total_pressure_recovery: 0.92
 
 nozzle:
   throat_diameter_m: 0.130

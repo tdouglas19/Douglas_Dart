@@ -13,6 +13,7 @@ from .fuel_trade import fuel_performance_trade
 from .openvsp_geometry import build_openvsp_geometry
 from .pulsejet import PulsejetSimulator, summarize_pulsejet
 from .ramjet import evaluate_ramjet
+from .robustness import run_robustness_trade
 from .sensitivity import (
     pulsejet_local_sensitivities,
     ramjet_local_sensitivities,
@@ -187,6 +188,13 @@ def _altitude_trade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _robustness_trade(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    result = run_robustness_trade(case, args.robustness)
+    print(json.dumps(asdict(result), indent=2))
+    return 0
+
+
 def _key_variables(args: argparse.Namespace) -> int:
     case = load_reference_case(args.config, args.fuels)
     pulsejet_warmup_s = (
@@ -313,7 +321,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     shared_nozzle.add_argument(
         "--config",
-        default="configs/shared_nozzle_candidate_a.yaml",
+        default="configs/shared_nozzle_candidate_b.yaml",
     )
     shared_nozzle.add_argument("--fuels", default=None)
     shared_nozzle.add_argument(
@@ -350,7 +358,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     design_convergence.add_argument(
         "--config",
-        default="configs/shared_nozzle_candidate_a.yaml",
+        default="configs/shared_nozzle_candidate_b.yaml",
     )
     design_convergence.add_argument("--fuels", default=None)
     design_convergence.add_argument("--propulsion-derate", type=float, default=0.15)
@@ -365,7 +373,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fuel_trade.add_argument(
         "--config",
-        default="configs/shared_nozzle_candidate_a.yaml",
+        default="configs/shared_nozzle_candidate_b.yaml",
     )
     fuel_trade.add_argument("--fuels", default=None)
     fuel_trade.add_argument("--propulsion-derate", type=float, default=0.15)
@@ -378,7 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     altitude_trade.add_argument(
         "--config",
-        default="configs/shared_nozzle_candidate_a.yaml",
+        default="configs/shared_nozzle_candidate_b.yaml",
     )
     altitude_trade.add_argument("--fuels", default=None)
     altitude_trade.add_argument("--minimum-altitude", type=float, default=3000.0)
@@ -388,13 +396,31 @@ def build_parser() -> argparse.ArgumentParser:
     altitude_trade.add_argument("--csv", default=None)
     altitude_trade.set_defaults(func=_altitude_trade)
 
+    robustness_trade = subparsers.add_parser(
+        "robustness-trade",
+        help=(
+            "evaluate component mass and named nominal, conservative, and adverse "
+            "peak-Mach scenarios with visible objective weights"
+        ),
+    )
+    robustness_trade.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_b.yaml",
+    )
+    robustness_trade.add_argument("--fuels", default=None)
+    robustness_trade.add_argument(
+        "--robustness",
+        default="configs/robustness_candidate_b.yaml",
+    )
+    robustness_trade.set_defaults(func=_robustness_trade)
+
     key_variables = subparsers.add_parser(
         "key-variables",
         help="rank local pulsejet and ramjet sensitivities around a configured point",
     )
     key_variables.add_argument(
         "--config",
-        default="configs/shared_nozzle_candidate_a.yaml",
+        default="configs/shared_nozzle_candidate_b.yaml",
     )
     key_variables.add_argument("--fuels", default=None)
     key_variables.add_argument(
@@ -415,12 +441,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     openvsp_build.add_argument(
         "--config",
-        default="configs/shared_nozzle_candidate_a.yaml",
+        default="configs/shared_nozzle_candidate_b.yaml",
     )
     openvsp_build.add_argument("--fuels", default=None)
     openvsp_build.add_argument(
         "--output",
-        default="openvsp/generated/shared_nozzle_candidate_a.vsp3",
+        default="openvsp/generated/shared_nozzle_candidate_b.vsp3",
     )
     openvsp_build.set_defaults(func=_openvsp_build)
 
@@ -430,12 +456,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     vspaero_sweep.add_argument(
         "--config",
-        default="configs/shared_nozzle_candidate_a.yaml",
+        default="configs/shared_nozzle_candidate_b.yaml",
     )
     vspaero_sweep.add_argument("--fuels", default=None)
     vspaero_sweep.add_argument(
         "--model",
-        default="openvsp/generated/shared_nozzle_candidate_a.vsp3",
+        default="openvsp/generated/shared_nozzle_candidate_b.vsp3",
     )
     vspaero_sweep.add_argument("--csv", default=None)
     vspaero_sweep.set_defaults(func=_vspaero_sweep)

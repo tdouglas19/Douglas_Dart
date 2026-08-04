@@ -58,6 +58,27 @@ class PulsejetTests(unittest.TestCase):
         self.assertGreater(summary.peak_chamber_pressure_pa, 101_325.0)
         self.assertLessEqual(summary.mean_net_thrust_n, summary.mean_gross_thrust_n)
 
+    def test_pulsejet_recovery_is_total_pressure_ratio(self):
+        simulator = PulsejetSimulator(
+            self.case.pulsejet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            self.case.altitude_m,
+            self.case.mach,
+        )
+        from douglas_dart.compressible import stagnation_pressure
+
+        ideal_total_pressure_pa = stagnation_pressure(
+            simulator.atmosphere.pressure_pa,
+            self.case.mach,
+        )
+        self.assertAlmostEqual(
+            simulator.inlet_total_pressure_pa / ideal_total_pressure_pa,
+            self.case.selector.pulsejet_total_pressure_recovery,
+            places=12,
+        )
+
     def test_control_volume_mass_and_energy_ledgers_close(self):
         simulator = PulsejetSimulator(
             self.case.pulsejet,

@@ -28,16 +28,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config",
         type=Path,
-        default=REPOSITORY_ROOT / "configs" / "shared_nozzle_candidate_a.yaml",
+        default=REPOSITORY_ROOT / "configs" / "shared_nozzle_candidate_b.yaml",
     )
     parser.add_argument("--fuels", type=Path, default=None)
+    parser.add_argument(
+        "--robustness",
+        type=Path,
+        default=REPOSITORY_ROOT / "configs" / "robustness_candidate_b.yaml",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=REPOSITORY_ROOT
         / "results"
         / "generated"
-        / "shared_nozzle_candidate_a",
+        / "shared_nozzle_candidate_b",
     )
     parser.add_argument(
         "--openvsp-model",
@@ -45,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=REPOSITORY_ROOT
         / "openvsp"
         / "generated"
-        / "shared_nozzle_candidate_a.vsp3",
+        / "shared_nozzle_candidate_b.vsp3",
     )
     parser.add_argument(
         "--body-diameter-max",
@@ -82,6 +87,7 @@ def main() -> int:
     summary = run_all_analyses(
         args.config,
         fuels_path=args.fuels,
+        robustness_path=args.robustness,
         output_directory=args.output_dir,
         openvsp_model_path=args.openvsp_model,
         body_diameter_max_m=args.body_diameter_max,

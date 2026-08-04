@@ -85,10 +85,13 @@ def _pulsejet_case_modifier(
             case,
             selector=replace(case.selector, discharge_coefficient=value),
         )
-    if variable == "selector_total_pressure_recovery":
+    if variable == "selector_pulsejet_total_pressure_recovery":
         return replace(
             case,
-            selector=replace(case.selector, total_pressure_recovery=value),
+            selector=replace(
+                case.selector,
+                pulsejet_total_pressure_recovery=value,
+            ),
         )
     if variable in {
         "chamber_volume_m3",
@@ -117,10 +120,13 @@ def _ramjet_case_modifier(
             case,
             nozzle=replace(case.nozzle, exit_to_throat_area_ratio=value),
         )
-    if variable == "selector_total_pressure_recovery":
+    if variable == "selector_ramjet_total_pressure_recovery":
         return replace(
             case,
-            selector=replace(case.selector, total_pressure_recovery=value),
+            selector=replace(
+                case.selector,
+                ramjet_total_pressure_recovery=value,
+            ),
         )
     if variable in {
         "mass_capture_coefficient",
@@ -146,7 +152,12 @@ def _input_values(
         "throat_diameter_m": case.nozzle.throat_diameter_m,
         "exit_to_throat_area_ratio": case.nozzle.exit_to_throat_area_ratio,
         "selector_discharge_coefficient": case.selector.discharge_coefficient,
-        "selector_total_pressure_recovery": case.selector.total_pressure_recovery,
+        "selector_pulsejet_total_pressure_recovery": (
+            case.selector.pulsejet_total_pressure_recovery
+        ),
+        "selector_ramjet_total_pressure_recovery": (
+            case.selector.ramjet_total_pressure_recovery
+        ),
         "chamber_volume_m3": case.pulsejet.chamber_volume_m3,
         "combustion_efficiency": case.pulsejet.combustion_efficiency,
         "target_equivalence_ratio": case.pulsejet.target_equivalence_ratio,
@@ -166,7 +177,8 @@ def _input_values(
     lower = 1.0 if variable == "exit_to_throat_area_ratio" else None
     upper = 1.0 if variable in {
         "selector_discharge_coefficient",
-        "selector_total_pressure_recovery",
+        "selector_pulsejet_total_pressure_recovery",
+        "selector_ramjet_total_pressure_recovery",
         "combustion_efficiency",
         "mass_capture_coefficient",
         "combustor_efficiency",
@@ -209,7 +221,7 @@ def pulsejet_local_sensitivities(
         "target_equivalence_ratio",
         "burn_duration_s",
         "selector_discharge_coefficient",
-        "selector_total_pressure_recovery",
+        "selector_pulsejet_total_pressure_recovery",
         "fuel_lower_heating_value_j_per_kg",
     ),
     *,
@@ -301,7 +313,7 @@ def ramjet_local_sensitivities(
     variables: Iterable[str] = (
         "throat_diameter_m",
         "exit_to_throat_area_ratio",
-        "selector_total_pressure_recovery",
+        "selector_ramjet_total_pressure_recovery",
         "mass_capture_coefficient",
         "combustor_total_pressure_loss_fraction",
         "combustor_efficiency",

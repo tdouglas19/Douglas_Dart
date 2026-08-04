@@ -51,9 +51,9 @@ def evaluate_ramjet(
     )
     inlet_total_temperature_k = stagnation_temperature(atmosphere.temperature_k, mach)
     ideal_total_pressure_pa = stagnation_pressure(atmosphere.pressure_pa, mach)
-    inlet_total_pressure_pa = atmosphere.pressure_pa + (
-        ideal_total_pressure_pa - atmosphere.pressure_pa
-    ) * selector.total_pressure_recovery
+    inlet_total_pressure_pa = (
+        ideal_total_pressure_pa * selector.ramjet_total_pressure_recovery
+    )
     combustor_exit_pressure_pa = inlet_total_pressure_pa * (
         1.0 - config.combustor_total_pressure_loss_fraction
     )

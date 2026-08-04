@@ -1,157 +1,102 @@
-# Candidate A design convergence
+# Candidate B static convergence
 
 ## Decision
 
-Carry **Candidate A** as the next geometry and coupled-model point:
+Carry **Candidate B** as the next geometry and model-integration point:
 
-- 205 mm outer body;
-- 2.30 m length;
+- 210 mm outer body and 2.30 m length;
 - fixed 195 mm circular intake with one-half available to the selected mode;
-- 130 mm shared throat;
-- `Ae/At = 1.05` shared exit;
+- 160 mm shared throat and `Ae/At = 1.05`;
 - representative Jet-A fuel; and
-- Mach 1.10 at 4,500 m MSL as the current peak analysis point.
+- Mach 1.10 at 4,500 m MSL as the current static analysis point.
 
-This is a lower-bound research configuration, not a frozen vehicle. It is the
-smallest tested architecture that packages the configured selector allowance and
-closes the conservative Mach 1.10 drag budget after a 15% propulsion derate.
+Candidate B is selected by the visible score in
+`configs/robustness_candidate_b.yaml` after passing the named nominal and
+conservative static screens. It is not a closed mission or a hardware recommendation.
 
-## Why the earlier full-capture concept was rejected
+## Model correction that rejected Candidate A
 
-At Mach 1.10 and 4,500 m, swallowing all potential flow from the half-open 195 mm
-intake required a roughly 223 mm hot-gas throat in the low-order model. Enlarging the
-body and intake together cannot cure that conflict because captured flow and throat
-capacity both scale approximately with area.
+Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of
+only the pressure rise above ambient:
 
-The design therefore keeps intake diameter fixed, chooses a packageable shared
-throat, and accepts intentional ramjet spillage. This trades mass flow for smaller
-body diameter and lower drag.
+\[
+P_{t,2}=P+0.92(P_{t,0}-P).
+\]
 
-The original `Ae/At = 2.25` placeholder was also rejected. At the low total-pressure
-ratio near Mach 1.10 it was strongly overexpanded and created a severe thrust penalty.
-The current model prefers less expansion in both modes, leading to the 1.05 boundary.
+That is not the conventional total-pressure recovery definition. The corrected
+implementation uses separate pulsejet and ramjet inputs and applies:
 
-## Candidate A numerical balance
+\[
+P_{t,2}=\pi_d P_{t,0}.
+\]
 
-| Quantity | Value |
+At Mach 1.10, this correction reduces Candidate A ramjet net thrust from the prior
+603 N result to about 549 N. After the existing 15% propulsion derate, the 205 mm
+Candidate A misses its 488 N drag budget by about 21 N. An automated governing-
+equation test now prevents the earlier interpretation from returning silently.
+
+## Candidate B numerical balance
+
+| Quantity | Static low-order value |
 |---|---:|
-| Diameter-scaled drag area budget | 0.009981 m² |
-| Drag-budget force at Mach 1.10 | 488.0 N |
-| Ramjet gross thrust | 1,050.2 N |
-| Ramjet inlet momentum drag | 447.0 N |
-| Ramjet net thrust | 603.2 N |
-| 15%-derated net thrust | 512.7 N |
-| Derated thrust margin | 24.7 N |
-| Air / fuel flow | 1.260 / 0.05075 kg/s |
-| Potential-capture spillage | 66.0% |
-| Full-throttle endurance from 1.40 kg | 27.6 s |
-| Linear hold-throttle fraction after derate | 95.2% |
-| Static fuel-limited hold / distance | 29.0 s / 10.3 km |
-| Configured loaded-mass margin to 25 kg | 4.0 kg |
+| Body / intake / throat diameter | 210 / 195 / 160 mm |
+| Exit/throat area ratio | 1.05 |
+| Diameter-scaled drag area | 0.010478 m² |
+| Drag at Mach 1.10 and 4,500 m | 512.1 N |
+| Nominal ramjet net thrust | 832.1 N |
+| Existing 15%-derated thrust | 707.3 N |
+| Existing 15%-derated margin | 195.2 N |
+| Nominal potential-capture spillage | 50.5% |
+| Nominal fuel flow | 0.07386 kg/s |
+| Full-throttle endurance from 1.40 kg | 19.0 s |
+| Selector radial packaging margin | 2.5 mm |
+| Pulsejet mean net thrust, sea level Mach 0.20 | about 122 N |
 
-The static hold exceeds the five-second requirement by a factor of about 5.8. It is
-not a compliance margin because acceleration fuel, real drag, transition losses, and
-inlet operability remain open.
+The larger throat improves high-speed ramjet flow capacity but reduces the
+low-speed pulsejet result. That shared-nozzle compromise is now explicit and must be
+tested in the coupled trajectory rather than optimized at one operating point.
 
-## Speed-run altitude remains open
+## Named robustness screens
 
-The repeatable static altitude sweep holds Mach, geometry, drag-area budget, and
-propulsion derate fixed:
+Every scenario is versioned in `configs/robustness_candidate_b.yaml`; none is a user
+requirement or a validated uncertainty distribution.
 
-| Altitude | Drag | Ramjet net | Derated margin | Fuel flow | Static hold |
-|---:|---:|---:|---:|---:|---:|
-| 3,000 m | 592.7 N | 722.2 N | 21.2 N | 0.06117 kg/s | 23.7 s |
-| 4,500 m | 488.0 N | 603.2 N | 24.7 N | 0.05075 kg/s | 29.0 s |
-| 6,000 m | 398.9 N | 500.0 N | 26.1 N | 0.04178 kg/s | 35.7 s |
-| 6,500 m | 372.3 N | 468.9 N | 26.3 N | 0.03909 kg/s | 38.3 s |
+| Scenario | Recovery | Thrust factor | Drag factor | Mass | Excess thrust |
+|---|---:|---:|---:|---:|---:|
+| Nominal | 0.92 | 1.00 | 1.00 | 21.0 kg | +320.0 N |
+| Conservative | 0.87 | 0.85 | 1.10 | 22.5 kg | +51.5 N |
+| Adverse | 0.82 | 0.75 | 1.20 | 23.9 kg | -153.7 N |
 
-The low-order static model prefers higher altitude for endurance and dynamic pressure.
-It excludes climb/diving energy, lower-density light-off/flameholding, control
-authority, and actual Mach-dependent drag. Therefore 4,500 m remains a mission
-starting point rather than a frozen speed-run altitude.
+The conservative screen has a provisional 50 N excess-thrust budget, so Candidate B
+passes it by only 1.5 N. The adverse case is intentionally informational and fails.
+This is evidence that inlet recovery and installed thrust remain the dominant risks,
+not evidence that the mission closes robustly.
 
-## Local feasibility bounds
+## Mass accounting
 
-Holding altitude, Mach, `Ae/At`, component assumptions, drag proxy, and the 15% derate
-fixed gives:
+The component allocations reconcile exactly to the configured 21.0 kg current
+estimate. Their explicit high-side additions total 2.9 kg, producing a 23.9 kg
+high-side estimate and 1.1 kg remaining against the 25 kg requirement. Most component
+entries are conceptual allocations; the numerical reconciliation is not a weighed
+vehicle.
 
-| Bound | Value | Candidate margin |
-|---|---:|---:|
-| Minimum body from configured packaging allowances | 205.00 mm | 0.00 mm |
-| Maximum body supported by derated thrust/drag proxy | 210.12 mm | 5.12 mm |
-| Minimum throat at 205 mm body | 126.84 mm | 3.17 mm diameter |
+## Present limiting factors
 
-These bounds show that Candidate A is useful for the next iteration but not robustly
-closed. A few percent of real drag growth or inlet recovery loss can consume the
-24.7 N modeled reserve.
-
-## Pulsejet repeating-cycle result
-
-The initially charged chamber creates a large startup impulse, so all design values
-discard the first 0.25 s and measure the next 0.25 s.
-
-| Quantity at sea level, Mach 0.20 | 20 µs result |
-|---|---:|
-| Mean gross / net thrust | 225.8 / 185.2 N |
-| Mean fuel flow | 0.03656 kg/s |
-| Peak chamber pressure in measurement window | 146.3 kPa |
-| Peak chamber temperature in measurement window | 2,058 K |
-| Peak instantaneous net thrust in measurement window | 1,043 N |
-| Cycles in 0.25 s | 14 |
-| Mean net thrust / loaded weight | 0.90 |
-
-The peak instantaneous value is a zero-dimensional output and must not be used as a
-structural load. The 20-to-10 µs change in mean net thrust is 0.27%. The 2,600 K
-temperature limiter rejects no energy in the 0.50 s Candidate A run.
-
-## Key local variables
-
-The normalized slope is the fractional output change divided by fractional input
-change over a centered ±10% perturbation. It is local and does not include parameter
-uncertainty or interactions.
-
-| Engine | Variable | Net-thrust normalized slope | Interpretation |
-|---|---|---:|---|
-| Ramjet | Throat diameter | +2.00 | Dominant because the point is throat-limited |
-| Pulsejet | Equivalence ratio | +1.21 | Thrust and fuel flow both move strongly |
-| Pulsejet | Fuel LHV | +1.21 | Same heat-release product as combustion efficiency in this model |
-| Pulsejet | Combustion efficiency | +1.21 | Must be calibrated; cannot be a tuning knob |
-| Pulsejet | Selector discharge coefficient | +1.20 | Effective open area is critical |
-| Ramjet | Total-pressure recovery | +1.16 | Inlet design/operability is a first-order risk |
-| Pulsejet | Total-pressure recovery | +0.63 | Intake loss matters in pulse mode too |
-| Pulsejet | Burn duration | -0.62 | Heat-release timing matters to useful pressure work |
-| Ramjet | Combustor exit temperature | +0.41 | Raises thrust and fuel flow |
-| Ramjet | Exit/throat area ratio | -0.39 | More expansion hurts this local overexpanded point |
-
-Ramjet mass-capture coefficient has zero local thrust sensitivity because the fixed
-throat already limits accepted flow; it changes potential spillage rather than
-throughflow. Fuel LHV and combustor efficiency strongly change ramjet fuel flow but
-barely change thrust at fixed target combustor temperature.
-
-## OpenVSP geometry promoted for the next gate
-
-The generated external geometry uses body stations at 0.00, 0.18, 0.99, 1.80, and
-2.30 m with diameters 195, 205, 205, 205, and 133.21 mm. Two lifting surfaces and four
-X-clocked fins are parameterized in YAML. Candidate A's VSPAERO reference quantities
-are 0.0896 m², 0.525 m, and 0.3033 m.
-
-The API contract is tested, but no live `.vsp3` or VSPAERO polar is claimed from this
-workspace because its imported `openvsp` module lacks the compiled API. The next
-geometry decision must follow live build, visual QA, and mesh/wake convergence.
+1. **Inlet recovery and installed thrust** dominate the Mach 1.10 prediction. The
+   adverse scenario cannot hold the drag budget.
+2. **Shared-nozzle sizing** is the main geometry compromise: a larger throat helps the
+   ramjet and weakens the current pulsejet result.
+3. **Body diameter** is no longer at the exact selector packaging boundary, but the
+   2.5 mm radial margin is still provisional and must absorb real tolerances.
+4. **Mass** remains below 25 kg in the stated high-side budget, but it has not yet been
+   coupled to acceleration, climb, stability, or recovery.
+5. **Aerodynamic drag** is still a diameter-scaled budget. The flight kernel's simple
+   coefficient polar is not consistent enough to replace it at Mach 1.10.
 
 ## Do not freeze yet
 
-Keep the following variables open:
-
-- 205–210 mm body diameter;
-- 127–132 mm throat neighborhood;
-- minimal but genuinely converging-diverging exit ratio;
-- lifting-surface area and placement;
-- fin area, clocking, and longitudinal location;
-- 4,500–6,500 m ramjet operating altitude;
-- intake recovery, capture/spillage schedule, and unstart margin;
-- chamber volume and pulse timing; and
-- fuel allocation and final fuel choice.
-
-The first freeze should occur only after external-drag closure and a coupled
-inlet/back-pressure model show a nontrivial reserve at Mach 1.10.
+Keep body diameter, throat size, inlet recovery, drag area, fuel allocation, and
+transition schedule open. The next high-value gate is a coupled phase-based mission
+simulation using one documented drag-area model, followed by inlet/back-pressure and
+external-aerodynamic closure. Candidate B must not be promoted as mission-feasible
+until those gates, stability/control, and recovery are demonstrated.

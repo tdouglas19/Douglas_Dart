@@ -21,14 +21,14 @@ Official references:
 - [OpenVSP API documentation](https://openvsp.org/api_docs/latest/)
 - [OpenVSP source and examples](https://github.com/OpenVSP/OpenVSP)
 
-## Build Candidate A
+## Build Candidate B
 
 ```bash
 python -m pip install -e .
 
 douglas-dart openvsp-build \
-  --config configs/shared_nozzle_candidate_a.yaml \
-  --output openvsp/generated/shared_nozzle_candidate_a.vsp3
+  --config configs/shared_nozzle_candidate_b.yaml \
+  --output openvsp/generated/shared_nozzle_candidate_b.vsp3
 ```
 
 The generator creates five circular body stations:
@@ -61,12 +61,12 @@ Before running VSPAERO, inspect the generated file in OpenVSP:
 
 ```bash
 douglas-dart vspaero-sweep \
-  --config configs/shared_nozzle_candidate_a.yaml \
-  --model openvsp/generated/shared_nozzle_candidate_a.vsp3 \
-  --csv results/vspaero_candidate_a.csv
+  --config configs/shared_nozzle_candidate_b.yaml \
+  --model openvsp/generated/shared_nozzle_candidate_b.vsp3 \
+  --csv results/vspaero_candidate_b.csv
 ```
 
-Candidate A uses the panel method because the body is thick geometry. Manual
+Candidate B uses the panel method because the body is thick geometry. Manual
 reference values are 0.0896 m² area, 0.525 m span, 0.3033 m mean aerodynamic chord,
 and 1.24 m CG station. Mach values are nonuniform, so the runner executes each
 Mach/alpha/beta combination as an individual one-point sweep rather than asking

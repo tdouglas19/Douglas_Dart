@@ -6,8 +6,11 @@
 - Pulsejet mass/energy ledgers and C-D-nozzle regime continuity are implemented.
 - Pulsejet trade averages exclude startup and have an automated time-step check.
 - Ramjet full-capture sizing exposed the original throat/body conflict.
-- A fixed shared-nozzle/spillage trade produced Candidate A and local body/throat
-  bounds.
+- Conventional total-pressure recovery replaced the earlier ram-rise interpretation
+  and rejected Candidate A as a static reserve point.
+- A fixed shared-nozzle/spillage trade plus named robustness screens produced
+  Candidate B at 210 mm body and 160 mm throat.
+- A component mass budget reconciles to 21.0 kg and exposes a 23.9 kg high-side case.
 - Fuel-limited Mach 1.10 hold replaces prescribed speed-run duration.
 - A 3,000–6,500 m static altitude sweep keeps the speed-run altitude open and shows
   the current model's high-altitude endurance preference.
@@ -31,8 +34,8 @@
 
 ## Next: inlet and propulsion closure
 
-1. Promote ramjet total-pressure recovery and spillage into an inlet/back-pressure
-   map with unstart margin.
+1. Promote the now-conventional ramjet total-pressure recovery and spillage inputs
+   into an inlet/back-pressure map with unstart margin.
 2. Replace the pulsejet's lumped acoustic assumption with the minimum fidelity needed
    to match a relevant pressure trace.
 3. Sweep chamber volume, selector effective area, equivalence ratio, heat release,
@@ -50,8 +53,9 @@
    and recovery reserve.
 4. Optimize speed-run altitude and mode-transition schedule rather than treating
    4,500 m as closed.
-5. Evaluate off-nominal atmosphere, propulsion derate, drag growth, and failed-lightoff
-   cases before judging the five-second and reciprocal-flight requirements.
+5. Extend the current named static robustness cases through the full trajectory,
+   including off-nominal atmosphere and failed light-off, before judging the
+   five-second and reciprocal-flight requirements.
 
 ## Decisions still owned by the user
 
