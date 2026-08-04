@@ -195,7 +195,7 @@ try {
         throw "Candidate B configuration was not found: $configurationPath"
     }
 
-    $pythonVersionScript = 'import sys; actual=f"{sys.version_info.major}.{sys.version_info.minor}"; print(actual); raise SystemExit(0 if actual == "3.11" else 1)'
+    $pythonVersionScript = "import sys; actual=str(sys.version_info.major) + '.' + str(sys.version_info.minor); print(actual); raise SystemExit(0 if actual == '3.11' else 1)"
     $pythonVersionOutput = @(Invoke-CheckedNativeCommand -Executable $pythonExecutable -Arguments @("-c", $pythonVersionScript) -CaptureOutput)
     $pythonVersion = ($pythonVersionOutput | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" } | Select-Object -Last 1)
     if ($pythonVersion -ne $ExpectedPythonVersion) {
@@ -240,7 +240,7 @@ for module in (degen_geom, openvsp):
         )
 if not hasattr(openvsp, "AddGeom") or not callable(openvsp.AddGeom):
     raise RuntimeError("openvsp.AddGeom is missing or is not callable")
-actual = str(openvsp.GetVSPVersion()).strip()
+actual = str(openvsp.GetVSPVersion()).replace("OpenVSP", "").strip()
 if actual != expected:
     raise RuntimeError(f"OpenVSP API version mismatch: expected {expected}, got {actual}")
 print("__DOUGLAS_DART_OPENVSP_VERSION__=" + actual)
@@ -305,7 +305,7 @@ if not geometry_ids:
     raise RuntimeError("No geometry objects were loaded from the generated VSP3 file")
 
 payload = {
-    "version": str(openvsp.GetVSPVersion()).strip(),
+    "version": str(openvsp.GetVSPVersion()).replace("OpenVSP", "").strip(),
     "geometries": [
         {"id": str(geometry_id), "name": str(openvsp.GetGeomName(geometry_id))}
         for geometry_id in geometry_ids
