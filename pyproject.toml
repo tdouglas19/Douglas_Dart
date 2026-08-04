@@ -9,6 +9,7 @@ description = "Low-order propulsion and flight modeling for the Douglas Dart res
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "matplotlib>=3.8",
   "PyYAML>=6.0",
 ]
 
