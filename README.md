@@ -145,6 +145,11 @@ python run_all.py --skip-vspaero
 The default 300 mm upper diameter value is only a numerical sweep bound. It is not a
 vehicle requirement and can be changed with `--body-diameter-max`.
 
+The automated test environment validates the Python package, result serialization,
+and OpenVSP API call contracts. It does not contain the official OpenVSP application,
+so a live `.vsp3` write and VSPAERO solve must still be run on a machine with the
+matching OpenVSP 3.51.2 Python bindings and solver installation.
+
 ## OpenVSP and VSPAERO
 
 Use the Python API shipped with the OpenVSP version named in the YAML. The ordinary
