@@ -101,6 +101,50 @@ douglas-dart pulsejet \
   --csv results/pulsejet_candidate_a.csv
 ```
 
+## One-command pipeline
+
+The repository-level runner executes every currently implemented propulsion, sizing,
+fuel, and sensitivity analysis, generates CSV/JSON results and plots, builds the
+OpenVSP model, and runs the configured 75-point VSPAERO sweep:
+
+```bash
+python run_all.py
+```
+
+The default result package is written to
+`results/generated/shared_nozzle_candidate_a/` with this structure:
+
+```text
+inputs/       copied YAML inputs used for the run
+csv/          tabular samples and trade sweeps
+json/         summaries and complete machine-readable results
+plots/        propulsion, sizing, fuel, sensitivity, and VSPAERO figures
+logs/         tracebacks for any stage that could not complete
+environment.json
+manifest.json
+summary.md
+```
+
+The generated geometry is written to
+`openvsp/generated/shared_nozzle_candidate_a.vsp3`. The manifest remains available
+even if OpenVSP or VSPAERO fails, so completed Python results are not lost and the
+blocked external stage is explicit.
+
+For a Python-only run on a machine without OpenVSP:
+
+```bash
+python run_all.py --skip-openvsp
+```
+
+To generate the `.vsp3` file but omit the live VSPAERO solver sweep:
+
+```bash
+python run_all.py --skip-vspaero
+```
+
+The default 300 mm upper diameter value is only a numerical sweep bound. It is not a
+vehicle requirement and can be changed with `--body-diameter-max`.
+
 ## OpenVSP and VSPAERO
 
 Use the Python API shipped with the OpenVSP version named in the YAML. The ordinary
