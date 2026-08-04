@@ -1,0 +1,74 @@
+name: generate-openvsp
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+jobs:
+  generate-vsp3:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Douglas Dart
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Download OpenVSP 3.51.2
+        shell: pwsh
+        run: |
+          $url = "https://openvsp.org/zips/current/windows/OpenVSP-3.51.2-win64-Python3.11.zip"
+          Invoke-WebRequest -Uri $url -OutFile openvsp.zip
+          Expand-Archive -Path openvsp.zip -DestinationPath openvsp-dist -Force
+
+      - name: Generate Candidate A VSP3
+        shell: pwsh
+        run: |
+          $vspExe = Get-ChildItem -Path openvsp-dist -Recurse -File -Filter vsp.exe | Select-Object -First 1
+          if (-not $vspExe) {
+            throw "vsp.exe was not found in the downloaded OpenVSP archive"
+          }
+          $vspRoot = $vspExe.Directory.FullName
+
+          $packageInit = Get-ChildItem -Path openvsp-dist -Recurse -File -Filter __init__.py |
+            Where-Object { $_.Directory.Name -eq "openvsp" } |
+            Select-Object -First 1
+          if ($packageInit) {
+            $pythonRoot = $packageInit.Directory.Parent.FullName
+          }
+          else {
+            $moduleFile = Get-ChildItem -Path openvsp-dist -Recurse -File -Filter openvsp.py | Select-Object -First 1
+            if (-not $moduleFile) {
+              throw "OpenVSP Python bindings were not found in the downloaded archive"
+            }
+            $pythonRoot = $moduleFile.Directory.FullName
+          }
+
+          $env:PATH = "$vspRoot;$pythonRoot;$env:PATH"
+          $env:PYTHONPATH = "$pythonRoot;$env:PYTHONPATH"
+
+          python -c "import openvsp as vsp; print(vsp.__file__); print(vsp.GetVSPVersion())"
+
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          python -m douglas_dart.cli openvsp-build `
+            --config configs/shared_nozzle_candidate_a.yaml `
+            --output artifact/shared_nozzle_candidate_a.vsp3
+
+          if (-not (Test-Path artifact/shared_nozzle_candidate_a.vsp3)) {
+            throw "OpenVSP did not create artifact/shared_nozzle_candidate_a.vsp3"
+          }
+
+      - name: Upload VSP3 model
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-nozzle-candidate-a-vsp3
+          path: artifact/shared_nozzle_candidate_a.vsp3
+          if-no-files-found: error
