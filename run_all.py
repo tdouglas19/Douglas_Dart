@@ -64,7 +64,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-openvsp",
         action="store_true",
-        help="skip .vsp3 generation; useful for Python-only development environments",
+        help=(
+            "run only the Python analyses and plots; this also skips VSPAERO because "
+            "the solver requires a generated .vsp3 model"
+        ),
     )
     parser.add_argument(
         "--skip-vspaero",
@@ -88,7 +91,7 @@ def main() -> int:
         altitude_step_m=args.altitude_step,
         propulsion_derate_fraction=args.propulsion_derate,
         run_openvsp=not args.skip_openvsp,
-        run_vspaero=not args.skip_vspaero,
+        run_vspaero=not (args.skip_openvsp or args.skip_vspaero),
     )
     print(json.dumps(asdict(summary), indent=2))
     return 0 if summary.successful else 1
