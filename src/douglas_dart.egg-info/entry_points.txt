@@ -1,2 +1,0 @@
-[console_scripts]
-douglas-dart = douglas_dart.cli:main
