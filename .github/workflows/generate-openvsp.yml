@@ -37,24 +37,24 @@ jobs:
             throw "vsp.exe was not found in the downloaded OpenVSP archive"
           }
           $vspRoot = $vspExe.Directory.FullName
-
-          $packageInit = Get-ChildItem -Path openvsp-dist -Recurse -File -Filter __init__.py |
-            Where-Object { $_.Directory.Name -eq "openvsp" } |
-            Select-Object -First 1
-          if ($packageInit) {
-            $pythonRoot = $packageInit.Directory.Parent.FullName
-          }
-          else {
-            $moduleFile = Get-ChildItem -Path openvsp-dist -Recurse -File -Filter openvsp.py | Select-Object -First 1
-            if (-not $moduleFile) {
-              throw "OpenVSP Python bindings were not found in the downloaded archive"
-            }
-            $pythonRoot = $moduleFile.Directory.FullName
+          $pythonBundleRoot = Join-Path $vspRoot "python"
+          if (-not (Test-Path $pythonBundleRoot)) {
+            throw "OpenVSP Python directory was not found at $pythonBundleRoot"
           }
 
-          $env:PATH = "$vspRoot;$pythonRoot;$env:PATH"
-          $env:PYTHONPATH = "$pythonRoot;$env:PYTHONPATH"
+          # The OpenVSP distribution contains several sibling Python packages
+          # (openvsp, degen_geom, utilities, and configuration helpers). Add the
+          # bundle root and each immediate child package root to Python's search path.
+          $pythonPaths = @($pythonBundleRoot)
+          $pythonPaths += Get-ChildItem -Path $pythonBundleRoot -Directory |
+            ForEach-Object { $_.FullName }
+          $pythonPathValue = ($pythonPaths -join ";")
 
+          $env:PATH = "$vspRoot;$pythonPathValue;$env:PATH"
+          $env:PYTHONPATH = "$pythonPathValue;$env:PYTHONPATH"
+
+          Write-Host "OpenVSP root: $vspRoot"
+          Write-Host "PYTHONPATH: $env:PYTHONPATH"
           python -c "import openvsp as vsp; print(vsp.__file__); print(vsp.GetVSPVersion())"
 
           New-Item -ItemType Directory -Force -Path artifact | Out-Null
