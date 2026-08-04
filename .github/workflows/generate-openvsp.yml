@@ -1,0 +1,88 @@
+name: generate-openvsp
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+jobs:
+  generate-vsp3:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Douglas Dart
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Download OpenVSP 3.51.2
+        shell: pwsh
+        run: |
+          $url = "https://openvsp.org/zips/current/windows/OpenVSP-3.51.2-win64-Python3.11.zip"
+          $downloaded = $false
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            Write-Host "OpenVSP download attempt $attempt of 4"
+            & curl.exe -L --fail --retry 3 --retry-delay 5 --connect-timeout 30 `
+              --output openvsp.zip $url
+            if ($LASTEXITCODE -eq 0 -and (Test-Path openvsp.zip) -and ((Get-Item openvsp.zip).Length -gt 1000000)) {
+              $downloaded = $true
+              break
+            }
+            Remove-Item openvsp.zip -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds (5 * $attempt)
+          }
+          if (-not $downloaded) {
+            throw "OpenVSP archive could not be downloaded after four attempts"
+          }
+          Expand-Archive -Path openvsp.zip -DestinationPath openvsp-dist -Force
+
+      - name: Generate Candidate A VSP3
+        shell: pwsh
+        run: |
+          $vspExe = Get-ChildItem -Path openvsp-dist -Recurse -File -Filter vsp.exe | Select-Object -First 1
+          if (-not $vspExe) {
+            throw "vsp.exe was not found in the downloaded OpenVSP archive"
+          }
+          $vspRoot = $vspExe.Directory.FullName
+          $pythonBundleRoot = Join-Path $vspRoot "python"
+          if (-not (Test-Path $pythonBundleRoot)) {
+            throw "OpenVSP Python directory was not found at $pythonBundleRoot"
+          }
+
+          # The OpenVSP distribution contains several sibling Python packages
+          # (openvsp, degen_geom, utilities, and configuration helpers). Add the
+          # bundle root and each immediate child package root to Python's search path.
+          $pythonPaths = @($pythonBundleRoot)
+          $pythonPaths += Get-ChildItem -Path $pythonBundleRoot -Directory |
+            ForEach-Object { $_.FullName }
+          $pythonPathValue = ($pythonPaths -join ";")
+
+          $env:PATH = "$vspRoot;$pythonPathValue;$env:PATH"
+          $env:PYTHONPATH = "$pythonPathValue;$env:PYTHONPATH"
+
+          Write-Host "OpenVSP root: $vspRoot"
+          Write-Host "PYTHONPATH: $env:PYTHONPATH"
+          python -c "import openvsp as vsp; print(vsp.__file__); print(vsp.GetVSPVersion())"
+
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          python -m douglas_dart.cli openvsp-build `
+            --config configs/shared_nozzle_candidate_a.yaml `
+            --output artifact/shared_nozzle_candidate_a.vsp3
+
+          if (-not (Test-Path artifact/shared_nozzle_candidate_a.vsp3)) {
+            throw "OpenVSP did not create artifact/shared_nozzle_candidate_a.vsp3"
+          }
+
+      - name: Upload VSP3 model
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-nozzle-candidate-a-vsp3
+          path: artifact/shared_nozzle_candidate_a.vsp3
+          if-no-files-found: error
