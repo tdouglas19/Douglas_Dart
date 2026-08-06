@@ -4,13 +4,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from dataclasses import replace
+
 from douglas_dart.config import load_reference_case
 from douglas_dart.openvsp_geometry import (
-    _RADIAL_MOUNT_OVERLAP_M,
+    _radial_mount_overlap_m,
+    body_diameter_at_x_m,
     body_stations,
     build_openvsp_geometry,
     clocking_angles_deg,
     shell_outer_diameter_m,
+    shell_stations,
     validate_openvsp_api,
     vspaero_reference_quantities,
 )
@@ -221,9 +225,14 @@ class OpenVSPGeometryTests(unittest.TestCase):
         fake = FakeOpenVSP()
         with tempfile.TemporaryDirectory() as directory:
             build_openvsp_geometry(self.case, Path(directory) / "test_candidate.vsp3", vsp=fake)
-        # A small commanded radial overlap avoids an exact-tangency mesh defect
-        # confirmed against the real installed OpenVSP API (see openvsp_geometry.py).
-        expected_radius_m = 0.5 * shell_outer_diameter_m(self.case) - _RADIAL_MOUNT_OVERLAP_M
+        # A small commanded radial overlap, sized from each surface's own root
+        # airfoil thickness, avoids an exact-tangency mesh defect confirmed against
+        # the real installed OpenVSP API (see openvsp_geometry.py). The lifting
+        # surface sits at 0/180 degree clocking, so its Y offset equals its mount
+        # radius directly (no cosine projection like the 45-degree-clocked fins).
+        expected_radius_m = 0.5 * shell_outer_diameter_m(self.case) - _radial_mount_overlap_m(
+            self.case.geometry.lifting_surface
+        )
         y_calls = [
             call[-1]
             for call in fake.parameter_calls
@@ -250,6 +259,77 @@ class OpenVSPGeometryTests(unittest.TestCase):
     def test_namespace_only_openvsp_module_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "not a functional OpenVSP API"):
             validate_openvsp_api(object(), "3.51.2")
+
+    def test_body_diameter_at_x_interpolates_through_aft_taper(self):
+        stations = body_stations(self.case)
+        aft_taper_start = stations[3]
+        exit_station = stations[-1]
+        self.assertAlmostEqual(
+            body_diameter_at_x_m(self.case, aft_taper_start.x_location_m),
+            aft_taper_start.diameter_m,
+        )
+        self.assertAlmostEqual(
+            body_diameter_at_x_m(self.case, exit_station.x_location_m),
+            exit_station.diameter_m,
+        )
+        midpoint_x = 0.5 * (aft_taper_start.x_location_m + exit_station.x_location_m)
+        midpoint_diameter = body_diameter_at_x_m(self.case, midpoint_x)
+        self.assertLess(midpoint_diameter, aft_taper_start.diameter_m)
+        self.assertGreater(midpoint_diameter, exit_station.diameter_m)
+
+    def test_shell_extending_into_aft_taper_fairs_to_local_body_diameter(self):
+        # Candidate A's shell now extends past the body's own aft_taper_start_m to
+        # keep the fin root on its constant-diameter span (see the YAML comment).
+        self.assertGreater(
+            self.case.geometry.shell.end_x_m, self.case.geometry.aft_taper_start_m
+        )
+        stations = shell_stations(self.case)
+        expected_end_diameter = body_diameter_at_x_m(
+            self.case, self.case.geometry.shell.end_x_m
+        )
+        self.assertAlmostEqual(stations[-1].diameter_m, expected_end_diameter)
+        self.assertLess(stations[-1].diameter_m, shell_outer_diameter_m(self.case))
+
+    def test_fin_root_chord_fits_entirely_within_shell_constant_span(self):
+        shell = self.case.geometry.shell
+        fin = self.case.geometry.fin
+        constant_start = shell.start_x_m + shell.forward_taper_length_m
+        constant_end = shell.end_x_m - shell.aft_taper_length_m
+        self.assertGreaterEqual(fin.x_location_m, constant_start)
+        self.assertLessEqual(fin.x_location_m + fin.root_chord_m, constant_end)
+
+    def test_reference_case_rejects_fin_root_chord_crossing_shell_taper(self):
+        bad_shell = replace(self.case.geometry.shell, end_x_m=self.case.geometry.fin.x_location_m)
+        bad_geometry = replace(self.case.geometry, shell=bad_shell)
+        with self.assertRaisesRegex(ValueError, "entire root chord"):
+            replace(self.case, geometry=bad_geometry)
+
+    def test_ram_inlet_is_centered_on_axis_and_flow_through(self):
+        fake = FakeOpenVSP()
+        with tempfile.TemporaryDirectory() as directory:
+            build_openvsp_geometry(self.case, Path(directory) / "test_candidate.vsp3", vsp=fake)
+        duct_calls = [call for call in fake.parameter_calls if len(call) == 4]
+        y_offsets = {
+            call[-1]
+            for call in duct_calls
+            if call[1] == "Y_Rel_Location" and call[2] == "XForm" and call[-1] == 0.0
+        }
+        z_offsets = {
+            call[-1]
+            for call in duct_calls
+            if call[1] == "Z_Rel_Location" and call[2] == "XForm" and call[-1] == 0.0
+        }
+        self.assertIn(0.0, y_offsets)
+        self.assertIn(0.0, z_offsets)
+        self.assertIn(
+            (
+                fake.added_geometries[2][0],  # third AddGeom call is the ram inlet duct
+                "GeomIOType",
+                "EngineModel",
+                float(fake.ENGINE_GEOM_INLET_OUTLET),
+            ),
+            fake.parameter_calls,
+        )
 
 
 class VSPAeroContractTests(unittest.TestCase):

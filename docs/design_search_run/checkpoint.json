@@ -1,0 +1,2342 @@
+[
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.250854049425936,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.5967352183058926,
+      "nominal_rule_satisfied": true,
+      "score": -5932.457297528703,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 4.435321219626646,
+        "dive_angle_deg": -20.0,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.2167087561674481,
+        "loaded_fuel_mass_kg": 2.5491459505740663,
+        "ramjet_fuel_fraction": 0.6318228118423725,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5932.457297528703,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 4.435321219626646,
+      "dive_angle_deg": -20.0,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.2167087561674481,
+      "loaded_fuel_mass_kg": 2.5491459505740663,
+      "ramjet_fuel_fraction": 0.6318228118423725,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 0,
+    "mean_score": -6016.9640772775065,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.573131714959072,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.5565841546954979,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -9.484374281144945,
+        "dive_entry_mach": 0.448190136929592,
+        "exit_to_throat_area_ratio": 1.1969089403969055,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.14195967719813393
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -9.484374281144945,
+      "dive_entry_mach": 0.448190136929592,
+      "exit_to_throat_area_ratio": 1.1969089403969055,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.14195967719813393
+    },
+    "feasible_count": 24,
+    "generation": 1,
+    "mean_score": -5990.508494885894,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.573131714959072,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.5565841546954979,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -9.484374281144945,
+        "dive_entry_mach": 0.448190136929592,
+        "exit_to_throat_area_ratio": 1.1969089403969055,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.14195967719813393
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -9.484374281144945,
+      "dive_entry_mach": 0.448190136929592,
+      "exit_to_throat_area_ratio": 1.1969089403969055,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.14195967719813393
+    },
+    "feasible_count": 24,
+    "generation": 2,
+    "mean_score": -5972.164508939181,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.39544829290002265,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 6.9384632885875,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.0785933172506885,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.12368104747490442
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 6.9384632885875,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.0785933172506885,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.12368104747490442
+    },
+    "feasible_count": 24,
+    "generation": 3,
+    "mean_score": -5948.774655916489,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.39544829290002265,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 6.9384632885875,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.0785933172506885,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.12368104747490442
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 6.9384632885875,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.0785933172506885,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.12368104747490442
+    },
+    "feasible_count": 24,
+    "generation": 4,
+    "mean_score": -5938.726504002302,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.39544829290002265,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 6.9384632885875,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.0785933172506885,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.12368104747490442
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 6.9384632885875,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.0785933172506885,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.12368104747490442
+    },
+    "feasible_count": 24,
+    "generation": 5,
+    "mean_score": -5933.7512030726975,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.39544829290002265,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 6.9384632885875,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.0785933172506885,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.12368104747490442
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 6.9384632885875,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.0785933172506885,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.12368104747490442
+    },
+    "feasible_count": 24,
+    "generation": 6,
+    "mean_score": -5932.275790897125,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.34345033665883695,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 6.935536954138749,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.41694406583260135,
+        "exit_to_throat_area_ratio": 1.0696521677711799,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 6.935536954138749,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.41694406583260135,
+      "exit_to_throat_area_ratio": 1.0696521677711799,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 7,
+    "mean_score": -5931.617572564042,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 15.0,
+        "dive_angle_deg": -8.058139185897302,
+        "dive_entry_mach": 0.43215871626271835,
+        "exit_to_throat_area_ratio": 1.1587769938323857,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 15.0,
+      "dive_angle_deg": -8.058139185897302,
+      "dive_entry_mach": 0.43215871626271835,
+      "exit_to_throat_area_ratio": 1.1587769938323857,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 8,
+    "mean_score": -5931.137700601624,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.861576623754439,
+        "dive_angle_deg": -6.183074364897633,
+        "dive_entry_mach": 0.7160523686931973,
+        "exit_to_throat_area_ratio": 1.1534836126637016,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.861576623754439,
+      "dive_angle_deg": -6.183074364897633,
+      "dive_entry_mach": 0.7160523686931973,
+      "exit_to_throat_area_ratio": 1.1534836126637016,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 9,
+    "mean_score": -5930.225252273464,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.861576623754439,
+        "dive_angle_deg": -6.183074364897633,
+        "dive_entry_mach": 0.7160523686931973,
+        "exit_to_throat_area_ratio": 1.1534836126637016,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.861576623754439,
+      "dive_angle_deg": -6.183074364897633,
+      "dive_entry_mach": 0.7160523686931973,
+      "exit_to_throat_area_ratio": 1.1534836126637016,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 10,
+    "mean_score": -5930.061432438218,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.3213088407923615,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.48838415562584636,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.32758723613101665,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.7717517826170738,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.32758723613101665,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.7717517826170738,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 11,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.4135474288365842,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.39583753317406933,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -7.753890531669772,
+        "dive_entry_mach": 0.3,
+        "exit_to_throat_area_ratio": 1.0387439762169215,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.6683621996931776,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -7.753890531669772,
+      "dive_entry_mach": 0.3,
+      "exit_to_throat_area_ratio": 1.0387439762169215,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.6683621996931776,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 12,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 14.682332687878828,
+        "dive_angle_deg": -15.144518773967143,
+        "dive_entry_mach": 0.3,
+        "exit_to_throat_area_ratio": 1.0544906075141018,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.6683621996931776,
+        "throat_diameter_m": 0.16671598672842497
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 14.682332687878828,
+      "dive_angle_deg": -15.144518773967143,
+      "dive_entry_mach": 0.3,
+      "exit_to_throat_area_ratio": 1.0544906075141018,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.6683621996931776,
+      "throat_diameter_m": 0.16671598672842497
+    },
+    "feasible_count": 24,
+    "generation": 13,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 13.809315628362906,
+        "dive_angle_deg": -4.422912203381946,
+        "dive_entry_mach": 0.41007381383204367,
+        "exit_to_throat_area_ratio": 1.0544906075141018,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.6541700266334569,
+        "throat_diameter_m": 0.1340592271569983
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 13.809315628362906,
+      "dive_angle_deg": -4.422912203381946,
+      "dive_entry_mach": 0.41007381383204367,
+      "exit_to_throat_area_ratio": 1.0544906075141018,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.6541700266334569,
+      "throat_diameter_m": 0.1340592271569983
+    },
+    "feasible_count": 24,
+    "generation": 14,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 15.0,
+        "dive_angle_deg": -18.046923644245947,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.6541700266334569,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 15.0,
+      "dive_angle_deg": -18.046923644245947,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.6541700266334569,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 15,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 15.0,
+        "dive_angle_deg": -18.046923644245947,
+        "dive_entry_mach": 0.4155941077978431,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2673896107689918,
+        "throat_diameter_m": 0.15276782443136125
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 15.0,
+      "dive_angle_deg": -18.046923644245947,
+      "dive_entry_mach": 0.4155941077978431,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2673896107689918,
+      "throat_diameter_m": 0.15276782443136125
+    },
+    "feasible_count": 24,
+    "generation": 16,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 14.816251217345489,
+        "dive_angle_deg": -6.84056000338781,
+        "dive_entry_mach": 0.5249670593448692,
+        "exit_to_throat_area_ratio": 1.1238800834902156,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.15276782443136125
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 14.816251217345489,
+      "dive_angle_deg": -6.84056000338781,
+      "dive_entry_mach": 0.5249670593448692,
+      "exit_to_throat_area_ratio": 1.1238800834902156,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.15276782443136125
+    },
+    "feasible_count": 24,
+    "generation": 17,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 9.687970678477209,
+        "dive_angle_deg": -6.84056000338781,
+        "dive_entry_mach": 0.5249670593448692,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.11287455640470884
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 9.687970678477209,
+      "dive_angle_deg": -6.84056000338781,
+      "dive_entry_mach": 0.5249670593448692,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.11287455640470884
+    },
+    "feasible_count": 24,
+    "generation": 18,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 15.0,
+        "dive_angle_deg": -10.930110528216927,
+        "dive_entry_mach": 0.657388337984851,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.6215129374573279,
+        "throat_diameter_m": 0.11287455640470884
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 15.0,
+      "dive_angle_deg": -10.930110528216927,
+      "dive_entry_mach": 0.657388337984851,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.6215129374573279,
+      "throat_diameter_m": 0.11287455640470884
+    },
+    "feasible_count": 24,
+    "generation": 19,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.5978173555630908,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.102750106951861,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.657388337984851,
+        "exit_to_throat_area_ratio": 1.0582030935222297,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.6215129374573279,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.102750106951861,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.657388337984851,
+      "exit_to_throat_area_ratio": 1.0582030935222297,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.6215129374573279,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 20,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 11.35824682048234,
+        "dive_angle_deg": -11.932633547465416,
+        "dive_entry_mach": 0.657388337984851,
+        "exit_to_throat_area_ratio": 1.180098189804474,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.6215129374573279,
+        "throat_diameter_m": 0.12828699989348882
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 11.35824682048234,
+      "dive_angle_deg": -11.932633547465416,
+      "dive_entry_mach": 0.657388337984851,
+      "exit_to_throat_area_ratio": 1.180098189804474,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.6215129374573279,
+      "throat_diameter_m": 0.12828699989348882
+    },
+    "feasible_count": 24,
+    "generation": 21,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 11.35824682048234,
+        "dive_angle_deg": -11.104138572551097,
+        "dive_entry_mach": 0.6128002370265948,
+        "exit_to_throat_area_ratio": 1.2402196427278533,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.45266316415251295,
+        "throat_diameter_m": 0.11532582963988935
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 11.35824682048234,
+      "dive_angle_deg": -11.104138572551097,
+      "dive_entry_mach": 0.6128002370265948,
+      "exit_to_throat_area_ratio": 1.2402196427278533,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.45266316415251295,
+      "throat_diameter_m": 0.11532582963988935
+    },
+    "feasible_count": 24,
+    "generation": 22,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.12469495614017655,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 11.35824682048234,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6128002370265948,
+        "exit_to_throat_area_ratio": 1.1301566711277131,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.7090412609050954,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 11.35824682048234,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6128002370265948,
+      "exit_to_throat_area_ratio": 1.1301566711277131,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.7090412609050954,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 23,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.3256965582643394,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.504858917146975,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.1127378694010472,
+        "dive_angle_deg": -15.526929814392123,
+        "dive_entry_mach": 0.6128002370265948,
+        "exit_to_throat_area_ratio": 1.0805112370895826,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.7358109718963377,
+        "throat_diameter_m": 0.11
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.1127378694010472,
+      "dive_angle_deg": -15.526929814392123,
+      "dive_entry_mach": 0.6128002370265948,
+      "exit_to_throat_area_ratio": 1.0805112370895826,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.7358109718963377,
+      "throat_diameter_m": 0.11
+    },
+    "feasible_count": 24,
+    "generation": 24,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.3452898865916007,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.4944691325093527,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -15.526929814392123,
+        "dive_entry_mach": 0.7421002891064267,
+        "exit_to_throat_area_ratio": 1.1240435655025234,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.7358109718963377,
+        "throat_diameter_m": 0.13921372218300027
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -15.526929814392123,
+      "dive_entry_mach": 0.7421002891064267,
+      "exit_to_throat_area_ratio": 1.1240435655025234,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.7358109718963377,
+      "throat_diameter_m": 0.13921372218300027
+    },
+    "feasible_count": 24,
+    "generation": 25,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.27044231161634896,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.4303476882936589,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -15.526929814392123,
+        "dive_entry_mach": 0.7421002891064267,
+        "exit_to_throat_area_ratio": 1.1240435655025234,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.7358109718963377,
+        "throat_diameter_m": 0.15055549163783724
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -15.526929814392123,
+      "dive_entry_mach": 0.7421002891064267,
+      "exit_to_throat_area_ratio": 1.1240435655025234,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.7358109718963377,
+      "throat_diameter_m": 0.15055549163783724
+    },
+    "feasible_count": 24,
+    "generation": 26,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.7273002368824575,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.3987516520124785,
+        "dive_angle_deg": -15.526929814392123,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.1240435655025234,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.4606170349737951,
+        "throat_diameter_m": 0.13897923102095466
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.3987516520124785,
+      "dive_angle_deg": -15.526929814392123,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.1240435655025234,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.4606170349737951,
+      "throat_diameter_m": 0.13897923102095466
+    },
+    "feasible_count": 24,
+    "generation": 27,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.3258515745867773,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.3987516520124785,
+        "dive_angle_deg": -15.526929814392123,
+        "dive_entry_mach": 0.6788730261047954,
+        "exit_to_throat_area_ratio": 1.3,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.8,
+        "throat_diameter_m": 0.13378687755032975
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.3987516520124785,
+      "dive_angle_deg": -15.526929814392123,
+      "dive_entry_mach": 0.6788730261047954,
+      "exit_to_throat_area_ratio": 1.3,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.8,
+      "throat_diameter_m": 0.13378687755032975
+    },
+    "feasible_count": 24,
+    "generation": 28,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 0.5733692020382278,
+      "nominal_rule_satisfied": true,
+      "score": -5930.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 6.276485732881682,
+        "dive_angle_deg": -9.502959394020898,
+        "dive_entry_mach": 0.36689217194053314,
+        "exit_to_throat_area_ratio": 1.2506961149884277,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.13378687755032975
+      }
+    },
+    "best_score": -5930.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 6.276485732881682,
+      "dive_angle_deg": -9.502959394020898,
+      "dive_entry_mach": 0.36689217194053314,
+      "exit_to_throat_area_ratio": 1.2506961149884277,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.13378687755032975
+    },
+    "feasible_count": 24,
+    "generation": 29,
+    "mean_score": -5930.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 30,
+    "mean_score": -5929.683333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 31,
+    "mean_score": -5929.683333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 32,
+    "mean_score": -5929.683333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 33,
+    "mean_score": -5929.683333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 34,
+    "mean_score": -5929.683333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 35,
+    "mean_score": -5929.683333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 36,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 37,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 38,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 39,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 40,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 41,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 42,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 43,
+    "mean_score": -5929.416666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0761598537751609,
+      "nominal_rule_satisfied": true,
+      "score": -5922.4,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.4,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 44,
+    "mean_score": -5929.099999999999,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.608092070367739,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.0795596341450804,
+      "nominal_rule_satisfied": true,
+      "score": -5922.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -14.730974685386675,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.1204673152298446,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -5922.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -14.730974685386675,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.1204673152298446,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 45,
+    "mean_score": -5929.083333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.6460617755927266,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.108841527929027,
+      "nominal_rule_satisfied": true,
+      "score": -4715.2,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -4715.2,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 46,
+    "mean_score": -5878.533333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.6460617755927266,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.108841527929027,
+      "nominal_rule_satisfied": true,
+      "score": -4715.2,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -4715.2,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 47,
+    "mean_score": -5878.433333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.6460617755927266,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": false,
+      "nominal_peak_mach": 1.108841527929027,
+      "nominal_rule_satisfied": true,
+      "score": -4715.2,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.0,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.6780532566075517,
+        "exit_to_throat_area_ratio": 1.02,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.2,
+        "throat_diameter_m": 0.1533682896698234
+      }
+    },
+    "best_score": -4715.2,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.0,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.6780532566075517,
+      "exit_to_throat_area_ratio": 1.02,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.2,
+      "throat_diameter_m": 0.1533682896698234
+    },
+    "feasible_count": 24,
+    "generation": 48,
+    "mean_score": -5878.433333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.108242450784986,
+      "nominal_rule_satisfied": true,
+      "score": -3904.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.179752797288453,
+        "dive_angle_deg": -9.78793709433485,
+        "dive_entry_mach": 0.720360092035513,
+        "exit_to_throat_area_ratio": 1.0557971957829992,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.27607334475620343,
+        "throat_diameter_m": 0.14521999226377544
+      }
+    },
+    "best_score": -3904.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.179752797288453,
+      "dive_angle_deg": -9.78793709433485,
+      "dive_entry_mach": 0.720360092035513,
+      "exit_to_throat_area_ratio": 1.0557971957829992,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.27607334475620343,
+      "throat_diameter_m": 0.14521999226377544
+    },
+    "feasible_count": 24,
+    "generation": 49,
+    "mean_score": -5743.25,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.108242450784986,
+      "nominal_rule_satisfied": true,
+      "score": -3904.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.179752797288453,
+        "dive_angle_deg": -9.78793709433485,
+        "dive_entry_mach": 0.720360092035513,
+        "exit_to_throat_area_ratio": 1.0557971957829992,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.27607334475620343,
+        "throat_diameter_m": 0.14521999226377544
+      }
+    },
+    "best_score": -3904.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.179752797288453,
+      "dive_angle_deg": -9.78793709433485,
+      "dive_entry_mach": 0.720360092035513,
+      "exit_to_throat_area_ratio": 1.0557971957829992,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.27607334475620343,
+      "throat_diameter_m": 0.14521999226377544
+    },
+    "feasible_count": 24,
+    "generation": 50,
+    "mean_score": -5743.25,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.108242450784986,
+      "nominal_rule_satisfied": true,
+      "score": -3904.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.179752797288453,
+        "dive_angle_deg": -9.78793709433485,
+        "dive_entry_mach": 0.720360092035513,
+        "exit_to_throat_area_ratio": 1.0557971957829992,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.27607334475620343,
+        "throat_diameter_m": 0.14521999226377544
+      }
+    },
+    "best_score": -3904.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.179752797288453,
+      "dive_angle_deg": -9.78793709433485,
+      "dive_entry_mach": 0.720360092035513,
+      "exit_to_throat_area_ratio": 1.0557971957829992,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.27607334475620343,
+      "throat_diameter_m": 0.14521999226377544
+    },
+    "feasible_count": 24,
+    "generation": 51,
+    "mean_score": -5690.966666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.12469495614017655,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.108242450784986,
+      "nominal_rule_satisfied": true,
+      "score": -3904.0,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 7.179752797288453,
+        "dive_angle_deg": -9.78793709433485,
+        "dive_entry_mach": 0.720360092035513,
+        "exit_to_throat_area_ratio": 1.0557971957829992,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.27607334475620343,
+        "throat_diameter_m": 0.14521999226377544
+      }
+    },
+    "best_score": -3904.0,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 7.179752797288453,
+      "dive_angle_deg": -9.78793709433485,
+      "dive_entry_mach": 0.720360092035513,
+      "exit_to_throat_area_ratio": 1.0557971957829992,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.27607334475620343,
+      "throat_diameter_m": 0.14521999226377544
+    },
+    "feasible_count": 24,
+    "generation": 52,
+    "mean_score": -5588.583333333333,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.5754204755467719,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.105712867337923,
+      "nominal_rule_satisfied": true,
+      "score": -3893.2,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 4.262417817513127,
+        "dive_angle_deg": -3.0,
+        "dive_entry_mach": 0.78,
+        "exit_to_throat_area_ratio": 1.0390335070816465,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.308368980302436,
+        "throat_diameter_m": 0.14969828536164007
+      }
+    },
+    "best_score": -3893.2,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 4.262417817513127,
+      "dive_angle_deg": -3.0,
+      "dive_entry_mach": 0.78,
+      "exit_to_throat_area_ratio": 1.0390335070816465,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.308368980302436,
+      "throat_diameter_m": 0.14969828536164007
+    },
+    "feasible_count": 24,
+    "generation": 53,
+    "mean_score": -5403.033333333334,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.5948986698045724,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.1045164447615823,
+      "nominal_rule_satisfied": true,
+      "score": -3878.8,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.1027713976015057,
+        "dive_angle_deg": -8.759730826612047,
+        "dive_entry_mach": 0.7670569435444009,
+        "exit_to_throat_area_ratio": 1.0487094815911644,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.43030051866379154,
+        "throat_diameter_m": 0.1384113690303766
+      }
+    },
+    "best_score": -3878.8,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.1027713976015057,
+      "dive_angle_deg": -8.759730826612047,
+      "dive_entry_mach": 0.7670569435444009,
+      "exit_to_throat_area_ratio": 1.0487094815911644,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.43030051866379154,
+      "throat_diameter_m": 0.1384113690303766
+    },
+    "feasible_count": 24,
+    "generation": 54,
+    "mean_score": -5097.066666666667,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.5948986698045724,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.1045164447615823,
+      "nominal_rule_satisfied": true,
+      "score": -3878.8,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.1027713976015057,
+        "dive_angle_deg": -8.759730826612047,
+        "dive_entry_mach": 0.7670569435444009,
+        "exit_to_throat_area_ratio": 1.0487094815911644,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.43030051866379154,
+        "throat_diameter_m": 0.1384113690303766
+      }
+    },
+    "best_score": -3878.8,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.1027713976015057,
+      "dive_angle_deg": -8.759730826612047,
+      "dive_entry_mach": 0.7670569435444009,
+      "exit_to_throat_area_ratio": 1.0487094815911644,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.43030051866379154,
+      "throat_diameter_m": 0.1384113690303766
+    },
+    "feasible_count": 24,
+    "generation": 55,
+    "mean_score": -4943.150000000001,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.5948986698045724,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.1061533917218316,
+      "nominal_rule_satisfied": true,
+      "score": -3878.8,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.1027713976015057,
+        "dive_angle_deg": -4.07591208694525,
+        "dive_entry_mach": 0.7179528160041493,
+        "exit_to_throat_area_ratio": 1.0487094815911644,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.43030051866379154,
+        "throat_diameter_m": 0.1384113690303766
+      }
+    },
+    "best_score": -3878.8,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.1027713976015057,
+      "dive_angle_deg": -4.07591208694525,
+      "dive_entry_mach": 0.7179528160041493,
+      "exit_to_throat_area_ratio": 1.0487094815911644,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.43030051866379154,
+      "throat_diameter_m": 0.1384113690303766
+    },
+    "feasible_count": 24,
+    "generation": 56,
+    "mean_score": -4773.0,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.5948986698045724,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.1061533917218316,
+      "nominal_rule_satisfied": true,
+      "score": -3878.8,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.1027713976015057,
+        "dive_angle_deg": -4.07591208694525,
+        "dive_entry_mach": 0.7179528160041493,
+        "exit_to_throat_area_ratio": 1.0487094815911644,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.43030051866379154,
+        "throat_diameter_m": 0.1384113690303766
+      }
+    },
+    "best_score": -3878.8,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.1027713976015057,
+      "dive_angle_deg": -4.07591208694525,
+      "dive_entry_mach": 0.7179528160041493,
+      "exit_to_throat_area_ratio": 1.0487094815911644,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.43030051866379154,
+      "throat_diameter_m": 0.1384113690303766
+    },
+    "feasible_count": 24,
+    "generation": 57,
+    "mean_score": -4722.766666666666,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.5948986698045724,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.1061533917218316,
+      "nominal_rule_satisfied": true,
+      "score": -3878.8,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.1027713976015057,
+        "dive_angle_deg": -4.07591208694525,
+        "dive_entry_mach": 0.7179528160041493,
+        "exit_to_throat_area_ratio": 1.0487094815911644,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.43030051866379154,
+        "throat_diameter_m": 0.1384113690303766
+      }
+    },
+    "best_score": -3878.8,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.1027713976015057,
+      "dive_angle_deg": -4.07591208694525,
+      "dive_entry_mach": 0.7179528160041493,
+      "exit_to_throat_area_ratio": 1.0487094815911644,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.43030051866379154,
+      "throat_diameter_m": 0.1384113690303766
+    },
+    "feasible_count": 24,
+    "generation": 58,
+    "mean_score": -4435.866666666666,
+    "population_size": 24
+  },
+  {
+    "best_evaluation": {
+      "adverse_meets_duration": false,
+      "adverse_peak_mach": 0.5948986698045724,
+      "adverse_rule_satisfied": true,
+      "feasible": true,
+      "infeasibility_reason": null,
+      "mass_margin_kg": 5.300000000000001,
+      "nominal_meets_duration": true,
+      "nominal_peak_mach": 1.1061533917218316,
+      "nominal_rule_satisfied": true,
+      "score": -3878.8,
+      "variables": {
+        "body_diameter_m": 0.195,
+        "climb_angle_deg": 3.1027713976015057,
+        "dive_angle_deg": -4.07591208694525,
+        "dive_entry_mach": 0.7179528160041493,
+        "exit_to_throat_area_ratio": 1.0487094815911644,
+        "loaded_fuel_mass_kg": 2.5,
+        "ramjet_fuel_fraction": 0.43030051866379154,
+        "throat_diameter_m": 0.1384113690303766
+      }
+    },
+    "best_score": -3878.8,
+    "best_variables": {
+      "body_diameter_m": 0.195,
+      "climb_angle_deg": 3.1027713976015057,
+      "dive_angle_deg": -4.07591208694525,
+      "dive_entry_mach": 0.7179528160041493,
+      "exit_to_throat_area_ratio": 1.0487094815911644,
+      "loaded_fuel_mass_kg": 2.5,
+      "ramjet_fuel_fraction": 0.43030051866379154,
+      "throat_diameter_m": 0.1384113690303766
+    },
+    "feasible_count": 24,
+    "generation": 59,
+    "mean_score": -4215.900000000001,
+    "population_size": 24
+  }
+]

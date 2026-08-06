@@ -23,26 +23,34 @@ frozen design and not a closed mission.
 | Current / high-side loaded mass / maximum allowed | 21.0 / 23.9 / 25.0 kg |
 | Body diameter / length | 210 mm / 2.30 m |
 | Circular intake / area available to one mode | 195 mm / 50% |
-| Shared throat / exit-to-throat area ratio | 160 mm / 1.05 |
+| Shared throat / exit-to-throat area ratio | 170 mm / 1.05 |
 | Mach 1.10 altitude | 4,500 m MSL |
-| Nominal ramjet net thrust / drag | 832 / 512 N |
-| Existing 15%-derated static margin | 195 N |
-| Conservative-screen excess thrust | 51.5 N against a 50 N budget |
-| Adverse-screen excess thrust | -153.7 N; fails |
-| Ramjet potential-capture spillage | 50.5% nominal |
-| Full-throttle ramjet fuel endurance | 19.0 s |
-| Pulsejet net thrust at sea level, Mach 0.20 | about 122 N |
+| Nominal ramjet net thrust / drag | 937 / 512 N |
+| Existing 15%-derated margin | 284 N |
+| Conservative-screen excess thrust | 128.8 N against a 50 N budget |
+| Adverse-screen excess thrust | -95.9 N; fails |
+| Ramjet potential-capture spillage | 44.2% nominal |
+| Full-throttle ramjet fuel endurance | 16.8 s |
+| Pulsejet net thrust at sea level, Mach 0.20 | about 119 N |
 
 The earlier 205/130 mm Candidate A is retained as a rejected regression case. Its
 ramjet result had treated 0.92 total-pressure recovery as recovery of only the ram
 pressure rise; after correcting recovery to the conventional total-pressure ratio,
 Candidate A misses the original 15% reserve by about 21 N.
 
-Candidate B passes the named nominal and conservative static screens and retains
-2.5 mm of radial selector packaging margin, but it fails the adverse screen. None of
-these static points demonstrates acceleration through Mach 1, inlet operability,
-drag closure, stability, control, or recovery. See
-[docs/design_convergence.md](docs/design_convergence.md) for the decision record.
+The 160 mm throat originally selected here also no longer holds: decomposing the
+flat 0.92 ramjet recovery into an idealized Mach-dependent normal-shock term times
+a 0.92 installed-efficiency factor (`ramjet.py`'s `ideal_inlet_shock_recovery`)
+changes recovery at Mach 1.10 by only ~0.1%, but that was enough to flip the 160 mm
+candidate's conservative-scenario excess thrust from a documented +1.5 N to -0.24 N
+-- it was always a razor-thin, non-robust pass. The robustness trade's own selection
+rule now picks 170 mm, confirmed against an extended throat sweep (130-190 mm). See
+[docs/design_convergence.md](docs/design_convergence.md) for the full decision record.
+
+Candidate B (170 mm) passes the named nominal and conservative static screens with a
+real margin and retains 2.5 mm of radial selector packaging margin, but it still
+fails the adverse screen. None of these static points demonstrates acceleration
+through Mach 1, inlet operability, drag closure, stability, control, or recovery.
 
 ## Current capability
 

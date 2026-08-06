@@ -6,6 +6,7 @@ from douglas_dart.trajectory import (
     ADVERSE_SCENARIO,
     MissionScenario,
     NOMINAL_SCENARIO,
+    _stall_speed_m_per_s,
     simulate_mission,
 )
 
@@ -91,6 +92,23 @@ class TrajectoryIntegrationTests(unittest.TestCase):
             and point.phase in {"dive", "ramjet_accel", "mach_hold"}
         ]
         for earlier, later in zip(regulated_points, regulated_points[1:]):
+            self.assertGreaterEqual(later.altitude_m, earlier.altitude_m - 1e-6)
+
+    def test_stall_speed_scales_with_mass_and_air_density(self):
+        # V_stall = sqrt(2W/(rho S CLmax)): heavier -> faster, thinner air -> faster.
+        light = _stall_speed_m_per_s(self.case, mass_kg=15.0, altitude_m=0.0)
+        heavy = _stall_speed_m_per_s(self.case, mass_kg=25.0, altitude_m=0.0)
+        self.assertGreater(heavy, light)
+        sea_level = _stall_speed_m_per_s(self.case, mass_kg=20.0, altitude_m=0.0)
+        high_altitude = _stall_speed_m_per_s(self.case, mass_kg=20.0, altitude_m=6000.0)
+        self.assertGreater(high_altitude, sea_level)
+
+    def test_zoom_climb_never_descends(self):
+        result = simulate_mission(
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+        )
+        zoom_points = [p for p in result.points if p.phase == "zoom_climb"]
+        for earlier, later in zip(zoom_points, zoom_points[1:]):
             self.assertGreaterEqual(later.altitude_m, earlier.altitude_m - 1e-6)
 
     def test_adverse_scenario_is_reported_not_hidden(self):

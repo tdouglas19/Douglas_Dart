@@ -202,6 +202,26 @@ def _installed_pulsejet_thrust_n(
     return thrust_n * density_ratio, fuel_flow_kg_per_s * density_ratio
 
 
+def _stall_speed_m_per_s(case: ReferenceCase, mass_kg: float, altitude_m: float) -> float:
+    """Return the 1g stall speed at the current mass and altitude.
+
+    ``V_stall = sqrt(2 W / (rho S CL_max))`` from steady level-flight lift balance
+    (L = W at CL_max). Replaces a fixed zoom-exit speed with one that scales with
+    the vehicle's actual instantaneous weight and local air density, matching
+    standard practice (approach/maneuver speeds are always referenced to stall
+    speed, not a fixed airspeed).
+    """
+
+    atmosphere = standard_atmosphere(_clamped_altitude(altitude_m))
+    weight_n = mass_kg * G0_M_PER_S2
+    denominator = (
+        atmosphere.density_kg_per_m3
+        * case.flight.reference_area_m2
+        * case.flight.maximum_lift_coefficient
+    )
+    return sqrt(2.0 * weight_n / denominator)
+
+
 def _best_glide_lift_coefficient(case: ReferenceCase, zero_lift_drag_area_m2: float) -> float:
     """Return the CL that maximizes L/D for the current parabolic-drag model."""
 
@@ -220,7 +240,8 @@ def simulate_mission(
     dive_angle_deg: float = -10.0,
     dive_entry_mach: float = 0.45,
     zoom_angle_deg: float = 25.0,
-    zoom_minimum_speed_m_per_s: float = 60.0,
+    zoom_exit_stall_margin_factor: float = 1.3,
+    pull_out_load_factor_g: float = 4.0,
     max_time_s: float = 900.0,
     record_every_n_steps: int = 4,
     pulsejet_table_warmup_s: float = 0.25,
@@ -232,6 +253,12 @@ def simulate_mission(
     Returns a full trajectory time history plus per-phase outcomes. Termination
     within a phase is event-based (fuel depletion, Mach target, altitude limit) per
     the mission requirement that speed-run duration is an output of the model.
+
+    ``pull_out_load_factor_g`` is the assumed maximum structural/aerodynamic load
+    factor available to recover from the dive; it sets the speed-dependent pull-out
+    altitude margin via constant-load-factor circular-arc flight mechanics rather
+    than a fixed altitude buffer. 4.0 g is a conservative placeholder pending a real
+    structural limit from the mass/structure model.
     """
 
     if time_step_s <= 0.0:
@@ -361,7 +388,16 @@ def simulate_mission(
                     pulsejet_table, mach, altitude_m
                 )
                 fuel_ledger = "pulsejet"
-            floor_m = field_elevation_m + 50.0
+            # Pull-out altitude margin from constant-load-factor circular-arc flight
+            # mechanics (r = V^2/(g(n-1)), altitude lost = r(1-cos(gamma))), evaluated
+            # at the current speed rather than a fixed distance -- a faster dive
+            # needs proportionally more room to recover to level flight.
+            load_factor_margin_g = max(pull_out_load_factor_g - 1.0, 0.1)
+            pull_out_radius_m = speed_m_per_s**2 / (G0_M_PER_S2 * load_factor_margin_g)
+            pull_out_altitude_loss_m = pull_out_radius_m * (
+                1.0 - cos(radians(abs(dive_angle_deg)))
+            )
+            floor_m = field_elevation_m + pull_out_altitude_loss_m
             if mach >= lightoff_mach:
                 close_phase("reached_ramjet_lightoff_mach")
                 phase_name, phase_start_t = "ramjet_accel", t
@@ -434,7 +470,13 @@ def simulate_mission(
         elif phase_name == "zoom_climb":
             gamma_deg = zoom_angle_deg
             thrust_n = 0.0
-            if speed_m_per_s <= zoom_minimum_speed_m_per_s or altitude_m >= case.mission.top_of_climb_altitude_max_msl_m:
+            # Exit the zoom at a speed referenced to the actual (mass- and
+            # altitude-dependent) stall speed, not one fixed airspeed for the whole
+            # flight -- standard practice for maneuver/approach speed margins.
+            zoom_exit_speed_m_per_s = zoom_exit_stall_margin_factor * _stall_speed_m_per_s(
+                case, mass_kg, altitude_m
+            )
+            if speed_m_per_s <= zoom_exit_speed_m_per_s or altitude_m >= case.mission.top_of_climb_altitude_max_msl_m:
                 close_phase("zoom_apex_or_altitude_cap_reached")
                 phase_name, phase_start_t = "glide", t
                 phase_start_altitude_m, phase_start_mach = altitude_m, mach

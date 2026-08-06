@@ -5,8 +5,37 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .atmosphere import standard_atmosphere
-from .compressible import fixed_cd_nozzle, stagnation_pressure, stagnation_temperature
+from .compressible import (
+    fixed_cd_nozzle,
+    normal_shock_total_pressure_ratio,
+    stagnation_pressure,
+    stagnation_temperature,
+)
 from .config import Fuel, NozzleConfig, RamjetConfig, SelectorConfig
+
+
+def ideal_inlet_shock_recovery(mach: float, gamma: float) -> float:
+    """Return the idealized (loss-free duct) inlet total-pressure recovery.
+
+    Below Mach 1 there is no shock, so an idealized inlet has no theoretical
+    stagnation-pressure loss (``1.0``); above Mach 1, the loss is exactly the
+    stationary normal-shock total-pressure ratio at the local freestream Mach
+    number, reusing this repository's own tested normal-shock relation
+    (``normal_shock_total_pressure_ratio``) rather than an empirical curve fit.
+
+    This captures only the idealized shock-system loss. It is deliberately NOT the
+    vehicle's actual installed recovery: duct friction, bends, boundary-layer
+    bleed, and this vehicle's own pulsejet/ramjet selector losses are real
+    additional losses, captured separately by the configured
+    ``SelectorConfig.ramjet_total_pressure_recovery`` installed-efficiency factor
+    that multiplies this ideal term (see ``evaluate_ramjet``).
+    """
+
+    if mach < 0.0:
+        raise ValueError("Mach cannot be negative")
+    if mach <= 1.0:
+        return 1.0
+    return normal_shock_total_pressure_ratio(mach, gamma)
 
 
 @dataclass(frozen=True)
@@ -16,6 +45,8 @@ class RamjetResult:
     air_mass_flow_kg_per_s: float
     fuel_mass_flow_kg_per_s: float
     fuel_air_ratio: float
+    ideal_inlet_shock_recovery: float
+    installed_total_pressure_recovery: float
     combustor_inlet_total_pressure_pa: float
     combustor_exit_total_pressure_pa: float
     combustor_inlet_total_temperature_k: float
@@ -51,9 +82,9 @@ def evaluate_ramjet(
     )
     inlet_total_temperature_k = stagnation_temperature(atmosphere.temperature_k, mach)
     ideal_total_pressure_pa = stagnation_pressure(atmosphere.pressure_pa, mach)
-    inlet_total_pressure_pa = (
-        ideal_total_pressure_pa * selector.ramjet_total_pressure_recovery
-    )
+    shock_recovery = ideal_inlet_shock_recovery(mach, config.gamma)
+    installed_total_pressure_recovery = shock_recovery * selector.ramjet_total_pressure_recovery
+    inlet_total_pressure_pa = ideal_total_pressure_pa * installed_total_pressure_recovery
     combustor_exit_pressure_pa = inlet_total_pressure_pa * (
         1.0 - config.combustor_total_pressure_loss_fraction
     )
@@ -145,6 +176,8 @@ def evaluate_ramjet(
         air_mass_flow_kg_per_s=air_mass_flow_kg_per_s,
         fuel_mass_flow_kg_per_s=fuel_mass_flow_kg_per_s,
         fuel_air_ratio=fuel_air_ratio,
+        ideal_inlet_shock_recovery=shock_recovery,
+        installed_total_pressure_recovery=installed_total_pressure_recovery,
         combustor_inlet_total_pressure_pa=inlet_total_pressure_pa,
         combustor_exit_total_pressure_pa=combustor_exit_pressure_pa,
         combustor_inlet_total_temperature_k=inlet_total_temperature_k,

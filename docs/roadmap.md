@@ -9,7 +9,8 @@
 - Conventional total-pressure recovery replaced the earlier ram-rise interpretation
   and rejected Candidate A as a static reserve point.
 - A fixed shared-nozzle/spillage trade plus named robustness screens produced
-  Candidate B at 210 mm body and 160 mm throat.
+  Candidate B at 210 mm body and originally 160 mm throat, revised to 170 mm after
+  the ramjet inlet-recovery correction (see docs/design_convergence.md).
 - A component mass budget reconciles to 21.0 kg and exposes a 23.9 kg high-side case.
 - Fuel-limited Mach 1.10 hold replaces prescribed speed-run duration.
 - A 3,000–6,500 m static altitude sweep keeps the speed-run altitude open and shows

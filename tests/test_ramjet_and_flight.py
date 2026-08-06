@@ -62,7 +62,7 @@ class RamjetAndFlightTests(unittest.TestCase):
             result.gross_thrust_n - result.inlet_momentum_drag_n,
         )
 
-    def test_ramjet_recovery_is_total_pressure_ratio(self):
+    def test_ramjet_recovery_is_ideal_shock_times_installed_efficiency(self):
         altitude_m = self.case.mission.speed_run_altitude_msl_m
         mach = self.case.mission.peak_mach
         atmosphere = standard_atmosphere(altitude_m)
@@ -75,11 +75,41 @@ class RamjetAndFlightTests(unittest.TestCase):
             altitude_m,
             mach,
         )
+        expected_recovery = (
+            result.ideal_inlet_shock_recovery * self.case.selector.ramjet_total_pressure_recovery
+        )
         self.assertAlmostEqual(
             result.combustor_inlet_total_pressure_pa / ideal_total_pressure_pa,
-            self.case.selector.ramjet_total_pressure_recovery,
+            expected_recovery,
             places=12,
         )
+        self.assertAlmostEqual(
+            result.installed_total_pressure_recovery, expected_recovery, places=12
+        )
+
+    def test_ideal_inlet_shock_recovery_is_lossless_below_mach_one(self):
+        from douglas_dart.ramjet import ideal_inlet_shock_recovery
+
+        self.assertEqual(ideal_inlet_shock_recovery(0.0, 1.4), 1.0)
+        self.assertEqual(ideal_inlet_shock_recovery(0.99, 1.4), 1.0)
+
+    def test_ideal_inlet_shock_recovery_matches_normal_shock_relation_above_mach_one(self):
+        from douglas_dart.compressible import normal_shock_total_pressure_ratio
+        from douglas_dart.ramjet import ideal_inlet_shock_recovery
+
+        for mach in (1.05, 1.10, 1.30, 2.0):
+            self.assertAlmostEqual(
+                ideal_inlet_shock_recovery(mach, 1.4),
+                normal_shock_total_pressure_ratio(mach, 1.4),
+                places=12,
+            )
+
+    def test_ideal_inlet_shock_recovery_decreases_monotonically_above_mach_one(self):
+        from douglas_dart.ramjet import ideal_inlet_shock_recovery
+
+        machs = [1.0, 1.05, 1.10, 1.30, 1.60, 2.0]
+        recoveries = [ideal_inlet_shock_recovery(m, 1.4) for m in machs]
+        self.assertTrue(all(a >= b for a, b in zip(recoveries, recoveries[1:])))
 
 
 if __name__ == "__main__":
