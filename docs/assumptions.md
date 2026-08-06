@@ -38,7 +38,7 @@ resolves.
 | Fuel | Representative Jet-A family | Close exact grade, atomization, light-off, safety, and properties |
 | Body diameter / length | 0.210 / 2.30 m | Candidate B; 2.5 mm radial selector margin |
 | Circular intake / open fraction | 0.195 m / 0.50 | Fixed current architecture |
-| Shared throat / `Ae/At` | 0.160 m / 1.05 | Candidate B shared-nozzle compromise |
+| Shared throat / `Ae/At` | 0.170 m / 1.05 | Candidate B shared-nozzle compromise; revised from 0.160 m after the ramjet inlet-recovery correction below |
 | Lifting surfaces | Two; 0.16 m exposed semispan, 0.42/0.14 m chords | OpenVSP starting geometry |
 | Fins | Four X-clocked; 0.10 m exposed span | OpenVSP starting geometry |
 | Field / sled release | 900 m MSL / 39–42 m/s TAS | Prior mission baseline |
@@ -50,11 +50,25 @@ Candidate B's diameter-scaled peak-Mach drag area is 0.010478 m². Until externa
 aerodynamics closes, changing body diameter scales this budget with diameter squared
 while intake diameter remains fixed.
 
+## Trajectory-model derived quantities (no longer bare constants)
+
+Two previously hardcoded literals in `trajectory.py` are now computed from the
+vehicle's actual state instead of one fixed number for the whole flight:
+
+| Item | Was | Now | Basis |
+|---|---|---|---|
+| Dive pull-out altitude floor | fixed `+50 m` | `V^2(1-cos(gamma))/(g(n-1))` at the current speed | Constant-load-factor circular-arc pull-out, `pull_out_load_factor_g` (default 4.0 g, provisional pending a real structural limit) |
+| Zoom-climb exit speed | fixed `60 m/s` | `1.3 * V_stall(mass, altitude)` | `V_stall = sqrt(2W/(rho S CLmax))`; 1.3x is the standard approach-speed margin convention |
+
+`maximum_lift_coefficient` (new `FlightConfig` field, 0.90 in all three configs) is
+a literature-typical placeholder for a thin unflapped section pending real airfoil
+data — same status as `lift_curve_slope_per_rad`.
+
 ## Propulsion-model assumptions
 
 | Item | Current value | Status and closure path |
 |---|---:|---|
-| Pulsejet / ramjet total-pressure recovery | 0.99 / 0.92 | Separate conventional total-pressure ratios; both provisional |
+| Pulsejet / ramjet installed-efficiency recovery factor | 0.99 / 0.92 | Multiplies the idealized Mach-dependent normal-shock recovery (`ideal_inlet_shock_recovery`, 1.0 below Mach 1); both factors are still provisional |
 | Selector discharge coefficient | 0.78 | Effective-area placeholder |
 | Chamber volume | 0.025 m³ | Packaging and acoustic-length closure required |
 | Fuel LHV / stoichiometric AFR | 43 MJ/kg / 14.7 | Representative Jet-A values |
@@ -78,17 +92,18 @@ growth. The adverse case combines 0.82 recovery, a 0.75 thrust factor, 20% drag 
 and the full 2.9 kg high-side mass addition.
 
 Those scenarios are engineering screens, not probability statements. Candidate B
-passes the required conservative 50 N excess-thrust budget by about 1.5 N and fails
-the informational adverse case by about 154 N.
+(170 mm throat) passes the required conservative 50 N excess-thrust budget by about
+128.8 N and fails the informational adverse case by about 96 N. (The prior 160 mm
+throat passed the conservative screen by only 1.5 N before the ramjet inlet-recovery
+correction below reduced that to -0.24 N, which is why the throat moved to 170 mm.)
 
 ## Interpretation of current outputs
 
-The nominal static Mach 1.10 calculation predicts 832 N ramjet net thrust and 50.5%
-potential-capture spillage. The existing 15% derate leaves about 195 N over the
-512 N drag budget. The separate conservative combined-penalty screen leaves only
-51.5 N.
+The nominal static Mach 1.10 calculation predicts 937 N ramjet net thrust and 44.2%
+potential-capture spillage. The existing 15% derate leaves about 284 N over the
+512 N drag budget. The separate conservative combined-penalty screen leaves 128.8 N.
 
-The pulsejet model predicts about 122 N steady-window net thrust at sea level and
+The pulsejet model predicts about 119 N steady-window net thrust at sea level and
 Mach 0.20 for Candidate B. Neither static result demonstrates transonic acceleration,
 mode transition, stability/control, thermal acceptability, or recovery.
 

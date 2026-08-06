@@ -43,6 +43,16 @@ class Fuel:
 
 @dataclass(frozen=True)
 class SelectorConfig:
+    """``ramjet_total_pressure_recovery`` is an *installed-efficiency* factor.
+
+    ``ramjet.py`` multiplies it by the idealized, Mach-dependent normal-shock
+    recovery (``ideal_inlet_shock_recovery``, 1.0 below Mach 1) rather than using it
+    as the total recovery outright. It represents everything the idealized shock
+    model does not capture -- duct friction, bends, boundary-layer bleed, and this
+    vehicle's own pulsejet/ramjet selector losses -- and stays roughly constant
+    with Mach, unlike the idealized shock term.
+    """
+
     circular_intake_diameter_m: float
     open_fraction: float
     discharge_coefficient: float
@@ -169,6 +179,7 @@ class FlightConfig:
     zero_lift_drag_coefficient: float
     induced_drag_factor: float
     lift_curve_slope_per_rad: float
+    maximum_lift_coefficient: float
 
     def __post_init__(self) -> None:
         for name in (
@@ -177,6 +188,7 @@ class FlightConfig:
             "zero_lift_drag_coefficient",
             "induced_drag_factor",
             "lift_curve_slope_per_rad",
+            "maximum_lift_coefficient",
         ):
             _positive(name, getattr(self, name))
 
@@ -355,19 +367,40 @@ class ExternalShellConfig:
 
 @dataclass(frozen=True)
 class RamInletConfig:
-    """Small non-flush ram-air scoop on the nose for the non-flow-through selector."""
+    """Centered, flow-through ram-air inlet lip duct ahead of the main body's nose.
 
-    x_location_m: float
-    length_m: float
-    height_m: float
-    width_m: float
-    clocking_deg: float
+    Represents the physical inlet-lip housing for the mutually exclusive
+    pulsejet/ramjet selector as a short axisymmetric flow-through duct, fairing from
+    a slightly larger external lip diameter down to the main body's nose-opening
+    diameter, centered on the vehicle axis -- not an off-axis decorative scoop, and
+    flagged with its own OpenVSP inlet/outlet engine parameters like the main body.
+
+    Sized from real subsonic-cowl design ratios rather than arbitrary absolute
+    dimensions, so the duct scales with whatever intake diameter the selector
+    trade lands on. ``lip_overshoot_fraction`` is the lip highlight's diametral
+    increase over the intake diameter it fairs into -- low-drag subsonic pitot
+    lips typically run 3-10% -- and ``lip_fineness_ratio`` is the duct's axial
+    length per unit of that diametral overshoot the fairing has to blend out
+    (higher means a more gradual fairing and lower external wave drag, at the
+    cost of duct length and wetted area).
+    """
+
+    lip_overshoot_fraction: float
+    lip_fineness_ratio: float
+    tessellation: int
 
     def __post_init__(self) -> None:
-        for name in ("x_location_m", "length_m", "height_m", "width_m"):
-            _positive(name, getattr(self, name))
-        if not 0.0 <= self.clocking_deg < 360.0:
-            raise ValueError("ram inlet clocking must be in [0, 360) degrees")
+        _fraction("lip_overshoot_fraction", self.lip_overshoot_fraction, inclusive_one=False)
+        _positive("lip_fineness_ratio", self.lip_fineness_ratio)
+        if self.tessellation < 9:
+            raise ValueError("ram inlet tessellation is too small")
+
+    def lip_diameter_m(self, intake_diameter_m: float) -> float:
+        return intake_diameter_m * (1.0 + self.lip_overshoot_fraction)
+
+    def length_m(self, intake_diameter_m: float) -> float:
+        diametral_overshoot_m = intake_diameter_m * self.lip_overshoot_fraction
+        return self.lip_fineness_ratio * diametral_overshoot_m
 
 
 @dataclass(frozen=True)
@@ -430,8 +463,6 @@ class OpenVSPGeometryConfig:
             raise ValueError("VSPAERO wake iterations must be positive")
         if self.shell.start_x_m < self.forebody_transition_length_m:
             raise ValueError("external shell must start at or aft of the forebody transition")
-        if self.shell.end_x_m > self.aft_taper_start_m:
-            raise ValueError("external shell must end at or before the aft taper start")
 
 
 @dataclass(frozen=True)
@@ -487,9 +518,26 @@ class ReferenceCase:
             raise ValueError("aft taper must start before the body ends")
         if self.geometry.reference_cg_x_m >= self.vehicle.body_length_m:
             raise ValueError("reference CG must lie within the body length")
+        if self.geometry.shell.end_x_m > self.vehicle.body_length_m:
+            raise ValueError("external shell must end at or before the body's aft end")
+        shell = self.geometry.shell
+        shell_constant_span_start_m = shell.start_x_m + shell.forward_taper_length_m
+        shell_constant_span_end_m = shell.end_x_m - shell.aft_taper_length_m
         for surface in (self.geometry.lifting_surface, self.geometry.fin):
             if surface.x_location_m + surface.root_chord_m > self.vehicle.body_length_m:
                 raise ValueError("surface root chord extends beyond the body length")
+            mounts_to_shell = shell.start_x_m <= surface.x_location_m <= shell.end_x_m
+            if mounts_to_shell and not (
+                shell_constant_span_start_m
+                <= surface.x_location_m
+                and surface.x_location_m + surface.root_chord_m
+                <= shell_constant_span_end_m
+            ):
+                raise ValueError(
+                    "a surface mounted to the external shell must have its entire "
+                    "root chord within the shell's constant-diameter span, or its "
+                    "root will show a gap against the shell's own taper"
+                )
         if self.geometry.lifting_surface_count:
             vspaero_reference_area_m2 = (
                 self.geometry.lifting_surface_count

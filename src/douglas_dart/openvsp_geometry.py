@@ -139,28 +139,52 @@ def body_stations(case: ReferenceCase) -> tuple[BodyStation, ...]:
     )
 
 
+def body_diameter_at_x_m(case: ReferenceCase, x_location_m: float) -> float:
+    """Interpolate the inner flow-through body's outer mold line at any station.
+
+    ``body_stations`` defines the body as a piecewise-linear profile (forebody
+    taper-in, constant section, aft taper-out to the nozzle exit). Any geometry
+    that fairs into the body -- the fin-can shell in particular -- must fair to
+    this local diameter, not the constant mid-body diameter, once it extends into
+    the forebody or aft taper regions.
+    """
+
+    stations = body_stations(case)
+    clamped_x = min(max(x_location_m, stations[0].x_location_m), stations[-1].x_location_m)
+    for lower, upper in zip(stations, stations[1:]):
+        if lower.x_location_m <= clamped_x <= upper.x_location_m:
+            span = upper.x_location_m - lower.x_location_m
+            if span <= 0.0:
+                return lower.diameter_m
+            fraction = (clamped_x - lower.x_location_m) / span
+            return lower.diameter_m + fraction * (upper.diameter_m - lower.diameter_m)
+    return stations[-1].diameter_m
+
+
 def shell_stations(case: ReferenceCase) -> tuple[BodyStation, ...]:
     """Return the five stations of the annular fin-can shroud outer mold line.
 
-    The shroud fairs from the inner flow-through body diameter up to the shell outer
-    diameter (inner body diameter plus twice the configured radial annulus offset)
-    over the forward taper, holds that diameter, and fairs back down aft. It is a
-    second, independent FUSELAGE surface, not a blend of the inner body.
+    The shroud fairs from the *local* inner flow-through body diameter (not the
+    constant mid-body diameter -- the shell may extend into the aft taper to keep a
+    fin/wing root chord entirely on its constant-diameter span, see
+    ``ReferenceCase.__post_init__``) up to the shell outer diameter (inner body
+    diameter plus twice the configured radial annulus offset) over the forward
+    taper, holds that diameter, and fairs back down aft. It is a second,
+    independent FUSELAGE surface, not a blend of the inner body.
     """
 
     shell = case.geometry.shell
-    body_diameter_m = case.vehicle.body_diameter_m
-    outer_diameter_m = body_diameter_m + 2.0 * shell.radial_offset_m
+    outer_diameter_m = case.vehicle.body_diameter_m + 2.0 * shell.radial_offset_m
     midpoint_m = 0.5 * (
         (shell.start_x_m + shell.forward_taper_length_m)
         + (shell.end_x_m - shell.aft_taper_length_m)
     )
     return (
-        BodyStation(shell.start_x_m, body_diameter_m),
+        BodyStation(shell.start_x_m, body_diameter_at_x_m(case, shell.start_x_m)),
         BodyStation(shell.start_x_m + shell.forward_taper_length_m, outer_diameter_m),
         BodyStation(midpoint_m, outer_diameter_m),
         BodyStation(shell.end_x_m - shell.aft_taper_length_m, outer_diameter_m),
-        BodyStation(shell.end_x_m, body_diameter_m),
+        BodyStation(shell.end_x_m, body_diameter_at_x_m(case, shell.end_x_m)),
     )
 
 
@@ -338,7 +362,20 @@ def _configure_flowthrough_body(
     return body_id, stations
 
 
-_RADIAL_MOUNT_OVERLAP_M = 0.004
+def _radial_mount_overlap_m(planform: SurfacePlanformConfig) -> float:
+    """Root-mount radial interpenetration, sized from the surface's own root airfoil.
+
+    A root mounted exactly tangent to the body/shell surface (zero overlap) produces
+    a degenerate sliver panel face at the tangent line during VSPAERO's real
+    triangulation ("PGFace Invalid in Triangulate_DBA"), confirmed against the real
+    installed API. Half the root airfoil's own maximum thickness is a natural,
+    geometry-scaled interpenetration depth -- enough to guarantee a genuine
+    intersection for this specific surface, rather than one fixed absolute value
+    that could be too shallow for a thick/large-chord surface or unnecessarily deep
+    for a thin one.
+    """
+
+    return 0.5 * planform.thickness_to_chord * planform.root_chord_m
 
 
 def _configure_radial_surface(
@@ -360,7 +397,9 @@ def _configure_radial_surface(
     # real triangulation ("PGFace Invalid in Triangulate_DBA"), confirmed against the
     # real installed API. A small commanded interpenetration forces a genuine
     # intersection instead of exact tangency.
-    mount_radius = mount_radius_m(case, planform.x_location_m) - _RADIAL_MOUNT_OVERLAP_M
+    mount_radius = mount_radius_m(case, planform.x_location_m) - _radial_mount_overlap_m(
+        planform
+    )
     vsp.SetParmVal(surface_id, "X_Rel_Location", "XForm", planform.x_location_m)
     vsp.SetParmVal(
         surface_id,
@@ -458,57 +497,71 @@ def _configure_external_shell(
 
 
 def _configure_ram_inlet(vsp: Any, case: ReferenceCase) -> str:
-    """Build a small non-flush ram-air scoop pod near the nose.
+    """Build the ram-air inlet as a centered, flow-through lip duct ahead of the nose.
 
-    The primary body is a flow-through representation for VSPAERO's external
-    aerodynamics only; it does not by itself represent the mutually exclusive
-    pulsejet/ramjet selector inlet. This pod is a coarse external bump standing in
-    for that non-flush intake lip so the outer mold line is not silently claiming a
-    true flow-through nose.
+    The primary body's nose station is already an open flow-through face, but a
+    single circular opening does not represent the mutually exclusive
+    pulsejet/ramjet selector's real inlet housing. This duct is a short,
+    axisymmetric extension mounted on the vehicle centerline immediately ahead of
+    the main body (spanning ``x in [-length_m, 0]``), fairing from a slightly larger
+    external lip diameter down to exactly the main body's nose-opening diameter, and
+    is explicitly flagged with its own OpenVSP inlet/outlet flow-through engine
+    parameters -- the same pattern used for the main body -- rather than being a
+    solid, off-axis decorative bump. ``length_m`` and the lip diameter are both
+    derived from the actual intake diameter via ``RamInletConfig``'s cowl ratios,
+    not set as independent absolute dimensions.
     """
 
     ram_inlet = case.geometry.ram_inlet
-    pod_id = str(vsp.AddGeom("FUSELAGE", ""))
-    if not pod_id:
+    nose_diameter_m = case.selector.circular_intake_diameter_m
+    length_m = ram_inlet.length_m(nose_diameter_m)
+    lip_diameter_m = ram_inlet.lip_diameter_m(nose_diameter_m)
+
+    duct_id = str(vsp.AddGeom("FUSELAGE", ""))
+    if not duct_id:
         raise RuntimeError("OpenVSP failed to create the ram-air inlet geometry")
-    vsp.SetGeomName(pod_id, "Douglas_Dart_Ram_Air_Inlet")
-    vsp.SetParmVal(pod_id, "Length", "Design", ram_inlet.length_m)
-    vsp.SetParmVal(pod_id, "Sym_Planar_Flag", "Sym", 0.0)
+    vsp.SetGeomName(duct_id, "Douglas_Dart_Ram_Air_Inlet_Duct")
+    vsp.SetParmVal(duct_id, "Length", "Design", length_m)
+    vsp.SetParmVal(duct_id, "Sym_Planar_Flag", "Sym", 0.0)
 
-    clocking_angle_rad = radians(ram_inlet.clocking_deg)
-    body_radius_m = 0.5 * case.vehicle.body_diameter_m
-    vsp.SetParmVal(pod_id, "X_Rel_Location", "XForm", ram_inlet.x_location_m)
-    vsp.SetParmVal(
-        pod_id, "Y_Rel_Location", "XForm", body_radius_m * cos(clocking_angle_rad)
-    )
-    vsp.SetParmVal(
-        pod_id, "Z_Rel_Location", "XForm", body_radius_m * sin(clocking_angle_rad)
-    )
-    vsp.SetParmVal(
-        pod_id,
-        "X_Rel_Rotation",
-        "XForm",
-        _normalize_rotation_deg(ram_inlet.clocking_deg),
-    )
+    # Centered on the vehicle axis and mounted immediately ahead of the main body's
+    # nose station (x=0), not offset radially or clocked to one side.
+    vsp.SetParmVal(duct_id, "X_Rel_Location", "XForm", -length_m)
+    vsp.SetParmVal(duct_id, "Y_Rel_Location", "XForm", 0.0)
+    vsp.SetParmVal(duct_id, "Z_Rel_Location", "XForm", 0.0)
+    vsp.SetParmVal(duct_id, "X_Rel_Rotation", "XForm", 0.0)
 
-    xsec_surf_id = str(vsp.GetXSecSurf(pod_id, 0))
+    xsec_surf_id = str(vsp.GetXSecSurf(duct_id, 0))
     station_count = vsp.GetNumXSec(xsec_surf_id)
-    pod_diameter_m = min(ram_inlet.height_m, ram_inlet.width_m)
+    last_index = station_count - 1
     for index in range(station_count):
         vsp.ChangeXSecShape(xsec_surf_id, index, vsp.XS_CIRCLE)
         xsec_id = str(vsp.GetXSec(xsec_surf_id, index))
-        fraction = index / max(station_count - 1, 1)
-        # Blunt nose/tail taper so the scoop bump has no zero-length degenerate ends.
-        shape_fraction = 1.0 - abs(2.0 * fraction - 1.0)
+        fraction = index / max(last_index, 1)
+        # Fair linearly from the external lip diameter at the forward face down to
+        # exactly the main body's nose-opening diameter at the aft face, so the duct
+        # blends into the body with no step.
+        diameter_m = lip_diameter_m + fraction * (nose_diameter_m - lip_diameter_m)
         _set_xsec_parm(vsp, xsec_id, "XLocPercent", fraction)
-        _set_xsec_parm(
-            vsp,
-            xsec_id,
-            "Circle_Diameter",
-            max(pod_diameter_m * shape_fraction, 1e-4),
-        )
+        _set_xsec_parm(vsp, xsec_id, "Circle_Diameter", diameter_m)
     _flatten_xsec_skinning(vsp, xsec_surf_id, station_count)
-    return pod_id
+
+    engine_values = {
+        "GeomIOType": vsp.ENGINE_GEOM_INLET_OUTLET,
+        "GeomInType": vsp.ENGINE_GEOM_FLOWTHROUGH,
+        "InletFaceMode": vsp.ENGINE_LOC_INDEX,
+        "InletLipMode": vsp.ENGINE_LOC_INDEX,
+        "OutletFaceMode": vsp.ENGINE_LOC_INDEX,
+        "OutletLipMode": vsp.ENGINE_LOC_INDEX,
+        "InletFaceIndex": 0,
+        "InletLipIndex": 0,
+        "OutletFaceIndex": last_index,
+        "OutletLipIndex": last_index,
+        "InletModeType": vsp.ENGINE_MODE_FLOWTHROUGH,
+    }
+    for name, value in engine_values.items():
+        vsp.SetParmVal(duct_id, name, "EngineModel", float(value))
+    return duct_id
 
 
 def build_openvsp_geometry(

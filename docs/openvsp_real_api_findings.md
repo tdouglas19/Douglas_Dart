@@ -96,6 +96,52 @@ take on the order of **4 hours** at this fidelity. Validate with a small subset 
 - running the full sweep unattended in the background (`douglas-dart vspaero-sweep`
   with the full grid), the same pattern used for `douglas-dart design-optimize`.
 
+## Follow-up: visual QA in the real GUI found three more real defects
+
+After the fixes above, a user visual-QA pass in the OpenVSP GUI (exactly the
+inspection this repository's own docs call "mandatory" before running VSPAERO)
+found three more real problems, none catchable by the recording-fake unit tests:
+
+1. **Fin root showed a gap at the aft edge.** The fin root chord (`x_location_m` to
+   `x_location_m + root_chord_m`) extended well past the external shell's
+   `end_x_m`, onto the *inner body's own* aft taper. Since the fin root sits at one
+   fixed radial mount (the shell's outer radius), and the inner body was shrinking
+   underneath it beyond the shell's end, the forward part of the root touched the
+   surface while the aft part opened into a gap. **Fix**: `shell_stations()` now
+   fairs to the *local* body diameter (`body_diameter_at_x_m`, a new piecewise-linear
+   interpolation over `body_stations()`) rather than always fairing to the constant
+   mid-body diameter, and `ReferenceCase.__post_init__` now has a hard invariant:
+   any fin or lifting surface that mounts to the shell must have its *entire* root
+   chord within the shell's constant-diameter span (`shell.start_x_m +
+   forward_taper_length_m` to `shell.end_x_m - aft_taper_length_m`), or config
+   loading fails loudly instead of silently generating a gapped mesh. All three YAML
+   configs' `shell.end_x_m` were extended accordingly, with margin.
+2. **The ram-air inlet sat off-axis** (radially offset at a clocking angle, "top
+   dead center" of the nose) rather than being centered on the vehicle axis.
+3. **It was a solid decorative bump, not a modeled inlet** — no actual flow-through
+   parameters.
+
+**Fix for both (2) and (3)**: `_configure_ram_inlet` was rebuilt as a short,
+axisymmetric duct centered on the vehicle centerline (`Y=Z=0`, no clocking),
+mounted immediately ahead of the main body's nose (`x` from `-length_m` to `0`),
+fairing linearly from a slightly larger external lip diameter down to *exactly* the
+main body's nose-opening diameter, and explicitly flagged with the same
+`ENGINE_GEOM_INLET_OUTLET` / `ENGINE_MODE_FLOWTHROUGH` parameters used on the main
+body. `RamInletConfig` dropped `x_location_m`/`height_m`/`width_m`/`clocking_deg` in
+favor of `length_m`/`lip_thickness_m`/`tessellation`, since the duct's position and
+symmetry are no longer free parameters.
+
+All three fixes were verified against the real installed API: `openvsp-build` then
+`VSPAEROComputeGeometry` runs clean with no triangulation warnings and no crash.
+
+## Reducing hardcoded geometry constants to derived quantities
+
+Per the same review, `_RADIAL_MOUNT_OVERLAP_M` (a bare `0.004` m constant used to
+force a genuine wing/fin-root intersection instead of exact surface tangency) was
+replaced with `_radial_mount_overlap_m(planform)`, which derives the overlap from
+*that surface's own* root airfoil thickness (`0.5 * thickness_to_chord * root_chord_m`)
+instead of one fixed value for every surface regardless of its size.
+
 ## Status
 
 With all three fixes applied, `douglas-dart openvsp-build` and a reduced-grid

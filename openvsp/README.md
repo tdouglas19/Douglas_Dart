@@ -36,10 +36,10 @@ The generator creates five circular body stations:
 | Axial position | Diameter | Role |
 |---:|---:|---|
 | 0.00 m | 195.0 mm | Open circular intake lip |
-| 0.18 m | 205.0 mm | Forebody-to-constant-body transition |
-| 0.99 m | 205.0 mm | Constant-body control station |
-| 1.80 m | 205.0 mm | Aft taper start |
-| 2.30 m | 133.21 mm | Open shared-nozzle exit |
+| 0.18 m | 210.0 mm | Forebody-to-constant-body transition |
+| 0.99 m | 210.0 mm | Constant-body control station |
+| 1.80 m | 210.0 mm | Aft taper start |
+| 2.30 m | 174.2 mm | Open shared-nozzle exit (170 mm throat, `Ae/At = 1.05`) |
 
 It also creates:
 
@@ -91,7 +91,7 @@ douglas-dart vspaero-sweep \
 ```
 
 Candidate B uses the panel method because the body is thick geometry. Manual
-reference values are 0.0896 m² area, 0.525 m span, 0.3033 m mean aerodynamic chord,
+reference values are 0.0896 m² area, 0.53 m span, 0.3033 m mean aerodynamic chord,
 and 1.24 m CG station. Mach values are nonuniform, so the runner executes each
 Mach/alpha/beta combination as an individual one-point sweep rather than asking
 OpenVSP to linearly interpolate between endpoints.
