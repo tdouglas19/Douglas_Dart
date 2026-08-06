@@ -59,12 +59,45 @@ drag closure, stability, control, or recovery. See
 - local normalized pulsejet and ramjet key-variable sensitivities;
 - performance-only multi-fuel comparison with tank volume and explicit omitted-system
   flags;
-- parameter-driven OpenVSP 3.51.2 flow-through body, two lifting surfaces, and four
-  canted fins;
+- parameter-driven OpenVSP 3.51.2 flow-through engine body, an annular fin-can
+  external shell (fuel tank/avionics volume, 0.5-1" radial offset) that the lifting
+  surfaces and fins mount to, a nose ram-air inlet pod, two lifting surfaces, and four
+  canted fins with clocking angles normalized into OpenVSP's -180 to 180 degree
+  `X_Rel_Rotation` range;
 - an explicit-point VSPAERO panel/VLM runner for nonuniform Mach, angle-of-attack,
-  and sideslip grids; and
-- a longitudinal point-mass flight-equation kernel awaiting aerodynamic tables and a
-  phase-based mission integrator.
+  and sideslip grids;
+- a Mach-indexed total-drag-area model (`src/douglas_dart/drag.py`) anchored at the
+  peak-Mach drag-area budget so the flight kernel and the sizing/robustness
+  discipline read one consistent transonic drag-rise shape instead of two
+  disagreeing ones; and
+- a phase-based mission trajectory integrator (`src/douglas_dart/trajectory.py`):
+  sled release, pulsejet climb/acceleration, shallow dive, ramjet ignition,
+  transonic acceleration, fuel-limited Mach-1.10 hold, zoom climb, and glide, runnable
+  at the nominal/conservative/adverse robustness scenarios via
+  `douglas-dart mission-trajectory --scenario adverse`; and
+- a JSBSim aircraft-model generator (`src/douglas_dart/jsbsim_model.py`) that builds a
+  real 6-DOF model from the same propulsion, drag, mass, and geometry data —
+  mutually exclusive pulsejet/ramjet thrust tables via `external_reactions`,
+  Mach-indexed drag, and geometry-derived (not invented) stability derivatives — and
+  verifies it by actually loading and running it in the installed JSBSim engine via
+  `douglas-dart jsbsim-build --check`. See [docs/jsbsim.md](docs/jsbsim.md); and
+- a local, token-free differential-evolution design search
+  (`src/douglas_dart/optimizer.py`) over body diameter, throat, area ratio, fuel
+  split, and climb/dive schedule against the nominal and adverse trajectory
+  scenarios, checkpointed every generation via
+  `douglas-dart design-optimize --population 24 --generations 40`. See
+  [docs/optimizer.md](docs/optimizer.md).
+
+Competition requirements are sourced from
+[boomsupersonic.com/prize](https://boomsupersonic.com/prize) and enforced in code,
+including the "no altitude loss from Mach 0.8 to past Mach 1" flight-path rule, which
+`trajectory.py` now audits on every run
+(`transonic_no_altitude_loss_rule_satisfied`).
+
+A real OpenVSP 3.51.2 install has now been run against this repository's geometry and
+found (and fixed) three real defects a recording-fake unit test could never catch —
+including one geometry-naming quirk that silently crashed the native mesher. See
+[docs/openvsp_real_api_findings.md](docs/openvsp_real_api_findings.md).
 
 OpenVSP/VSPAERO is used only for external aerodynamics. Internal combustion and nozzle
 flow stay in the Python propulsion model.
@@ -98,6 +131,13 @@ douglas-dart altitude-trade \
 douglas-dart pulsejet \
   --config configs/shared_nozzle_candidate_b.yaml \
   --duration 0.50 --summary-start 0.25
+
+douglas-dart mission-trajectory \
+  --config configs/shared_nozzle_candidate_b.yaml --scenario adverse
+
+douglas-dart jsbsim-build \
+  --config configs/shared_nozzle_candidate_b.yaml --scenario adverse \
+  --check --check-mach 1.10 --check-altitude 4500
 ```
 
 CSV output is optional and generated files are ignored by Git:

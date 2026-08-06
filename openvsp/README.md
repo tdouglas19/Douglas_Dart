@@ -41,9 +41,33 @@ The generator creates five circular body stations:
 | 1.80 m | 205.0 mm | Aft taper start |
 | 2.30 m | 133.21 mm | Open shared-nozzle exit |
 
-It also creates two lifting surfaces at 0°/180° and four fins at
-45°/135°/225°/315°. Each is an independent unsymmetrized OpenVSP wing so sideslip
-and asymmetric loads are not suppressed by a geometry symmetry shortcut.
+It also creates:
+
+- an annular external shell ("fin can") as a second, independent FUSELAGE surface,
+  offset radially outward from the inner flow-through body by the configured 0.5-1
+  inch (`openvsp.shell.radial_offset_m`) annulus and faired to the inner body
+  diameter at both ends. This annulus is where the fuel tank, avionics, and other
+  auxiliary systems are packaged; it is included in vehicle sizing and drag;
+- a small non-flush ram-air inlet pod on the nose, since the primary body is a
+  flow-through representation for external aerodynamics only and the real vehicle's
+  pulsejet/ramjet selector is not a true flow-through inlet; and
+- two lifting surfaces at 0°/180° and four fins at 45°/135°/225°/315°, mounted to the
+  external shell's outer diameter wherever their axial station falls inside the
+  shell span (otherwise the inner body). Each is an independent unsymmetrized OpenVSP
+  wing so sideslip and asymmetric loads are not suppressed by a geometry symmetry
+  shortcut. Clocking angles are normalized into OpenVSP's -180 to 180 degree
+  `X_Rel_Rotation` range before being written (225° -> -135°, 315° -> -45°).
+
+Every circular cross-section (inner body, external shell, and inlet pod) has its
+top/bottom/left/right skinning angle and strength zeroed and its symmetric-skinning
+flag set, so the mold line stays a plain surface of revolution rather than picking up
+an unintended skew.
+
+If you build or hand-adjust a `.vsp3` in the OpenVSP GUI and want it kept as
+comparison data, put it (and any VSPAERO output you run locally) in
+`openvsp/reference/` — see that directory's `README.md` for the naming convention.
+That directory is tracked; `openvsp/generated/` is pipeline output and stays
+git-ignored.
 
 ## Mandatory visual QA
 

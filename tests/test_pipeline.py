@@ -36,7 +36,7 @@ class PipelineArtifactTests(unittest.TestCase):
         )
         self.assertEqual(converted["row"]["value"], None)
         self.assertEqual(converted["row"]["status"], ["unvalidated"])
-        self.assertEqual(converted["path"], "results/example.csv")
+        self.assertEqual(converted["path"], str(Path("results/example.csv")))
 
     def test_writers_create_machine_readable_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

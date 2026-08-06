@@ -27,7 +27,21 @@ from .sizing import (
     shared_nozzle_feasibility_bounds,
     shared_nozzle_trade_sweep,
 )
+from .jsbsim_model import validate_with_jsbsim, write_jsbsim_aircraft
+from .optimizer import DEFAULT_BOUNDS, run_differential_evolution, write_generation_log_csv
+from .trajectory import (
+    ADVERSE_SCENARIO,
+    CONSERVATIVE_SCENARIO,
+    NOMINAL_SCENARIO,
+    simulate_mission,
+)
 from .vspaero import run_vspaero_sweep
+
+_MISSION_SCENARIOS = {
+    "nominal": NOMINAL_SCENARIO,
+    "conservative": CONSERVATIVE_SCENARIO,
+    "adverse": ADVERSE_SCENARIO,
+}
 
 
 def _write_samples(path: Path, samples: list) -> None:
@@ -237,6 +251,69 @@ def _key_variables(args: argparse.Namespace) -> int:
     return 0
 
 
+def _mission_trajectory(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    scenario = _MISSION_SCENARIOS[args.scenario]
+    result = simulate_mission(case, scenario, time_step_s=args.dt, max_time_s=args.max_time)
+    if args.csv:
+        _write_samples(Path(args.csv), list(result.points))
+    output = asdict(result)
+    if not args.include_points:
+        output.pop("points", None)
+    print(json.dumps(output, indent=2))
+    return 0
+
+
+def _design_optimize(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = output_dir / "checkpoint.json"
+    csv_path = output_dir / "generation_log.csv"
+
+    def on_generation(record) -> None:
+        print(
+            f"generation {record.generation:3d}  best_score={record.best_score:12.1f}  "
+            f"feasible={record.feasible_count}/{record.population_size}  "
+            f"nominal_mach={record.best_evaluation.nominal_peak_mach}  "
+            f"adverse_mach={record.best_evaluation.adverse_peak_mach}"
+        )
+
+    records = run_differential_evolution(
+        case,
+        population_size=args.population,
+        generations=args.generations,
+        mutation_factor=args.mutation_factor,
+        crossover_probability=args.crossover_probability,
+        seed=args.seed,
+        checkpoint_path=checkpoint_path,
+        progress_callback=on_generation,
+    )
+    write_generation_log_csv(csv_path, records)
+    best = records[-1].best_evaluation
+    print(json.dumps(asdict(best), indent=2))
+    print(f"\nCheckpoint: {checkpoint_path}\nGeneration log: {csv_path}")
+    return 0
+
+
+def _jsbsim_build(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    scenario = _MISSION_SCENARIOS[args.scenario]
+    root_dir = Path(args.root)
+    output_path, summary = write_jsbsim_aircraft(case, root_dir / "aircraft", scenario)
+    print(json.dumps(asdict(summary), indent=2))
+    if args.check:
+        check = validate_with_jsbsim(
+            root_dir,
+            output_path.parent.name,
+            altitude_m=args.check_altitude,
+            mach=args.check_mach,
+            run_seconds=args.check_seconds,
+        )
+        print(json.dumps(asdict(check), indent=2))
+    return 0
+
+
 def _openvsp_build(args: argparse.Namespace) -> int:
     case = load_reference_case(args.config, args.fuels)
     summary = build_openvsp_geometry(case, args.output)
@@ -434,6 +511,82 @@ def build_parser() -> argparse.ArgumentParser:
     key_variables.add_argument("--pulsejet-dt", type=float, default=None)
     key_variables.add_argument("--csv", default=None)
     key_variables.set_defaults(func=_key_variables)
+
+    mission_trajectory = subparsers.add_parser(
+        "mission-trajectory",
+        help=(
+            "integrate the phase-based sled-release-to-landing mission at a named "
+            "nominal/conservative/adverse robustness scenario"
+        ),
+    )
+    mission_trajectory.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_b.yaml",
+    )
+    mission_trajectory.add_argument("--fuels", default=None)
+    mission_trajectory.add_argument(
+        "--scenario",
+        choices=tuple(_MISSION_SCENARIOS),
+        default="nominal",
+    )
+    mission_trajectory.add_argument("--dt", type=float, default=0.05)
+    mission_trajectory.add_argument("--max-time", type=float, default=900.0)
+    mission_trajectory.add_argument("--include-points", action="store_true")
+    mission_trajectory.add_argument("--csv", default=None)
+    mission_trajectory.set_defaults(func=_mission_trajectory)
+
+    design_optimize = subparsers.add_parser(
+        "design-optimize",
+        help=(
+            "run a local, unattended differential-evolution search over body "
+            "diameter, throat, area ratio, fuel split, and climb/dive geometry "
+            "against the nominal and adverse trajectory scenarios; no AI model calls"
+        ),
+    )
+    design_optimize.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_b.yaml",
+    )
+    design_optimize.add_argument("--fuels", default=None)
+    design_optimize.add_argument("--population", type=int, default=20)
+    design_optimize.add_argument("--generations", type=int, default=30)
+    design_optimize.add_argument("--mutation-factor", type=float, default=0.6)
+    design_optimize.add_argument("--crossover-probability", type=float, default=0.7)
+    design_optimize.add_argument("--seed", type=int, default=0)
+    design_optimize.add_argument(
+        "--output-dir",
+        default="results/generated/design_optimize",
+    )
+    design_optimize.set_defaults(func=_design_optimize)
+
+    jsbsim_build = subparsers.add_parser(
+        "jsbsim-build",
+        help=(
+            "generate a JSBSim aircraft model from the configured propulsion, drag, "
+            "mass, and geometry data, with mutually exclusive pulsejet/ramjet "
+            "external-reactions thrust tables"
+        ),
+    )
+    jsbsim_build.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_b.yaml",
+    )
+    jsbsim_build.add_argument("--fuels", default=None)
+    jsbsim_build.add_argument(
+        "--scenario",
+        choices=tuple(_MISSION_SCENARIOS),
+        default="nominal",
+    )
+    jsbsim_build.add_argument("--root", default="jsbsim/generated")
+    jsbsim_build.add_argument(
+        "--check",
+        action="store_true",
+        help="load the model in real JSBSim and run a short sanity simulation",
+    )
+    jsbsim_build.add_argument("--check-altitude", type=float, default=4500.0)
+    jsbsim_build.add_argument("--check-mach", type=float, default=0.20)
+    jsbsim_build.add_argument("--check-seconds", type=float, default=5.0)
+    jsbsim_build.set_defaults(func=_jsbsim_build)
 
     openvsp_build = subparsers.add_parser(
         "openvsp-build",

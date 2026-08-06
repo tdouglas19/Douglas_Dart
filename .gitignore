@@ -12,6 +12,7 @@ results/*.csv
 results/*.json
 results/*.png
 openvsp/generated/
+jsbsim/generated/
 *.adb
 *.cases
 *.compgeom.csv
@@ -22,6 +23,15 @@ openvsp/generated/
 *.polar
 *.vspaero
 *.vspgeom
+*.vkey
+*.csf
+*.quad.cases
 
 # Keep result directories in the repository
 !results/.gitkeep
+
+# User-supplied reference OpenVSP/VSPAERO artifacts are authoritative comparison
+# data, not pipeline-generated output; keep them even though their extensions match
+# the generated-artifact patterns above.
+!openvsp/reference/
+!openvsp/reference/**

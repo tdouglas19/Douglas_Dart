@@ -79,6 +79,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="build the .vsp3 file but skip the live VSPAERO point sweep",
     )
+    parser.add_argument(
+        "--skip-trajectory",
+        action="store_true",
+        help="skip the phase-based nominal/adverse mission trajectory integration",
+    )
+    parser.add_argument(
+        "--skip-jsbsim",
+        action="store_true",
+        help="skip generating the JSBSim aircraft models",
+    )
+    parser.add_argument(
+        "--skip-jsbsim-check",
+        action="store_true",
+        help="build the JSBSim models but skip the live load-and-run sanity check",
+    )
+    parser.add_argument(
+        "--jsbsim-root",
+        type=Path,
+        default=REPOSITORY_ROOT / "jsbsim" / "generated",
+    )
     return parser
 
 
@@ -98,6 +118,10 @@ def main() -> int:
         propulsion_derate_fraction=args.propulsion_derate,
         run_openvsp=not args.skip_openvsp,
         run_vspaero=not (args.skip_openvsp or args.skip_vspaero),
+        run_trajectory=not args.skip_trajectory,
+        run_jsbsim=not args.skip_jsbsim,
+        jsbsim_check=not args.skip_jsbsim_check,
+        jsbsim_root=args.jsbsim_root,
     )
     print(json.dumps(asdict(summary), indent=2))
     return 0 if summary.successful else 1

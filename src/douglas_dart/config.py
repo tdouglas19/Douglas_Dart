@@ -245,7 +245,11 @@ class MissionConfig:
 
 @dataclass(frozen=True)
 class RequirementsConfig:
-    """Competition constraints kept separate from the working design point."""
+    """Competition constraints kept separate from the working design point.
+
+    Sourced from https://boomsupersonic.com/prize (fetched 2026-08-05). See
+    ``docs/assumptions.md`` for the full requirement-by-requirement citation table.
+    """
 
     maximum_takeoff_mass_kg: float
     minimum_time_above_mach_one_s: float
@@ -253,16 +257,24 @@ class RequirementsConfig:
     landing_intact_required: bool
     reciprocal_flight_same_day_required: bool
     pulsejet_rule_status: str
+    transonic_no_altitude_loss_required: bool
+    transonic_regime_start_mach: float
+    remote_pilot_abort_authority_required: bool
 
     def __post_init__(self) -> None:
         for name in (
             "maximum_takeoff_mass_kg",
             "minimum_time_above_mach_one_s",
             "minimum_peak_mach",
+            "transonic_regime_start_mach",
         ):
             _positive(name, getattr(self, name))
         if not self.pulsejet_rule_status.strip():
             raise ValueError("pulsejet rule status cannot be empty")
+        if self.transonic_regime_start_mach >= self.minimum_peak_mach:
+            raise ValueError(
+                "transonic regime start Mach must be below the minimum peak Mach"
+            )
 
 
 @dataclass(frozen=True)
@@ -301,6 +313,64 @@ class SurfacePlanformConfig:
 
 
 @dataclass(frozen=True)
+class ExternalShellConfig:
+    """Annular fin-can shroud outside the flow-through engine body.
+
+    Houses the fuel tank, avionics, and other auxiliary systems in the annulus
+    between the inner engine flowpath and this outer mold line, per the "fin can"
+    architecture: fins and lifting surfaces mount to this shell, not the inner body.
+    """
+
+    radial_offset_m: float
+    start_x_m: float
+    end_x_m: float
+    forward_taper_length_m: float
+    aft_taper_length_m: float
+    tessellation: int
+
+    def __post_init__(self) -> None:
+        for name in (
+            "radial_offset_m",
+            "start_x_m",
+            "end_x_m",
+            "forward_taper_length_m",
+            "aft_taper_length_m",
+        ):
+            _positive(name, getattr(self, name))
+        if not 0.0127 - 1e-6 <= self.radial_offset_m <= 0.0254 + 1e-6:
+            raise ValueError(
+                "external shell radial offset should be a standard 0.5-1 inch "
+                "annulus (0.0127-0.0254 m)"
+            )
+        if self.end_x_m <= self.start_x_m:
+            raise ValueError("external shell end station must be aft of the start station")
+        if (
+            self.forward_taper_length_m + self.aft_taper_length_m
+            >= self.end_x_m - self.start_x_m
+        ):
+            raise ValueError("external shell tapers cannot exceed the shell length")
+        if self.tessellation < 9:
+            raise ValueError("external shell tessellation is too small")
+
+
+@dataclass(frozen=True)
+class RamInletConfig:
+    """Small non-flush ram-air scoop on the nose for the non-flow-through selector."""
+
+    x_location_m: float
+    length_m: float
+    height_m: float
+    width_m: float
+    clocking_deg: float
+
+    def __post_init__(self) -> None:
+        for name in ("x_location_m", "length_m", "height_m", "width_m"):
+            _positive(name, getattr(self, name))
+        if not 0.0 <= self.clocking_deg < 360.0:
+            raise ValueError("ram inlet clocking must be in [0, 360) degrees")
+
+
+@dataclass(frozen=True)
 class OpenVSPGeometryConfig:
     """External-geometry and VSPAERO sweep inputs shared by the generator."""
 
@@ -317,6 +387,8 @@ class OpenVSPGeometryConfig:
     fin_clocking_offset_deg: float
     lifting_surface: SurfacePlanformConfig
     fin: SurfacePlanformConfig
+    shell: ExternalShellConfig
+    ram_inlet: RamInletConfig
     analysis_method: str
     mach_values: tuple[float, ...]
     alpha_deg_values: tuple[float, ...]
@@ -356,6 +428,10 @@ class OpenVSPGeometryConfig:
             raise ValueError("VSPAERO Mach values cannot be negative")
         if self.wake_iterations < 1:
             raise ValueError("VSPAERO wake iterations must be positive")
+        if self.shell.start_x_m < self.forebody_transition_length_m:
+            raise ValueError("external shell must start at or aft of the forebody transition")
+        if self.shell.end_x_m > self.aft_taper_start_m:
+            raise ValueError("external shell must end at or before the aft taper start")
 
 
 @dataclass(frozen=True)
@@ -482,6 +558,8 @@ def load_reference_case(
     body_geometry = _mapping(geometry, "body")
     lifting_surface = _mapping(geometry, "lifting_surface")
     fin = _mapping(geometry, "fin")
+    shell = _mapping(geometry, "shell")
+    ram_inlet = _mapping(geometry, "ram_inlet")
     analysis = _mapping(geometry, "analysis")
     simulation = _mapping(data, "simulation")
 
@@ -520,6 +598,8 @@ def load_reference_case(
             fin_clocking_offset_deg=float(geometry["fin_clocking_offset_deg"]),
             lifting_surface=SurfacePlanformConfig(**lifting_surface),
             fin=SurfacePlanformConfig(**fin),
+            shell=ExternalShellConfig(**shell),
+            ram_inlet=RamInletConfig(**ram_inlet),
             analysis_method=str(analysis["method"]),
             mach_values=tuple(float(value) for value in analysis["mach_values"]),
             alpha_deg_values=tuple(

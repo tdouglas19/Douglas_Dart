@@ -22,6 +22,7 @@ from typing import Any, Callable, Iterable, Sequence
 
 from .config import load_fuels, load_reference_case
 from .fuel_trade import fuel_performance_trade
+from .jsbsim_model import validate_with_jsbsim, write_jsbsim_aircraft
 from .openvsp_geometry import build_openvsp_geometry
 from .pulsejet import PulsejetSimulator, summarize_pulsejet
 from .ramjet import evaluate_ramjet
@@ -39,6 +40,7 @@ from .sizing import (
     shared_nozzle_feasibility_bounds,
     shared_nozzle_trade_sweep,
 )
+from .trajectory import ADVERSE_SCENARIO, NOMINAL_SCENARIO, simulate_mission
 from .vspaero import run_vspaero_sweep
 
 
@@ -64,8 +66,9 @@ class PipelineRunSummary:
     successful: bool
     stages: tuple[PipelineStageRecord, ...]
     note: str = (
-        "The pipeline executes every currently implemented low-order analysis. "
-        "A phase-based coupled flight mission integrator is not yet implemented."
+        "The pipeline executes every currently implemented low-order analysis, "
+        "including the phase-based nominal/adverse mission trajectory integrator "
+        "and JSBSim aircraft-model generation with a live load-and-run check."
     )
 
 
@@ -541,7 +544,7 @@ def _write_summary_markdown(
             "",
             "## Coverage note",
             "",
-            "The pipeline runs every currently implemented low-order propulsion, sizing, fuel, sensitivity, OpenVSP, and optional VSPAERO analysis. The longitudinal flight-equation kernel exists, but a phase-based coupled mission integrator and solver-backed aerodynamic tables are still pending.",
+            "The pipeline runs every currently implemented low-order propulsion, sizing, fuel, sensitivity, phase-based mission trajectory, JSBSim aircraft-model, OpenVSP, and optional VSPAERO analysis. Solver-backed aerodynamic tables (replacing the Mach-indexed drag-area proxy) are still pending.",
             "",
         ]
     )
@@ -565,6 +568,10 @@ def run_all_analyses(
     propulsion_derate_fraction: float = 0.15,
     run_openvsp: bool = True,
     run_vspaero: bool = True,
+    run_trajectory: bool = True,
+    run_jsbsim: bool = True,
+    jsbsim_check: bool = True,
+    jsbsim_root: str | Path = "jsbsim/generated",
 ) -> PipelineRunSummary:
     """Run all currently implemented analyses and write a complete result package."""
 
@@ -576,6 +583,7 @@ def run_all_analyses(
     )
     output_directory = Path(output_directory)
     openvsp_model_path = Path(openvsp_model_path)
+    jsbsim_root = Path(jsbsim_root)
     json_dir = output_directory / "json"
     csv_dir = output_directory / "csv"
     plot_dir = output_directory / "plots"
@@ -872,6 +880,70 @@ def run_all_analyses(
         )
 
     execute("key_variables", True, sensitivity_stage)
+
+    trajectory_results: dict[str, Any] = {}
+
+    def trajectory_stage() -> Sequence[Path]:
+        nonlocal trajectory_results
+        trajectory_results = {
+            "nominal": simulate_mission(case, NOMINAL_SCENARIO),
+            "adverse": simulate_mission(case, ADVERSE_SCENARIO),
+        }
+        return (
+            _write_json(json_dir / "mission_trajectory.json", trajectory_results),
+        )
+
+    if run_trajectory:
+        execute("mission_trajectory", True, trajectory_stage)
+    else:
+        stage_records.append(
+            PipelineStageRecord(
+                name="mission_trajectory",
+                status="skipped",
+                required=False,
+                duration_s=0.0,
+                output_files=(),
+                message="disabled by run_trajectory=False",
+            )
+        )
+
+    def jsbsim_stage() -> Sequence[Path]:
+        outputs: list[Path] = []
+        checks: dict[str, Any] = {}
+        for scenario in (NOMINAL_SCENARIO, ADVERSE_SCENARIO):
+            output_path, summary = write_jsbsim_aircraft(
+                case, jsbsim_root / "aircraft", scenario
+            )
+            outputs.append(
+                _write_json(
+                    json_dir / f"jsbsim_{scenario.name}_aircraft_summary.json", summary
+                )
+            )
+            if jsbsim_check:
+                checks[scenario.name] = validate_with_jsbsim(
+                    jsbsim_root,
+                    output_path.parent.name,
+                    altitude_m=case.mission.speed_run_altitude_msl_m,
+                    mach=case.mission.peak_mach,
+                    run_seconds=3.0,
+                )
+        if checks:
+            outputs.append(_write_json(json_dir / "jsbsim_load_checks.json", checks))
+        return outputs
+
+    if run_jsbsim:
+        execute("jsbsim_model", True, jsbsim_stage)
+    else:
+        stage_records.append(
+            PipelineStageRecord(
+                name="jsbsim_model",
+                status="skipped",
+                required=False,
+                duration_s=0.0,
+                output_files=(),
+                message="disabled by run_jsbsim=False",
+            )
+        )
 
     def plots_stage() -> Sequence[Path]:
         plot_paths: list[Path] = []

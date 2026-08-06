@@ -93,6 +93,44 @@ vehicle.
 5. **Aerodynamic drag** is still a diameter-scaled budget. The flight kernel's simple
    coefficient polar is not consistent enough to replace it at Mach 1.10.
 
+## Mach-indexed drag and phase-based trajectory (new)
+
+`src/douglas_dart/drag.py` replaces the flight kernel's constant-coefficient polar
+with a Mach-indexed drag-area model anchored at the existing peak-Mach drag-area
+budget and shaped by an explicit transonic drag-rise table (still an unvalidated
+proxy, but now one consistent model instead of two disagreeing ones). Both discipline
+paths — `sizing.py`'s static screens and the flight kernel — can now read the same
+number at any Mach, not only at exactly 1.10.
+
+`src/douglas_dart/trajectory.py` adds the phase-based sled-release-to-landing mission
+integrator named in the roadmap. It is an energy-state model with a *prescribed*
+flight-path angle per phase, not a trimmed/lift-solved trajectory, and it can be run
+at the nominal, conservative, or adverse robustness multipliers via
+`douglas-dart mission-trajectory --scenario <name>`.
+
+Running it at the current Candidate B configuration surfaces two new, previously
+invisible findings rather than confirming closure:
+
+1. **A low-speed pulsejet net-thrust trough near Mach ~0.1** appears immediately
+   after sled release in the underlying unsteady chamber model (thrust rises from a
+   small positive value at Mach 0.0-0.1 to roughly 120-145 N by Mach 0.2 at this
+   altitude). Under the conservative and adverse thrust derates this trough is enough
+   to stall the climb-phase acceleration entirely in the current model. This is either
+   a real low-speed operability risk or a modeling/averaging-window artifact; it is
+   not yet distinguished, and it was invisible in the prior static single-point
+   pulsejet result.
+2. **The configured shallow dive does not reach the ramjet light-off Mach** (0.80)
+   before hitting the altitude floor at nominal multipliers with the currently
+   configured 10-degree dive angle and 8-degree climb angle. Reaching a higher Mach
+   before the dive, diving deeper, or diving longer are all now visible trade knobs
+   instead of an assumed transition.
+
+Neither finding should be read as proof the architecture fails; both are direct
+consequences of provisional numbers (dive/climb angles, pulsejet low-speed table
+resolution) that are now open trajectory-level trade variables. They are reported
+here, not hidden, because the point of the model is to find where the design does not
+yet close.
+
 ## Do not freeze yet
 
 Keep body diameter, throat size, inlet recovery, drag area, fuel allocation, and

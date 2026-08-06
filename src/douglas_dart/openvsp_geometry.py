@@ -14,7 +14,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from .config import ReferenceCase, SurfacePlanformConfig
+from .config import ExternalShellConfig, RamInletConfig, ReferenceCase, SurfacePlanformConfig
 
 
 @dataclass(frozen=True)
@@ -36,9 +36,13 @@ class OpenVSPGeometrySummary:
     openvsp_version: str
     output_path: str
     body_id: str
+    shell_id: str
+    ram_inlet_id: str
     lifting_surface_ids: tuple[str, ...]
     fin_ids: tuple[str, ...]
     body_stations: tuple[BodyStation, ...]
+    shell_stations: tuple[BodyStation, ...]
+    shell_outer_diameter_m: float
     lifting_reference_area_m2: float
     lifting_reference_span_m: float
     lifting_reference_mean_aerodynamic_chord_m: float
@@ -135,6 +139,49 @@ def body_stations(case: ReferenceCase) -> tuple[BodyStation, ...]:
     )
 
 
+def shell_stations(case: ReferenceCase) -> tuple[BodyStation, ...]:
+    """Return the five stations of the annular fin-can shroud outer mold line.
+
+    The shroud fairs from the inner flow-through body diameter up to the shell outer
+    diameter (inner body diameter plus twice the configured radial annulus offset)
+    over the forward taper, holds that diameter, and fairs back down aft. It is a
+    second, independent FUSELAGE surface, not a blend of the inner body.
+    """
+
+    shell = case.geometry.shell
+    body_diameter_m = case.vehicle.body_diameter_m
+    outer_diameter_m = body_diameter_m + 2.0 * shell.radial_offset_m
+    midpoint_m = 0.5 * (
+        (shell.start_x_m + shell.forward_taper_length_m)
+        + (shell.end_x_m - shell.aft_taper_length_m)
+    )
+    return (
+        BodyStation(shell.start_x_m, body_diameter_m),
+        BodyStation(shell.start_x_m + shell.forward_taper_length_m, outer_diameter_m),
+        BodyStation(midpoint_m, outer_diameter_m),
+        BodyStation(shell.end_x_m - shell.aft_taper_length_m, outer_diameter_m),
+        BodyStation(shell.end_x_m, body_diameter_m),
+    )
+
+
+def shell_outer_diameter_m(case: ReferenceCase) -> float:
+    return case.vehicle.body_diameter_m + 2.0 * case.geometry.shell.radial_offset_m
+
+
+def mount_radius_m(case: ReferenceCase, x_location_m: float) -> float:
+    """Return the fin-can mount radius for a radial surface at one axial station.
+
+    Surfaces that fall within the external shell's constant-diameter span mount to
+    the shell outer mold line (the "fin can"); surfaces outside that span fall back
+    to the inner flow-through body radius.
+    """
+
+    shell = case.geometry.shell
+    if shell.start_x_m <= x_location_m <= shell.end_x_m:
+        return 0.5 * shell_outer_diameter_m(case)
+    return 0.5 * case.vehicle.body_diameter_m
+
+
 def clocking_angles_deg(count: int, offset_deg: float) -> tuple[float, ...]:
     if count <= 0:
         return ()
@@ -176,6 +223,53 @@ def vspaero_reference_quantities(
 def _set_xsec_parm(vsp: Any, xsec_id: str, name: str, value: float) -> None:
     parm_id = vsp.GetXSecParm(xsec_id, name)
     vsp.SetParmVal(parm_id, float(value))
+
+
+def _set_xsec_parm_if_present(vsp: Any, xsec_id: str, name: str, value: float) -> None:
+    """Set an optional cross-section parameter, tolerating a missing skinning parm.
+
+    Real OpenVSP returns an empty parm ID for a name that does not exist on the
+    current cross-section shape; the required-function fake used in tests always
+    returns a synthetic (truthy) ID, so this stays exercised there too.
+    """
+
+    parm_id = vsp.GetXSecParm(xsec_id, name)
+    if not parm_id:
+        return
+    vsp.SetParmVal(parm_id, float(value))
+
+
+def _flatten_xsec_skinning(vsp: Any, xsec_surf_id: str, station_count: int) -> None:
+    """Zero the top/right skinning skew and strength on every circular cross-section.
+
+    OpenVSP fuselage cross-sections carry per-side ("Top"/"Right"/"Bottom"/"Left")
+    skinning continuity angle and strength parameters. Left at nonzero or asymmetric
+    defaults they can skew an otherwise circular mold line. This keeps every station
+    a plain, symmetric surface of revolution so the body stays flowing and
+    aerodynamic rather than picking up an unintended top/side kink.
+    """
+
+    for index in range(station_count):
+        xsec_id = str(vsp.GetXSec(xsec_surf_id, index))
+        _set_xsec_parm_if_present(vsp, xsec_id, "AllSym", 1.0)
+        for side in ("Top", "Bottom", "Left", "Right"):
+            _set_xsec_parm_if_present(vsp, xsec_id, f"{side}LAngle", 0.0)
+            _set_xsec_parm_if_present(vsp, xsec_id, f"{side}LStrength", 0.0)
+            _set_xsec_parm_if_present(vsp, xsec_id, f"{side}RAngle", 0.0)
+            _set_xsec_parm_if_present(vsp, xsec_id, f"{side}RStrength", 0.0)
+
+
+def _normalize_rotation_deg(clocking_angle_deg: float) -> float:
+    """Fold a [0, 360) clocking angle into OpenVSP's [-180, 180] XRot range.
+
+    ``X_Rel_Rotation`` only accepts -180 to 180 degrees, so a 225 degree fin station
+    must be commanded as -135 and a 315 degree station as -45.
+    """
+
+    normalized = ((clocking_angle_deg + 180.0) % 360.0) - 180.0
+    if normalized <= -180.0:
+        normalized += 360.0
+    return normalized
 
 
 def _check_openvsp_errors(vsp: Any) -> None:
@@ -223,6 +317,7 @@ def _configure_flowthrough_body(
             station.x_location_m / case.vehicle.body_length_m,
         )
         _set_xsec_parm(vsp, xsec_id, "Circle_Diameter", station.diameter_m)
+    _flatten_xsec_skinning(vsp, xsec_surf_id, len(stations))
 
     last_index = len(stations) - 1
     engine_values = {
@@ -243,6 +338,9 @@ def _configure_flowthrough_body(
     return body_id, stations
 
 
+_RADIAL_MOUNT_OVERLAP_M = 0.004
+
+
 def _configure_radial_surface(
     vsp: Any,
     case: ReferenceCase,
@@ -257,21 +355,31 @@ def _configure_radial_surface(
     vsp.SetParmVal(surface_id, "Sym_Planar_Flag", "Sym", float(vsp.SYM_NONE))
 
     clocking_angle_rad = radians(clocking_angle_deg)
-    body_radius_m = 0.5 * case.vehicle.body_diameter_m
+    # A root mounted exactly tangent to the body/shell surface (zero radial overlap)
+    # produces a degenerate sliver panel face at the tangent line during VSPAERO's
+    # real triangulation ("PGFace Invalid in Triangulate_DBA"), confirmed against the
+    # real installed API. A small commanded interpenetration forces a genuine
+    # intersection instead of exact tangency.
+    mount_radius = mount_radius_m(case, planform.x_location_m) - _RADIAL_MOUNT_OVERLAP_M
     vsp.SetParmVal(surface_id, "X_Rel_Location", "XForm", planform.x_location_m)
     vsp.SetParmVal(
         surface_id,
         "Y_Rel_Location",
         "XForm",
-        body_radius_m * cos(clocking_angle_rad),
+        mount_radius * cos(clocking_angle_rad),
     )
     vsp.SetParmVal(
         surface_id,
         "Z_Rel_Location",
         "XForm",
-        body_radius_m * sin(clocking_angle_rad),
+        mount_radius * sin(clocking_angle_rad),
     )
-    vsp.SetParmVal(surface_id, "X_Rel_Rotation", "XForm", clocking_angle_deg)
+    vsp.SetParmVal(
+        surface_id,
+        "X_Rel_Rotation",
+        "XForm",
+        _normalize_rotation_deg(clocking_angle_deg),
+    )
 
     vsp.SetDriverGroup(
         surface_id,
@@ -307,6 +415,102 @@ def _configure_radial_surface(
     return surface_id
 
 
+def _configure_external_shell(
+    vsp: Any,
+    case: ReferenceCase,
+) -> tuple[str, tuple[BodyStation, ...]]:
+    """Build the annular fin-can shroud as a second, independent FUSELAGE surface.
+
+    Houses the fuel tank, avionics, and auxiliary systems in the annulus between this
+    outer mold line and the inner engine flow path; fins and lifting surfaces mount
+    to it (see :func:`mount_radius_m`).
+    """
+
+    stations = shell_stations(case)
+    shell_id = str(vsp.AddGeom("FUSELAGE", ""))
+    if not shell_id:
+        raise RuntimeError("OpenVSP failed to create the external shell geometry")
+    vsp.SetGeomName(shell_id, "Douglas_Dart_External_Shell_FinCan")
+    vsp.SetParmVal(shell_id, "Length", "Design", case.vehicle.body_length_m)
+    vsp.SetParmVal(
+        shell_id,
+        "Tess_W",
+        "Shape",
+        float(case.geometry.shell.tessellation),
+    )
+
+    xsec_surf_id = str(vsp.GetXSecSurf(shell_id, 0))
+    if vsp.GetNumXSec(xsec_surf_id) != len(stations):
+        raise RuntimeError("The expected five default fuselage cross-sections are unavailable")
+
+    for index, station in enumerate(stations):
+        vsp.ChangeXSecShape(xsec_surf_id, index, vsp.XS_CIRCLE)
+        xsec_id = str(vsp.GetXSec(xsec_surf_id, index))
+        _set_xsec_parm(
+            vsp,
+            xsec_id,
+            "XLocPercent",
+            station.x_location_m / case.vehicle.body_length_m,
+        )
+        _set_xsec_parm(vsp, xsec_id, "Circle_Diameter", station.diameter_m)
+    _flatten_xsec_skinning(vsp, xsec_surf_id, len(stations))
+    return shell_id, stations
+
+
+def _configure_ram_inlet(vsp: Any, case: ReferenceCase) -> str:
+    """Build a small non-flush ram-air scoop pod near the nose.
+
+    The primary body is a flow-through representation for VSPAERO's external
+    aerodynamics only; it does not by itself represent the mutually exclusive
+    pulsejet/ramjet selector inlet. This pod is a coarse external bump standing in
+    for that non-flush intake lip so the outer mold line is not silently claiming a
+    true flow-through nose.
+    """
+
+    ram_inlet = case.geometry.ram_inlet
+    pod_id = str(vsp.AddGeom("FUSELAGE", ""))
+    if not pod_id:
+        raise RuntimeError("OpenVSP failed to create the ram-air inlet geometry")
+    vsp.SetGeomName(pod_id, "Douglas_Dart_Ram_Air_Inlet")
+    vsp.SetParmVal(pod_id, "Length", "Design", ram_inlet.length_m)
+    vsp.SetParmVal(pod_id, "Sym_Planar_Flag", "Sym", 0.0)
+
+    clocking_angle_rad = radians(ram_inlet.clocking_deg)
+    body_radius_m = 0.5 * case.vehicle.body_diameter_m
+    vsp.SetParmVal(pod_id, "X_Rel_Location", "XForm", ram_inlet.x_location_m)
+    vsp.SetParmVal(
+        pod_id, "Y_Rel_Location", "XForm", body_radius_m * cos(clocking_angle_rad)
+    )
+    vsp.SetParmVal(
+        pod_id, "Z_Rel_Location", "XForm", body_radius_m * sin(clocking_angle_rad)
+    )
+    vsp.SetParmVal(
+        pod_id,
+        "X_Rel_Rotation",
+        "XForm",
+        _normalize_rotation_deg(ram_inlet.clocking_deg),
+    )
+
+    xsec_surf_id = str(vsp.GetXSecSurf(pod_id, 0))
+    station_count = vsp.GetNumXSec(xsec_surf_id)
+    pod_diameter_m = min(ram_inlet.height_m, ram_inlet.width_m)
+    for index in range(station_count):
+        vsp.ChangeXSecShape(xsec_surf_id, index, vsp.XS_CIRCLE)
+        xsec_id = str(vsp.GetXSec(xsec_surf_id, index))
+        fraction = index / max(station_count - 1, 1)
+        # Blunt nose/tail taper so the scoop bump has no zero-length degenerate ends.
+        shape_fraction = 1.0 - abs(2.0 * fraction - 1.0)
+        _set_xsec_parm(vsp, xsec_id, "XLocPercent", fraction)
+        _set_xsec_parm(
+            vsp,
+            xsec_id,
+            "Circle_Diameter",
+            max(pod_diameter_m * shape_fraction, 1e-4),
+        )
+    _flatten_xsec_skinning(vsp, xsec_surf_id, station_count)
+    return pod_id
+
+
 def build_openvsp_geometry(
     case: ReferenceCase,
     output_path: str | Path,
@@ -324,13 +528,21 @@ def build_openvsp_geometry(
         vsp.VSPRenew()
     vsp.ClearVSPModel()
     body_id, stations = _configure_flowthrough_body(vsp, case)
+    shell_id, shell_station_tuple = _configure_external_shell(vsp, case)
+    ram_inlet_id = _configure_ram_inlet(vsp, case)
 
     lifting_ids = tuple(
         _configure_radial_surface(
             vsp,
             case,
             case.geometry.lifting_surface,
-            f"Lifting_Surface_{index + 1}",
+            # Not "Lifting_Surface_N": a real installed OpenVSP 3.51.2 Windows build
+            # crashes VSPAEROComputeGeometry's native panel mesher whenever a geom
+            # name ends in the literal substring "_Surface" (reproduced
+            # deterministically; "_Surface_X" and every other tested variant that
+            # does not end the string in "_Surface" is unaffected). Confirmed via
+            # bisection against the real API, not the unit-test fake.
+            f"Lifting_Panel_{index + 1}",
             angle_deg,
         )
         for index, angle_deg in enumerate(
@@ -370,9 +582,13 @@ def build_openvsp_geometry(
         openvsp_version=actual_version,
         output_path=str(output_path),
         body_id=body_id,
+        shell_id=shell_id,
+        ram_inlet_id=ram_inlet_id,
         lifting_surface_ids=lifting_ids,
         fin_ids=fin_ids,
         body_stations=stations,
+        shell_stations=shell_station_tuple,
+        shell_outer_diameter_m=shell_outer_diameter_m(case),
         lifting_reference_area_m2=references.area_m2,
         lifting_reference_span_m=references.span_m,
         lifting_reference_mean_aerodynamic_chord_m=(
