@@ -5,17 +5,28 @@ not automatically requirements or validated parameters.
 
 ## Requirements and owner direction
 
+The competition rows below are sourced directly from
+[boomsupersonic.com/prize](https://boomsupersonic.com/prize) (fetched 2026-08-05) and
+encoded in `RequirementsConfig`. This replaces the earlier "organizer confirmation
+required" placeholder for pulsejet eligibility, which the prize page explicitly
+resolves.
+
 | Item | Current value | Status |
 |---|---:|---|
 | Intake modes | Pulsejet or ramjet, never both open | User requirement |
 | Available geometric intake area | 50% of the 195 mm circular intake | User requirement / prior intake diameter |
-| Peak Mach | 1.10 | User requirement |
+| Peak Mach | 1.10 | User requirement (exceeds the sonic minimum below) |
 | Speed-run termination | Fuel depletion; no prescribed duration | User requirement |
 | Body diameter | No hard maximum; trade against drag and flow | User direction |
-| Maximum takeoff mass | 25 kg | Competition requirement |
-| Minimum supersonic time | More than Mach 1 for at least 5 s | Competition requirement |
-| Recovery | Land intact; reciprocal same-day flight required | Competition requirement |
-| Pulsejet eligibility | Organizer confirmation required | Unresolved rule interpretation |
+| Maximum takeoff mass | 25 kg / 55 lb, including fuel | Competition requirement (boomsupersonic.com/prize) |
+| Minimum supersonic time | True airspeed above the local speed of sound, sustained 5+ continuous seconds | Competition requirement (boomsupersonic.com/prize) |
+| Transonic acceleration flight path | Mach 0.8 to past Mach 1 must be flown level or climbing, **no altitude loss** | Competition requirement (boomsupersonic.com/prize); now enforced in `trajectory.py`'s dive/ramjet_accel/mach_hold phases and audited on every run via `transonic_no_altitude_loss_rule_satisfied` |
+| Allowed propulsion | Turbojet, turbofan, ramjet, or pulsejet, any combination; no rockets, no onboard oxidizer, air-breathing only | Competition requirement (boomsupersonic.com/prize); confirms the pulsejet+ramjet architecture is eligible |
+| Configuration | Fixed-wing airplane, lift from aerodynamic surfaces | Competition requirement (boomsupersonic.com/prize) |
+| Control | Remote human pilot, continuous command **and abort authority** | Competition requirement (boomsupersonic.com/prize); not yet reflected in any avionics/control-link design — open item |
+| Recovery | Controlled landing (wheeled or belly) on the designated area; reusable without replacing major components; reciprocal-heading same-day dual flight on the same airframe | Competition requirement (boomsupersonic.com/prize) |
+| Verification | Calibrated pitot-static + total air temperature, sealed data loggers, GPS telemetry, reciprocal runs | Competition requirement (boomsupersonic.com/prize); drives the "Instrumentation and testability" requirement category, not yet built out |
+| Eligibility | Amateur team (US citizens/permanent residents), majority hand-built, no venture capital/corporate sponsorship/government grants | Competition requirement (boomsupersonic.com/prize); non-engineering, tracked for awareness only |
 
 ## Candidate B geometry and mission inputs
 

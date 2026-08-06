@@ -73,7 +73,10 @@ requirements:
   minimum_peak_mach: 1.0
   landing_intact_required: true
   reciprocal_flight_same_day_required: true
-  pulsejet_rule_status: organizer_confirmation_required
+  pulsejet_rule_status: confirmed_eligible_boomsupersonic_com_prize
+  transonic_no_altitude_loss_required: true
+  transonic_regime_start_mach: 0.80
+  remote_pilot_abort_authority_required: true
 
 openvsp:
   api_version: "3.51.2"
@@ -102,6 +105,19 @@ openvsp:
     tip_chord_m: 0.10
     sweep_deg: 52.0
     thickness_to_chord: 0.05
+  shell:
+    radial_offset_m: 0.019
+    start_x_m: 0.20
+    end_x_m: 1.80
+    forward_taper_length_m: 0.06
+    aft_taper_length_m: 0.06
+    tessellation: 37
+  ram_inlet:
+    x_location_m: 0.05
+    length_m: 0.08
+    height_m: 0.030
+    width_m: 0.045
+    clocking_deg: 90.0
   analysis:
     method: panel
     mach_values: [0.20, 0.60, 0.80, 1.00, 1.10]

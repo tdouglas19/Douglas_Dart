@@ -46,14 +46,32 @@
 
 ## Coupled mission model
 
-1. Build a phase manager for sled release → pulsejet climb → dive/acceleration →
-   light-off experiment → ramjet handoff → fuel-limited run → zoom/glide → landing.
-2. Interpolate cycle-averaged pulsejet maps, ramjet maps, and aerodynamic tables.
-3. Track fuel by phase, CG, dynamic pressure, heat proxies, stability/control margins,
-   and recovery reserve.
-4. Optimize speed-run altitude and mode-transition schedule rather than treating
-   4,500 m as closed.
-5. Extend the current named static robustness cases through the full trajectory,
+1. **Done, energy-state fidelity**: `src/douglas_dart/trajectory.py` implements the
+   phase manager (sled release → pulsejet climb → acceleration → dive → ramjet
+   handoff → fuel-limited Mach-1.10 hold → zoom → glide → landing), interpolating a
+   pulsejet static thrust table and the steady ramjet model, using the Mach-indexed
+   drag model in `drag.py`. It surfaced two open findings instead of confirming
+   closure: a low-speed pulsejet thrust trough near Mach 0.1 that stalls climb under
+   conservative/adverse derates, and the configured dive not reaching ramjet
+   light-off Mach at nominal conditions (see `docs/design_convergence.md`).
+2. **Done, independent 6-DOF cross-check**: `src/douglas_dart/jsbsim_model.py`
+   generates a JSBSim model from the same propulsion/drag/geometry data at the
+   nominal/conservative/adverse scenarios and verifies it against the real installed
+   JSBSim engine (`docs/jsbsim.md`). It reproduces the same nominal-accelerates /
+   adverse-decelerates result at Mach 1.10 as the static screen and the trajectory
+   integrator — three independently implemented models agreeing, though all three
+   still share the same underlying assumptions.
+3. **Still open**: the trajectory model prescribes flight-path angle per phase rather
+   than solving lift/trim; it does not check stall, dynamic pressure limits, or
+   control authority. JSBSim has no control surfaces yet and its stability
+   derivatives are textbook tail-volume estimates, not VSPAERO-derived.
+4. Track fuel by phase, CG, dynamic pressure, heat proxies, stability/control margins,
+   and recovery reserve inside the trajectory model itself (currently only mass and
+   the two named fuel ledgers are tracked).
+5. Optimize speed-run altitude, dive geometry, and mode-transition schedule rather
+   than treating 4,500 m, an 8-degree climb, and a 10-degree dive as closed — the
+   dive-does-not-reach-light-off finding above makes this the next high-value trade.
+6. Extend the current named static robustness cases through the full trajectory,
    including off-nominal atmosphere and failed light-off, before judging the
    five-second and reciprocal-flight requirements.
 

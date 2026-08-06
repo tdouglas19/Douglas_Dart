@@ -42,7 +42,12 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(case.nozzle.throat_diameter_m, 0.130)
         self.assertEqual(case.nozzle.exit_to_throat_area_ratio, 1.05)
         self.assertLess(case.flight.initial_mass_kg, case.requirements.maximum_takeoff_mass_kg)
-        self.assertEqual(case.requirements.pulsejet_rule_status, "organizer_confirmation_required")
+        self.assertEqual(
+            case.requirements.pulsejet_rule_status,
+            "confirmed_eligible_boomsupersonic_com_prize",
+        )
+        self.assertTrue(case.requirements.transonic_no_altitude_loss_required)
+        self.assertAlmostEqual(case.requirements.transonic_regime_start_mach, 0.80)
 
     def test_flight_and_vspaero_reference_area_cannot_silently_diverge(self):
         case = load_reference_case(

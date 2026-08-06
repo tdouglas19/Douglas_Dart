@@ -6,9 +6,11 @@ from pathlib import Path
 
 from douglas_dart.config import load_reference_case
 from douglas_dart.openvsp_geometry import (
+    _RADIAL_MOUNT_OVERLAP_M,
     body_stations,
     build_openvsp_geometry,
     clocking_angles_deg,
+    shell_outer_diameter_m,
     validate_openvsp_api,
     vspaero_reference_quantities,
 )
@@ -177,12 +179,19 @@ class OpenVSPGeometryTests(unittest.TestCase):
             model_path = Path(directory) / "test_candidate.vsp3"
             summary = build_openvsp_geometry(self.case, model_path, vsp=fake)
             self.assertTrue(model_path.is_file())
-        self.assertEqual(len(fake.added_geometries), 7)
-        self.assertEqual([item[1] for item in fake.added_geometries], ["FUSELAGE"] + ["WING"] * 6)
-        self.assertEqual(len(fake.changed_xsecs), 5)
+        self.assertEqual(len(fake.added_geometries), 9)
+        self.assertEqual(
+            [item[1] for item in fake.added_geometries],
+            ["FUSELAGE", "FUSELAGE", "FUSELAGE"] + ["WING"] * 6,
+        )
+        self.assertEqual(len(fake.changed_xsecs), 15)
         self.assertEqual(len(summary.lifting_surface_ids), 2)
         self.assertEqual(len(summary.fin_ids), 4)
         self.assertTrue(summary.flowthrough_open_end_configuration_requested)
+        self.assertTrue(summary.shell_id)
+        self.assertTrue(summary.ram_inlet_id)
+        self.assertEqual(len(summary.shell_stations), 5)
+        self.assertGreater(summary.shell_outer_diameter_m, self.case.vehicle.body_diameter_m)
         self.assertEqual(fake.written_files[-1][1], fake.SET_ALL)
         self.assertIn(
             (
@@ -192,6 +201,36 @@ class OpenVSPGeometryTests(unittest.TestCase):
                 float(fake.ENGINE_GEOM_INLET_OUTLET),
             ),
             fake.parameter_calls,
+        )
+
+    def test_fin_rotation_is_normalized_into_vsp_xrot_range(self):
+        fake = FakeOpenVSP()
+        with tempfile.TemporaryDirectory() as directory:
+            build_openvsp_geometry(self.case, Path(directory) / "test_candidate.vsp3", vsp=fake)
+        rotation_calls = [
+            call[-1]
+            for call in fake.parameter_calls
+            if len(call) == 4 and call[1] == "X_Rel_Rotation" and call[2] == "XForm"
+        ]
+        self.assertTrue(rotation_calls)
+        self.assertTrue(all(-180.0 <= value <= 180.0 for value in rotation_calls))
+        self.assertIn(-135.0, rotation_calls)
+        self.assertIn(-45.0, rotation_calls)
+
+    def test_fins_and_lifting_surfaces_mount_to_shell_outer_diameter(self):
+        fake = FakeOpenVSP()
+        with tempfile.TemporaryDirectory() as directory:
+            build_openvsp_geometry(self.case, Path(directory) / "test_candidate.vsp3", vsp=fake)
+        # A small commanded radial overlap avoids an exact-tangency mesh defect
+        # confirmed against the real installed OpenVSP API (see openvsp_geometry.py).
+        expected_radius_m = 0.5 * shell_outer_diameter_m(self.case) - _RADIAL_MOUNT_OVERLAP_M
+        y_calls = [
+            call[-1]
+            for call in fake.parameter_calls
+            if len(call) == 4 and call[1] == "Y_Rel_Location" and call[2] == "XForm"
+        ]
+        self.assertTrue(
+            any(abs(abs(value) - expected_radius_m) < 1e-9 for value in y_calls)
         )
 
     def test_reference_area_is_sum_of_exposed_lifting_surfaces(self):

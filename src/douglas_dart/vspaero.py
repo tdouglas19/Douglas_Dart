@@ -65,11 +65,18 @@ _VSPAERO_FUNCTIONS = (
 
 _VSPAERO_CONSTANTS = (
     "MANUAL_REF",
-    "PANEL",
     "SET_ALL",
     "SET_NONE",
-    "VORTEX_LATTICE",
 )
+
+# Some OpenVSP 3.51.2 Python builds do not expose an explicit AnalysisMethod input
+# on VSPAEROSweep at all (confirmed against a real installed 3.51.2 Windows build:
+# GetIntAnalysisInput("VSPAEROSweep", "AnalysisMethod", 0) returns empty, and the
+# named PANEL/VORTEX_LATTICE constants are absent from the module). Panel vs vortex
+# lattice is selected entirely through GeomSet/ThinGeomSet in that case, which this
+# module always sets regardless. Treat PANEL/VORTEX_LATTICE as optional so a real,
+# functional API is not rejected over a constant that build does not provide.
+_VSPAERO_OPTIONAL_CONSTANTS = ("PANEL", "VORTEX_LATTICE")
 
 
 def validate_vspaero_api(vsp: Any, expected_version: str) -> str:
@@ -101,12 +108,13 @@ def _set_geometry_sets(vsp: Any, analysis: str, method: str) -> None:
 
 
 def _set_sweep_analysis_method(vsp: Any, analysis: str, method: str) -> None:
-    if method == "panel":
-        analysis_method = vsp.PANEL
-    elif method == "vortex_lattice":
-        analysis_method = vsp.VORTEX_LATTICE
-    else:
+    if method not in ("panel", "vortex_lattice"):
         raise ValueError(f"unsupported VSPAERO method: {method}")
+    if not (hasattr(vsp, "PANEL") and hasattr(vsp, "VORTEX_LATTICE")):
+        # This build has no AnalysisMethod input; _set_geometry_sets already routed
+        # the model to panel or VLM via GeomSet/ThinGeomSet.
+        return
+    analysis_method = vsp.PANEL if method == "panel" else vsp.VORTEX_LATTICE
     vsp.SetIntAnalysisInput(analysis, "AnalysisMethod", [analysis_method], 0)
 
 
@@ -153,6 +161,25 @@ def _set_single_point_inputs(
         vsp.SetDoubleAnalysisInput(analysis, f"{prefix}Start", [value], 0)
         vsp.SetDoubleAnalysisInput(analysis, f"{prefix}End", [value], 0)
         vsp.SetIntAnalysisInput(analysis, f"{prefix}Npts", [1], 0)
+
+
+def _latest_force_moment_history_id(vsp: Any, result_ids: tuple[str, ...]) -> str:
+    """Return the newest entry in ``ResultsVec`` that carries force/moment history.
+
+    Confirmed against the real installed API: one ``VSPAEROSweep`` call appends more
+    than one entry to ``ResultsVec`` (e.g. a "CLtot"-bearing history result plus
+    separate rotor CP/CQ/CT-style and CpSlice-summary results), and later calls keep
+    appending rather than resetting. Scanning backward for the last entry containing
+    ``CLtot`` is robust to however many trailing non-aerodynamic entries follow it.
+    """
+
+    for candidate in reversed(result_ids):
+        if "CLtot" in set(str(value) for value in vsp.GetAllDataNames(candidate)):
+            return candidate
+    raise RuntimeError(
+        "No VSPAERO history result in ResultsVec contains 'CLtot'; got "
+        + ", ".join(result_ids)
+    )
 
 
 def _final_result_value(vsp: Any, history_id: str, name: str) -> float:
@@ -231,15 +258,19 @@ def run_vspaero_sweep(
                 sweep_id = str(vsp.ExecAnalysis(sweep_analysis))
                 if not sweep_id:
                     raise RuntimeError("VSPAEROSweep returned no results ID")
+                # ResultsVec accumulates entries across the whole live session
+                # rather than resetting per call, and a single VSPAEROSweep call can
+                # itself append more than one entry (confirmed against the real
+                # installed API). Find the newest CLtot-bearing entry explicitly
+                # rather than assuming a fixed count or position.
                 result_ids = tuple(
                     str(value) for value in vsp.GetStringResults(sweep_id, "ResultsVec", 0)
                 )
-                if len(result_ids) != 1:
+                if not result_ids:
                     raise RuntimeError(
-                        "A configured single-point VSPAERO run did not return exactly "
-                        f"one history result (got {len(result_ids)})"
+                        "A configured single-point VSPAERO run returned no history result"
                     )
-                history_id = result_ids[0]
+                history_id = _latest_force_moment_history_id(vsp, result_ids)
                 points.append(
                     VSPAeroPoint(
                         mach=mach,

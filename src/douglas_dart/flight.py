@@ -46,16 +46,41 @@ def longitudinal_derivative(
     thrust_n: float,
     fuel_mass_flow_kg_per_s: float,
     angle_of_attack_rad: float,
+    *,
+    zero_lift_drag_area_m2: float | None = None,
+    drag_multiplier: float = 1.0,
 ) -> PointMassDerivative:
+    """Integrate one longitudinal point-mass state derivative.
+
+    ``zero_lift_drag_area_m2`` is an explicit override hook. When it is ``None`` the
+    kernel keeps its original constant-coefficient polar for callers that have not
+    adopted a Mach-indexed drag model
+    (see :mod:`douglas_dart.drag`). When supplied, it replaces
+    ``flight.zero_lift_drag_coefficient`` while the induced-drag term is unchanged.
+    """
+
     if state.mass_kg <= 0.0 or state.speed_m_per_s <= 0.0:
         raise ValueError("mass and speed must be positive")
+    if drag_multiplier <= 0.0:
+        raise ValueError("drag multiplier must be positive")
     atmosphere = standard_atmosphere(state.altitude_m)
     dynamic_pressure_pa = 0.5 * atmosphere.density_kg_per_m3 * state.speed_m_per_s**2
     lift_coefficient, drag_coefficient = aerodynamic_coefficients(
         flight, angle_of_attack_rad
     )
     lift_n = dynamic_pressure_pa * flight.reference_area_m2 * lift_coefficient
-    drag_n = dynamic_pressure_pa * flight.reference_area_m2 * drag_coefficient
+    if zero_lift_drag_area_m2 is None:
+        drag_n = drag_multiplier * dynamic_pressure_pa * flight.reference_area_m2 * drag_coefficient
+    else:
+        induced_drag_n = (
+            dynamic_pressure_pa
+            * flight.reference_area_m2
+            * flight.induced_drag_factor
+            * lift_coefficient**2
+        )
+        drag_n = drag_multiplier * (
+            dynamic_pressure_pa * zero_lift_drag_area_m2 + induced_drag_n
+        )
     gamma = state.flight_path_angle_rad
     acceleration_m_per_s2 = (
         thrust_n * cos(angle_of_attack_rad)
