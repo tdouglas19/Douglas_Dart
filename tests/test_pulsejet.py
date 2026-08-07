@@ -68,11 +68,25 @@ class PulsejetTests(unittest.TestCase):
             self.case.mach,
         )
         from douglas_dart.compressible import stagnation_pressure
+        from douglas_dart.pulsejet import SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION
 
-        ideal_total_pressure_pa = stagnation_pressure(
+        full_ram_total_pressure_pa = stagnation_pressure(
             simulator.atmosphere.pressure_pa,
             self.case.mach,
         )
+        # reference_case.yaml configures inlet_type: side, which
+        # PulsejetSimulator.__init__ credits with only
+        # SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION of the ram-pressure rise
+        # above ambient before applying pulsejet_total_pressure_recovery --
+        # replicate that damping here rather than comparing against the
+        # full-ram (straight-inlet) stagnation pressure.
+        ideal_total_pressure_pa = full_ram_total_pressure_pa
+        if self.case.selector.inlet_type == "side":
+            ram_pressure_rise_pa = full_ram_total_pressure_pa - simulator.atmosphere.pressure_pa
+            ideal_total_pressure_pa = (
+                simulator.atmosphere.pressure_pa
+                + SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION * ram_pressure_rise_pa
+            )
         self.assertAlmostEqual(
             simulator.inlet_total_pressure_pa / ideal_total_pressure_pa,
             self.case.selector.pulsejet_total_pressure_recovery,

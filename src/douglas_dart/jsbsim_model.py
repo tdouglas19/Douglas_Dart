@@ -51,13 +51,13 @@ from .trajectory import (
     MissionScenario,
     NOMINAL_SCENARIO,
     _installed_pulsejet_thrust_n,
+    _PULSEJET_TABLE_MACH_VALUES,
     _pulsejet_static_thrust_table,
 )
 
 N_TO_LBF = 1.0 / 4.4482216152605
 G0_M_PER_S2 = 9.80665
 
-_PULSEJET_TABLE_MACH_VALUES = (0.0, 0.10, 0.20, 0.30, 0.40, 0.50)
 _PULSEJET_TABLE_ALTITUDES_M = (0.0, 1500.0, 3000.0, 4500.0, 6000.0)
 _RAMJET_TABLE_MACH_VALUES = (0.80, 0.90, 1.00, 1.10, 1.20, 1.30)
 _RAMJET_TABLE_ALTITUDES_M = (2000.0, 3500.0, 4500.0, 5500.0, 7000.0)

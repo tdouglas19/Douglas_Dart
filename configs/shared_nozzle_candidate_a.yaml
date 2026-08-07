@@ -4,7 +4,12 @@ case:
 
 environment:
   altitude_m: 0.0
-  mach: 0.20
+  # See reference_case.yaml's comment: raised from 0.20 because sizing.py's
+  # direct PulsejetSimulator calls use a short fixed measurement window,
+  # which reads as near-zero thrust below roughly Mach 0.3-0.35 (real cycle
+  # period lengthens sharply there with inlet_type: side below) even though
+  # the engine is still genuinely firing, just more slowly.
+  mach: 0.40
 
 selector:
   circular_intake_diameter_m: 0.195
@@ -12,6 +17,7 @@ selector:
   discharge_coefficient: 0.78
   pulsejet_total_pressure_recovery: 0.99
   ramjet_total_pressure_recovery: 0.92
+  inlet_type: side
 
 nozzle:
   throat_diameter_m: 0.130

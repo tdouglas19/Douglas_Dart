@@ -45,6 +45,32 @@ from .propulsion_map import (
 G0_M_PER_S2 = 9.80665
 _SEA_LEVEL_DENSITY_KG_PER_M3 = standard_atmosphere(0.0).density_kg_per_m3
 
+# Sampled Mach grid for the sea-level static pulsejet thrust table
+# (_pulsejet_static_thrust_table). Previously stopped at 0.50 with no
+# documented technical reason -- not a physical limit of PulsejetSimulator,
+# which accepts any non-negative Mach; _interp_table/_installed_pulsejet_thrust_n
+# clamped to that last entry above it rather than re-simulating, so every
+# pulsejet-thrust claim above Mach 0.5 was extrapolation of a value only
+# ever actually computed at 0.50. Extended through 1.00 (covers
+# optimizer.py's minimum_lightoff_test_mach search range, 0.50-1.00) so
+# _interp_table has real simulated data across the Mach range this vehicle
+# actually operates the pulsejet in, not a flat guess. Direct simulation
+# (docs/design_convergence.md) shows this is not a flat curve at all: net
+# thrust genuinely *weakens* below roughly Mach 0.3-0.4 (real pulsejets,
+# including this simulator, fire at zero forward speed -- but at low Mach
+# the refill cycle is driven only by a small pressure differential instead
+# of ram pressure, so the real cycle period lengthens to ~0.585 s at Mach 0
+# versus the ~0.014 s minimum_cycle_period_s design rate -- see
+# propulsion_map.py's _run_pulsejet_simulation, which adaptively extends its
+# measurement window so this weaker-but-real low-Mach thrust is actually
+# measured instead of read as zero by a window too short to see even one
+# slow cycle) and *peaks* around Mach 0.85-0.9 before declining as inlet
+# momentum drag outgrows gross thrust -- both real findings this table
+# previously could not see at all.
+_PULSEJET_TABLE_MACH_VALUES: tuple[float, ...] = (
+    0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+)
+
 
 @dataclass(frozen=True)
 class MissionScenario:
@@ -304,7 +330,7 @@ def simulate_mission(
     pulsejet_table = _pulsejet_static_thrust_table(
         case,
         scenario,
-        (0.0, 0.10, 0.20, 0.30, 0.40, 0.50),
+        _PULSEJET_TABLE_MACH_VALUES,
         warmup_s=pulsejet_table_warmup_s,
         measurement_s=pulsejet_table_measurement_s,
         time_step_s=pulsejet_table_time_step_s,

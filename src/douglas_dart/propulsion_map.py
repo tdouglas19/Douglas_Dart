@@ -127,6 +127,27 @@ class PropulsionMapPoint:
     numerical_reference_only: bool = True
 
 
+# Below roughly Mach 0.3-0.4, PulsejetSimulator's real cycle period grows
+# to ~0.585 s (vs. the ~0.014 s minimum_cycle_period_s the engine is tuned
+# for), because refill is driven only by the small (inlet_total_pressure_pa
+# - blown-down chamber pressure) differential rather than ram pressure. A
+# fixed warmup_s+measurement_s window (0.10-0.25 s in this codebase's usual
+# fast-fidelity settings) is shorter than even one cycle at that rate, so it
+# previously reported ~0 completed cycles and near-zero net thrust at low
+# Mach -- a measurement-window artifact, not a genuine physical zero (a
+# longer window shows the engine keeps firing, just at a much lower duty
+# cycle). _run_pulsejet_simulation below extends the window adaptively
+# until it has seen enough completed cycles to average, instead of trusting
+# a fixed duration tuned for the fast (high-Mach) cycle rate. At any Mach
+# where the fixed window already contains this many cycles (the normal,
+# fast-cycling case), the while loop below never executes -- zero added
+# cost for the case this fidelity setting was already tuned for.
+_MINIMUM_COMPLETED_CYCLES_IN_MEASUREMENT_WINDOW = 2
+# Safety cap so a combination that genuinely never ignites (e.g. no fuel
+# reaching the chamber) cannot spin this loop indefinitely.
+_MAXIMUM_PULSEJET_SIMULATION_S = 3.0
+
+
 @lru_cache(maxsize=512)
 def _run_pulsejet_simulation(
     config: PulsejetConfig,
@@ -151,10 +172,30 @@ def _run_pulsejet_simulation(
     (case, altitude, mach, fidelity) combination multiple times per
     candidate; memoizing avoids re-running the unsteady sim for a result
     that would come out byte-identical.
+
+    The measurement window is adaptive -- see
+    `_MINIMUM_COMPLETED_CYCLES_IN_MEASUREMENT_WINDOW`'s comment above.
+    `PulsejetSimulator.run(duration_s, ...)` advances from wherever the
+    simulator's own clock currently is up to the given absolute duration,
+    so calling it again with a larger duration resumes rather than restarts.
     """
     simulator = PulsejetSimulator(config, selector, nozzle, fuel, altitude_m, mach)
-    samples = tuple(simulator.run(warmup_s + measurement_s, time_step_s))
-    return samples, simulator.inlet_total_pressure_pa
+    measurement_end_s = warmup_s + measurement_s
+    samples: list[PulsejetSample] = list(simulator.run(measurement_end_s, time_step_s))
+    completed_in_window = sum(
+        1 for sample in samples if sample.event == "ignition" and sample.time_s >= warmup_s
+    )
+    while (
+        completed_in_window < _MINIMUM_COMPLETED_CYCLES_IN_MEASUREMENT_WINDOW
+        and measurement_end_s < _MAXIMUM_PULSEJET_SIMULATION_S
+    ):
+        measurement_end_s = min(
+            measurement_end_s + measurement_s, _MAXIMUM_PULSEJET_SIMULATION_S
+        )
+        new_samples = simulator.run(measurement_end_s, time_step_s)
+        samples.extend(new_samples)
+        completed_in_window += sum(1 for sample in new_samples if sample.event == "ignition")
+    return tuple(samples), simulator.inlet_total_pressure_pa
 
 
 def _pulsejet_point(

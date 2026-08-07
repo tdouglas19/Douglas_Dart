@@ -347,6 +347,95 @@ silently changing them), `ADVERSE_SCENARIO`'s literal values in
 `trajectory.py` were left unchanged; this is a documented recommendation
 for deliberate review, not an applied fix.
 
+## Pulsejet low-Mach thrust: widened table, side inlet, and a caught bug (2026-08-07)
+
+Three changes, investigated together because each affects how the others
+should be read.
+
+**1. Widened `_PULSEJET_TABLE_MACH_VALUES` from 6 points (0.0-0.50) to 11
+(0.0-1.00).** The table previously stopped at Mach 0.50 with no documented
+technical reason; `_interp_table` clamped to that last entry above it
+rather than re-simulating, so every pulsejet-thrust claim above Mach 0.5
+in this codebase's history was extrapolation of a value only ever actually
+computed at 0.50. `jsbsim_model.py` had an independent, identically-stale
+copy of the same 6-point grid; consolidated to import trajectory.py's
+single constant instead of drifting out of sync again.
+
+**2. Set `inlet_type: side` in all three active configs** (previously
+defaulting to `"straight"`, per user direction on the real vehicle's
+intake geometry).
+
+**3. Caught and fixed a real bug this investigation's own first pass
+introduced into the documentation, not into the simulator.** Sweeping the
+newly-widened table with the side inlet showed net thrust jumping from
+near-zero below Mach ~0.3-0.35 to 100+ N above it -- initially documented
+(in this file, in `trajectory.py`'s docstring, and in three config
+comments) as pulsejet genuinely producing **zero** thrust below that Mach,
+a "true physical zero." **This was wrong**, caught directly by a user
+challenge ("pulsejets can provide thrust with zero forward velocity") that
+prompted re-checking rather than accepting the first measurement. Stepping
+`PulsejetSimulator` for 2 full seconds at Mach 0 (not the usual short
+warmup/measurement window) shows the engine *does* keep firing --
+ignitions at t=0.001, 0.585, 1.174, 1.767 s, a real cycle period of ~0.585 s
+(~1.7 Hz) versus the ~0.014 s (~71 Hz) the engine is tuned for at speed.
+Mechanism: refill at low Mach is driven only by the small (inlet total
+pressure - blown-down chamber pressure) differential instead of ram
+pressure, so it takes far longer to accumulate the fresh-air fraction
+`_ignite_if_ready` requires before it can re-arm. The fixed 0.10-0.25 s
+warmup+measurement window used everywhere in this codebase is *shorter
+than one cycle* at that rate, so `summarize_pulsejet` saw zero completed
+cycles in its window and reported near-zero thrust -- a measurement-window
+artifact, not the engine's real output. Confirmed with the actual fix:
+sweeping with the corrected window shows genuine (if far weaker than
+high-Mach) positive thrust at every Mach from 0.0 to 0.30, e.g. ~9.3 N at
+Mach 0.0 versus the previously-reported ~0 N.
+
+**Fix: `propulsion_map.py`'s `_run_pulsejet_simulation` now extends its
+measurement window adaptively** instead of trusting a fixed duration --
+it keeps calling `PulsejetSimulator.run()` with a larger target duration
+(each call resumes from the simulator's current clock rather than
+restarting) until at least `_MINIMUM_COMPLETED_CYCLES_IN_MEASUREMENT_WINDOW`
+(2) cycles have been observed post-warmup, capped by
+`_MAXIMUM_PULSEJET_SIMULATION_S` (3.0 s) as a safety valve against a
+combination that genuinely never ignites. At any Mach where the original
+fixed window already contained enough cycles (the normal, fast-cycling
+case this fidelity setting was tuned for), the extension loop never
+executes -- zero added cost there; the added cost is isolated to the low-
+Mach points that actually needed it. All three now-corrected "true
+physical zero" claims (`trajectory.py`, `tests/test_feasibility.py`,
+`tests/test_propulsion_map.py`, and the three config files' `mach: 0.40`
+comments) were rewritten to describe the real mechanism (a measurement-
+window artifact affecting *direct* `PulsejetSimulator` construction, which
+`sizing.py`'s static trade screens still use per `propulsion_map.py`'s own
+documented exception list and therefore does not benefit from this fix --
+`environment.mach: 0.40`, raised from 0.20 for those call sites
+specifically, is still correct and necessary).
+
+**What this does and does not change about the adverse-plateau finding
+above.** The corrected model gives the adverse-scenario pulsejet phase
+genuine, if weak, low-Mach thrust it did not have in either the pre-side-
+inlet model or the first (buggy) post-side-inlet measurement. This
+materially changes the fuel-starvation dynamics documented earlier in this
+file (that section's exact numbers predate both the side inlet and this
+fix) -- rerun any candidate evaluation before trusting a specific Mach
+number from before this section. The qualitative mechanisms found earlier
+(fuel-split matters more than raw thrust margin near the release
+condition; pulsejet's margin can exceed ramjet's near the lightoff
+threshold, argued for `minimum_lightoff_test_mach` as a search variable)
+still hold and were re-verified against the corrected model (see
+`tests/test_optimizer.py`'s `test_evaluate_design_rewards_crossing_into_ramjet_range_in_adverse`
+and `test_pulsejet_holds_better_adverse_margin_than_ramjet_near_lightoff`),
+but the specific numeric fixtures backing those tests needed re-deriving --
+several combinations that read as comfortably feasible before now land
+exactly on a sharp, poorly-interpolated transition in the widened table
+(linear interpolation between two 0.1-spaced Mach samples underestimates
+thrust badly right where cycling turns on, since the true curve is closer
+to a step than a ramp) or hit fuel exhaustion earlier than expected.
+Neither is a new bug -- both are the search space genuinely being touchier
+under a more physically complete model -- but they are a reminder that
+`docs/design_convergence.md`'s numbers throughout this document are
+snapshots of a specific model state, not permanent facts.
+
 ## Model correction that rejected Candidate A
 
 Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of

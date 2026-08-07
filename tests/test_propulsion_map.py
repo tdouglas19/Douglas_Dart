@@ -19,7 +19,15 @@ class PropulsionMapTests(unittest.TestCase):
         self.case = load_reference_case(ROOT / "configs" / "shared_nozzle_candidate_b.yaml")
 
     def test_pulsejet_point_has_no_ramjet_only_fields(self):
-        point = evaluate_propulsion_map_point(self.case, 0.2, 0.0, PULSEJET_MODE)
+        # 0.5, not 0.2: chosen for a clearly-positive, fast-to-simulate
+        # thrust value. Below roughly Mach 0.3-0.35, real pulsejet cycle
+        # period lengthens sharply (with the configured "side" inlet_type,
+        # refill is driven by a weak pressure differential instead of ram
+        # pressure) -- evaluate_propulsion_map_point's adaptive measurement
+        # window (propulsion_map.py's _run_pulsejet_simulation) still
+        # measures genuine, if weaker, positive thrust there, just at
+        # higher simulated-time cost than this test needs to pay.
+        point = evaluate_propulsion_map_point(self.case, 0.5, 0.0, PULSEJET_MODE)
         self.assertEqual(point.mode, PULSEJET_MODE)
         self.assertIsNone(point.potential_air_mass_flow_kg_per_s)
         self.assertIsNone(point.spilled_mass_flow_fraction)

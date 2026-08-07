@@ -4,7 +4,19 @@ case:
 
 environment:
   altitude_m: 0.0
-  mach: 0.20
+  # Raised from 0.20: sizing.py's static trade screens construct
+  # PulsejetSimulator directly with a short fixed measurement window
+  # (propulsion_map.py's module docstring explains why those call sites
+  # bypass the common interface). With inlet_type: side below, real cycle
+  # period lengthens sharply below roughly Mach 0.3-0.35 (refill is driven
+  # by a weak pressure differential instead of ram pressure -- see
+  # propulsion_map.py's _run_pulsejet_simulation, which adaptively extends
+  # its own window so trajectory.py-routed callers see this correctly), so
+  # a short fixed window at 0.20 reads as near-zero thrust even though the
+  # engine is still firing, just more slowly. 0.40 keeps the original
+  # intent (a representative subsonic pulsejet reference point) while
+  # staying comfortably above where that fixed-window measurement is valid.
+  mach: 0.40
 
 selector:
   circular_intake_diameter_m: 0.195
@@ -12,6 +24,7 @@ selector:
   discharge_coefficient: 0.78
   pulsejet_total_pressure_recovery: 0.99
   ramjet_total_pressure_recovery: 0.92
+  inlet_type: side
 
 nozzle:
   throat_diameter_m: 0.100

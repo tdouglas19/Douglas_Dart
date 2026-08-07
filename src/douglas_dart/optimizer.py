@@ -95,6 +95,7 @@ class DesignVariableBounds:
     sled_release_speed_m_per_s: tuple[float, float]
     wing_area_scale_factor: tuple[float, float]
     minimum_lightoff_test_mach: tuple[float, float]
+    chamber_volume_m3: tuple[float, float]
 
     def names(self) -> tuple[str, ...]:
         return (
@@ -110,6 +111,7 @@ class DesignVariableBounds:
             "sled_release_speed_m_per_s",
             "wing_area_scale_factor",
             "minimum_lightoff_test_mach",
+            "chamber_volume_m3",
         )
 
     def as_pairs(self) -> tuple[tuple[float, float], ...]:
@@ -195,6 +197,23 @@ DEFAULT_BOUNDS = DesignVariableBounds(
     # (1.10) that ReferenceCase's own validation requires this to not
     # exceed, with margin.
     minimum_lightoff_test_mach=(0.50, 1.00),
+    # mass_model.py's docstring "Pulsejet chamber-wall mass" section: at the
+    # configured baseline (0.025 m^3, ~0.21 m body), the thin-shell mass
+    # estimate for this volume alone (~5.7 kg) exceeds the entire $4.20 kg
+    # shared_engine_body_combustor_nozzle budget line, and separately
+    # (docs/design_convergence.md Gate 1) needs 722 mm of forebody length
+    # against a configured 180 mm -- both point the same way: 0.025 m^3 is
+    # too large for this vehicle's scale, not a search-bound artifact.
+    # Upper bound (0.012 m^3) is set from feasibility.py's own packaging
+    # geometry (chamber_volume_m3 <= forebody_transition_length_m * body
+    # cross-section area), evaluated across this search's own
+    # body_diameter_m range (0.195-0.260 m) -- packaging-feasible volumes
+    # there top out around 0.0054-0.0096 m^3, so 0.012 m^3 sits just above
+    # that band rather than exactly on it, since packaging_bounds scoring
+    # (evaluate_design) already penalizes combinations that don't fit
+    # without needing this bound to enforce it exactly. Lower bound
+    # (0.003 m^3) keeps the chamber a physically non-trivial size.
+    chamber_volume_m3=(0.003, 0.012),
 )
 
 
@@ -212,6 +231,7 @@ class DesignVariables:
     sled_release_speed_m_per_s: float
     wing_area_scale_factor: float
     minimum_lightoff_test_mach: float
+    chamber_volume_m3: float
 
     def as_vector(self, bounds: DesignVariableBounds) -> list[float]:
         return [getattr(self, name) for name in bounds.names()]
@@ -275,6 +295,7 @@ def apply_design_variables(
         geometry_case,
         mass_calibration,
         throat_diameter_m=variables.throat_diameter_m,
+        chamber_volume_m3=variables.chamber_volume_m3,
     ).empty_mass_kg
     new_initial_mass_kg = empty_mass_kg + variables.loaded_fuel_mass_kg
     ramjet_fuel_kg = variables.ramjet_fuel_fraction * variables.loaded_fuel_mass_kg
@@ -303,6 +324,7 @@ def apply_design_variables(
     ramjet = replace(
         case.ramjet, minimum_lightoff_test_mach=variables.minimum_lightoff_test_mach
     )
+    pulsejet = replace(case.pulsejet, chamber_volume_m3=variables.chamber_volume_m3)
     return replace(
         case,
         vehicle=vehicle,
@@ -311,6 +333,7 @@ def apply_design_variables(
         mission=mission,
         geometry=geometry,
         ramjet=ramjet,
+        pulsejet=pulsejet,
     )
 
 
