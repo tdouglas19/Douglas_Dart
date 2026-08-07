@@ -275,6 +275,18 @@ _RULE_VIOLATION_PENALTY = 2000.0
 _TIME_ABOVE_MACH_ONE_REWARD_PER_S = 5.0
 _MASS_MARGIN_REWARD_PER_KG = 50.0
 _BODY_DIAMETER_TIEBREAK_PENALTY_PER_M = 1000.0
+# Below Mach 1, `_TIME_ABOVE_MACH_ONE_REWARD_PER_S` is zero and the boolean
+# reached/duration terms above are identical for a candidate stuck at Mach
+# 0.1 and one stuck at Mach 0.9 -- there is no gradient telling the search
+# which is closer to closing. Observed in practice: a 150-generation search
+# let the adverse-scenario peak Mach collapse from ~0.8 to ~0.13 between
+# generation 22 and 39 with the score *improving*, because giving up on
+# adverse acceleration freed up mass/drag budget that scored via
+# `_MASS_MARGIN_REWARD_PER_KG` with nothing counteracting it. This term adds
+# continuous partial credit for however far a scenario actually got, sized
+# to outweigh a plausible few-kg mass-margin trade so the search is pulled
+# toward closing distance instead of being indifferent to it.
+_PEAK_MACH_PROGRESS_REWARD_PER_MACH = 150.0
 
 
 def evaluate_design(
@@ -355,6 +367,7 @@ def evaluate_design(
         if not result.transonic_no_altitude_loss_rule_satisfied:
             score -= weight * _RULE_VIOLATION_PENALTY
         score += weight * result.time_above_mach_one_s * _TIME_ABOVE_MACH_ONE_REWARD_PER_S
+        score += weight * result.peak_mach_reached * _PEAK_MACH_PROGRESS_REWARD_PER_MACH
 
     mass_margin_kg = (
         candidate_case.requirements.maximum_takeoff_mass_kg
