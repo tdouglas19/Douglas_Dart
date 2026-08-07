@@ -394,6 +394,8 @@ def evaluate_design(
                 nominal_rule_satisfied=None,
                 adverse_rule_satisfied=None,
                 mass_margin_kg=None,
+                packaging_failures=None,
+                packaging_failure_names=None,
             )
 
     score = 0.0

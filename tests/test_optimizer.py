@@ -127,6 +127,36 @@ class OptimizerTests(unittest.TestCase):
         self.assertIsNotNone(evaluation.infeasibility_reason)
         self.assertLess(evaluation.score, -1e8)
 
+    def test_evaluate_design_reports_infeasible_without_raising_when_simulate_mission_rejects(self):
+        # Distinct from test_evaluate_design_reports_infeasible_without_raising
+        # above: that test only exercises the exception path around
+        # apply_design_variables. ramjet_fuel_fraction=1.0 passes
+        # apply_design_variables (a valid ReferenceCase gets built) but
+        # leaves zero pulsejet-phase fuel, which simulate_mission itself
+        # rejects -- a second, separate except block in evaluate_design that
+        # this test suite had never exercised (a DE search sampling
+        # ramjet_fuel_fraction near its own 1.0 upper bound hit exactly this
+        # and crashed the whole run with an unhandled TypeError from a stale
+        # CandidateEvaluation(...) call missing required fields).
+        bad_variables = DesignVariables(
+            body_diameter_m=self.case.vehicle.body_diameter_m,
+            body_length_m=self.case.vehicle.body_length_m,
+            throat_diameter_m=self.case.nozzle.throat_diameter_m,
+            exit_to_throat_area_ratio=self.case.nozzle.exit_to_throat_area_ratio,
+            loaded_fuel_mass_kg=self.case.mission.loaded_fuel_mass_kg,
+            ramjet_fuel_fraction=1.0,
+            climb_angle_deg=8.0,
+            dive_angle_deg=-10.0,
+            dive_entry_mach=0.45,
+            sled_release_speed_m_per_s=self.case.mission.sled_release_speed_max_m_per_s,
+            wing_area_scale_factor=1.0,
+        )
+        evaluation = evaluate_design(self.case, bad_variables, self.mass_calibration)
+        self.assertFalse(evaluation.feasible)
+        self.assertIsNotNone(evaluation.infeasibility_reason)
+        self.assertLess(evaluation.score, -1e8)
+        self.assertIsNone(evaluation.packaging_failures)
+
     def test_evaluate_design_feasible_candidate_wires_all_variables(self):
         evaluation = evaluate_design(self.case, self.baseline_variables, self.mass_calibration)
         self.assertTrue(evaluation.feasible)
