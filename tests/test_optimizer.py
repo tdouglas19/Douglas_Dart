@@ -35,6 +35,7 @@ class OptimizerTests(unittest.TestCase):
             dive_entry_mach=0.45,
             sled_release_speed_m_per_s=self.case.mission.sled_release_speed_max_m_per_s,
             wing_area_scale_factor=1.0,
+            minimum_lightoff_test_mach=0.80,
         )
 
     def test_apply_design_variables_reproduces_baseline_empty_mass_at_baseline_geometry(self):
@@ -59,6 +60,7 @@ class OptimizerTests(unittest.TestCase):
             dive_entry_mach=0.45,
             sled_release_speed_m_per_s=self.case.mission.sled_release_speed_max_m_per_s,
             wing_area_scale_factor=1.0,
+            minimum_lightoff_test_mach=0.80,
         )
         baseline_candidate = apply_design_variables(
             self.case, self.baseline_variables, self.mass_calibration
@@ -86,10 +88,68 @@ class OptimizerTests(unittest.TestCase):
             dive_entry_mach=0.45,
             sled_release_speed_m_per_s=55.0,
             wing_area_scale_factor=1.0,
+            minimum_lightoff_test_mach=0.80,
         )
         candidate = apply_design_variables(self.case, variables, self.mass_calibration)
         self.assertAlmostEqual(candidate.mission.sled_release_speed_min_m_per_s, 55.0)
         self.assertAlmostEqual(candidate.mission.sled_release_speed_max_m_per_s, 55.0)
+
+    def test_apply_design_variables_wires_minimum_lightoff_test_mach(self):
+        variables = DesignVariables(
+            body_diameter_m=self.case.vehicle.body_diameter_m,
+            body_length_m=self.case.vehicle.body_length_m,
+            throat_diameter_m=self.case.nozzle.throat_diameter_m,
+            exit_to_throat_area_ratio=self.case.nozzle.exit_to_throat_area_ratio,
+            loaded_fuel_mass_kg=self.case.mission.loaded_fuel_mass_kg,
+            ramjet_fuel_fraction=0.3,
+            climb_angle_deg=8.0,
+            dive_angle_deg=-10.0,
+            dive_entry_mach=0.45,
+            sled_release_speed_m_per_s=self.case.mission.sled_release_speed_max_m_per_s,
+            wing_area_scale_factor=1.0,
+            minimum_lightoff_test_mach=0.87,
+        )
+        candidate = apply_design_variables(self.case, variables, self.mass_calibration)
+        self.assertAlmostEqual(candidate.ramjet.minimum_lightoff_test_mach, 0.87)
+        # RamjetConfig.__post_init__ requires minimum_self_sustaining_mach (a
+        # fixed, unsearched config field) to not fall below this searched
+        # value -- apply_design_variables must not silently violate that.
+        self.assertGreaterEqual(
+            candidate.ramjet.minimum_self_sustaining_mach,
+            candidate.ramjet.minimum_lightoff_test_mach,
+        )
+
+    def test_raising_lightoff_threshold_lets_pulsejet_close_more_of_the_adverse_gap(self):
+        # docs/design_convergence.md's root-cause investigation: under the
+        # adverse scenario, pulsejet's own level-flight thrust margin stays
+        # positive to about Mach 0.87, while ramjet's net thrust is negative
+        # relative to drag at every Mach from 0.5-1.1 with typically-searched
+        # nozzle sizing -- so delaying the pulsejet-to-ramjet handoff (not
+        # advancing it) should measurably raise adverse peak Mach, up to
+        # where pulsejet's own margin runs out.
+        base = dict(
+            body_diameter_m=0.195,
+            body_length_m=2.180399725775693,
+            climb_angle_deg=29.964117719444015,
+            dive_angle_deg=-3.0,
+            exit_to_throat_area_ratio=1.0298163472681163,
+            loaded_fuel_mass_kg=9.0,
+            ramjet_fuel_fraction=0.6,
+            sled_release_speed_m_per_s=121.28468576040422,
+            throat_diameter_m=0.1246150615512329,
+            wing_area_scale_factor=0.5,
+        )
+        low = evaluate_design(
+            self.case,
+            DesignVariables(**base, dive_entry_mach=0.78, minimum_lightoff_test_mach=0.80),
+            self.mass_calibration,
+        )
+        high = evaluate_design(
+            self.case,
+            DesignVariables(**base, dive_entry_mach=0.70, minimum_lightoff_test_mach=0.87),
+            self.mass_calibration,
+        )
+        self.assertGreater(high.adverse_peak_mach, low.adverse_peak_mach + 0.03)
 
     def test_apply_design_variables_rejects_infeasible_combination(self):
         bad_variables = DesignVariables(
@@ -104,6 +164,7 @@ class OptimizerTests(unittest.TestCase):
             dive_entry_mach=0.45,
             sled_release_speed_m_per_s=40.0,
             wing_area_scale_factor=1.0,
+            minimum_lightoff_test_mach=0.80,
         )
         with self.assertRaises(ValueError):
             apply_design_variables(self.case, bad_variables, self.mass_calibration)
@@ -121,6 +182,7 @@ class OptimizerTests(unittest.TestCase):
             dive_entry_mach=0.45,
             sled_release_speed_m_per_s=40.0,
             wing_area_scale_factor=1.0,
+            minimum_lightoff_test_mach=0.80,
         )
         evaluation = evaluate_design(self.case, bad_variables, self.mass_calibration)
         self.assertFalse(evaluation.feasible)
@@ -150,6 +212,7 @@ class OptimizerTests(unittest.TestCase):
             dive_entry_mach=0.45,
             sled_release_speed_m_per_s=self.case.mission.sled_release_speed_max_m_per_s,
             wing_area_scale_factor=1.0,
+            minimum_lightoff_test_mach=0.80,
         )
         evaluation = evaluate_design(self.case, bad_variables, self.mass_calibration)
         self.assertFalse(evaluation.feasible)
@@ -185,6 +248,7 @@ class OptimizerTests(unittest.TestCase):
             sled_release_speed_m_per_s=121.28468576040422,
             throat_diameter_m=0.1246150615512329,
             wing_area_scale_factor=0.5,
+            minimum_lightoff_test_mach=0.80,
         )
         starved = evaluate_design(
             self.case, DesignVariables(**base, ramjet_fuel_fraction=0.892), self.mass_calibration

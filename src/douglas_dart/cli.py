@@ -693,8 +693,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "run a local, unattended differential-evolution search over body "
             "diameter/length, throat, area ratio, fuel split, sled release speed, "
-            "and climb/dive geometry against the nominal and adverse trajectory "
-            "scenarios, with mass_model.py's geometry-linked mass; no AI model calls"
+            "climb/dive geometry, wing area, and ramjet lightoff Mach against the "
+            "nominal and adverse trajectory scenarios, with mass_model.py's "
+            "geometry-linked mass; no AI model calls"
         ),
     )
     design_optimize.add_argument(

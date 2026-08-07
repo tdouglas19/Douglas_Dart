@@ -40,6 +40,21 @@ lifting-surface mass and every drag/lift calculation that reads
 `reference_area_m2` see the same, consistent number. Fin geometry and
 lifting-surface x-location/sweep/thickness are still read from the baseline
 config, not independently searched.
+
+## Ramjet lightoff Mach
+
+`minimum_lightoff_test_mach` (`RamjetConfig`) is a search variable too. It
+is documented in `config.py` as an "open trade variable," not a value
+sourced from the switchable-engine patent lineage -- freely adjustable. A
+direct root-cause investigation (`docs/design_convergence.md`) found it
+matters a lot: under the adverse scenario, pulsejet's own level-flight
+thrust margin (no climb-gravity penalty) stays positive to about Mach 0.87,
+while ramjet's net thrust is *negative* relative to drag at every Mach from
+0.5-1.1 with typically-searched nozzle sizing -- so *delaying* the
+pulsejet-to-ramjet handoff, not advancing it, is usually the improvement
+available here. Bounded below `RamjetConfig`'s own
+`minimum_self_sustaining_mach` requirement with margin (see
+`DEFAULT_BOUNDS`'s inline comment).
 """
 
 from __future__ import annotations
@@ -79,6 +94,7 @@ class DesignVariableBounds:
     dive_entry_mach: tuple[float, float]
     sled_release_speed_m_per_s: tuple[float, float]
     wing_area_scale_factor: tuple[float, float]
+    minimum_lightoff_test_mach: tuple[float, float]
 
     def names(self) -> tuple[str, ...]:
         return (
@@ -93,6 +109,7 @@ class DesignVariableBounds:
             "dive_entry_mach",
             "sled_release_speed_m_per_s",
             "wing_area_scale_factor",
+            "minimum_lightoff_test_mach",
         )
 
     def as_pairs(self) -> tuple[tuple[float, float], ...]:
@@ -162,6 +179,22 @@ DEFAULT_BOUNDS = DesignVariableBounds(
     # actually reach and cross that threshold rather than stopping just short
     # of it.
     wing_area_scale_factor=(0.5, 6.0),
+    # RamjetConfig's own docstring: this threshold is an explicit "open trade
+    # variable," not sourced from the switchable-engine patent lineage.
+    # docs/design_convergence.md's root-cause investigation found it matters
+    # a lot and in the opposite direction one might expect: under the
+    # adverse scenario, pulsejet's own level-flight thrust margin (no
+    # gravity penalty once leveled off) stays positive to about Mach 0.87,
+    # while ramjet's net thrust is *negative* relative to drag at every
+    # Mach from 0.5-1.1 with typically-searched nozzle sizing. Directly
+    # measured: raising this threshold from the configured 0.80 to 0.87 took
+    # one candidate's adverse peak Mach from 0.802 to 0.867, plateauing
+    # exactly where the pulsejet-margin crossover predicts. Lower bound
+    # (0.50) stays comfortably above where a mode switch would be premature;
+    # upper bound (1.00) stays below the fixed minimum_self_sustaining_mach
+    # (1.10) that ReferenceCase's own validation requires this to not
+    # exceed, with margin.
+    minimum_lightoff_test_mach=(0.50, 1.00),
 )
 
 
@@ -178,6 +211,7 @@ class DesignVariables:
     dive_entry_mach: float
     sled_release_speed_m_per_s: float
     wing_area_scale_factor: float
+    minimum_lightoff_test_mach: float
 
     def as_vector(self, bounds: DesignVariableBounds) -> list[float]:
         return [getattr(self, name) for name in bounds.names()]
@@ -266,8 +300,17 @@ def apply_design_variables(
         sled_release_speed_min_m_per_s=variables.sled_release_speed_m_per_s,
         sled_release_speed_max_m_per_s=variables.sled_release_speed_m_per_s,
     )
+    ramjet = replace(
+        case.ramjet, minimum_lightoff_test_mach=variables.minimum_lightoff_test_mach
+    )
     return replace(
-        case, vehicle=vehicle, nozzle=nozzle, flight=flight, mission=mission, geometry=geometry
+        case,
+        vehicle=vehicle,
+        nozzle=nozzle,
+        flight=flight,
+        mission=mission,
+        geometry=geometry,
+        ramjet=ramjet,
     )
 
 

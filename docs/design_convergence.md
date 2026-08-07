@@ -250,6 +250,48 @@ is revisited too (see `ramjet_net_thrust_nonpositive_during_acceleration`
 in the rebalanced candidate's own status). Both fixes are necessary; neither
 alone closes adverse.
 
+## Dive-mechanic audit and the ramjet lightoff threshold as a 12th search variable
+
+Following directly from the above: is the climb-to-altitude / dive /
+gravity-assisted-acceleration / pull-out / level-flight-ramjet architecture
+actually implemented, and is it being used well?
+
+**Yes, it's implemented and gets exercised once fuel-starvation (above) is
+fixed.** With `ramjet_fuel_fraction=0.6`, the rebalanced adverse mission
+climbs at 30 deg to the 6000 m top-of-climb gate (Mach 0.762), levels off
+briefly, dives at the candidate's shallow -3 deg to cross
+`minimum_lightoff_test_mach`, and hands off to ramjet -- exactly the
+described sequence. But the dive itself did almost no work here: only 20 m
+of altitude loss, because `dive_angle_deg=-3` was shallow and
+`dive_entry_mach=0.78` left almost no room before the 0.80 gate.
+
+**Extending the dive does not help, and that is correct, not a gap.**
+Testing a much higher top-of-climb altitude (6000 -> 12000 m, not currently
+a search variable) combined with a much steeper dive (-3 -> -20 deg) barely
+moved peak Mach (0.8016 -> 0.8026) -- because `trajectory.py`'s "dive"
+phase already forces `gamma_deg = 0` (no further altitude loss) the instant
+`mach >= transonic_regime_start_mach` (0.8), which is `docs/assumptions.md`'s
+sourced Boom Supersonic Prize rule ("level or climbing only from Mach
+0.8+"), not an arbitrary internal choice. The dive can only build speed
+*up to* that gate, never past it -- diving further to gain more speed
+would violate the competition's own rule. `top_of_climb_altitude_min/max_msl_m`
+is correctly left unsearched; there is no available gain there.
+
+**The real lever hiding in this question turned out to be which Mach the
+gate itself sits at.** Since the dive can only carry the vehicle up to
+`minimum_lightoff_test_mach`, and (per the root-cause section above)
+pulsejet's own thrust margin outlasts ramjet's, *raising* that gate lets
+the pulsejet-driven portion of the flight (climb + accel + dive combined)
+carry the vehicle further before an inferior propulsion mode takes over.
+Made it a 12th `optimizer.py` search variable
+(`minimum_lightoff_test_mach`, bounds 0.50-1.00, kept below the fixed
+`minimum_self_sustaining_mach=1.10` with margin per `RamjetConfig`'s own
+validation). Direct measurement: raising it from 0.80 to 0.87 alone (same
+candidate, `ramjet_fuel_fraction=0.6`) takes adverse peak Mach from 0.802
+to 0.867, plateauing exactly where the pulsejet-margin crossover predicts.
+Regression tests: `test_apply_design_variables_wires_minimum_lightoff_test_mach`,
+`test_raising_lightoff_threshold_lets_pulsejet_close_more_of_the_adverse_gap`.
+
 ## Model correction that rejected Candidate A
 
 Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of
