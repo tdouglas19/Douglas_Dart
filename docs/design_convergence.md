@@ -96,6 +96,41 @@ mass calibration, all 11 `optimizer.py` design variables:
   search's objective can still fail Level 0 packaging silently; treat every
   `design-optimize` result as requiring a `level0-bounds` check before
   trusting it, per `docs/design_workflow.md`'s closing rule for every gate.
+- **Run 3** (widened `loaded_fuel_mass_kg`/`ramjet_fuel_fraction`/
+  `climb_angle_deg`) did not close the gap either -- adverse peak Mach
+  0.620, slightly *worse* than Run 2's 0.802, while the overall score still
+  improved (nominal's `time_above_mach_one_s` term grew enough to outweigh
+  it). `climb_angle_deg` was still pinned at its new 20 deg ceiling (19.98).
+  **Root cause, isolated by re-running Run 3's winning candidate under each
+  adverse derate individually healed back to nominal** (`trajectory.py`'s
+  `minimum_lightoff_test_mach = 0.8`): adverse peak Mach never reaches 0.8,
+  i.e. **the vehicle never reaches ramjet ignition in the adverse
+  scenario at all** -- the entire shortfall happens inside the pulsejet
+  climb/accel/dive phases. Healing thrust alone (0.75x -> 1.0x) recovers
+  most of the gap (0.620 -> 0.742, still short of 0.8); healing drag or mass
+  growth barely move it (+0.014, +0.037); **healing ramjet total-pressure
+  recovery changes nothing at all** (0.620 -> 0.620, exactly) -- confirming
+  ramjet is never active in this scenario to be affected by it. This means
+  `throat_diameter_m`, `exit_to_throat_area_ratio`, and
+  `ramjet_fuel_fraction` -- three of `optimizer.py`'s eleven search
+  variables -- are structurally irrelevant to closing the adverse gap
+  specifically (they still matter for the nominal case, which does reach
+  ramjet); widening their bounds, as Run 3 did for `ramjet_fuel_fraction`,
+  could not and did not help. The actual lever is pulsejet-phase
+  performance/climb profile. `climb_angle_deg`'s ceiling was raised again
+  (20 -> 30 deg) on the strength of this and its own bound-saturation
+  signal -- see `optimizer.py`'s `DEFAULT_BOUNDS` inline comment for the
+  mechanism (a steeper climb reaches `top_of_climb_m` in less time, spending
+  less of the climb phase fighting `mass*g*sin(gamma)` before leveling off
+  into the more efficient `pulsejet_accel` phase).
+- **Speedup (2026-08-07, unrelated to the above search results but changes
+  their wall-clock cost):** `propulsion_map.py`'s pulsejet simulation is now
+  memoized -- it was being re-run from scratch, byte-identically, once per
+  mission scenario per candidate (the scenario thrust multiplier is applied
+  only *after* the simulation, never inside it). Measured ~2x reduction in
+  per-candidate `evaluate_design` cost at the search's default fast-fidelity
+  settings. No calculation or output changed (121/121 tests unchanged); see
+  the commit for the full before/after measurement.
 
 ## Model correction that rejected Candidate A
 

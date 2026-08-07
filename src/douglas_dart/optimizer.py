@@ -132,6 +132,10 @@ DEFAULT_BOUNDS = DesignVariableBounds(
     # old bound was an arbitrary round number, not a packaging or mass limit
     # (feasibility.py's fuel-volume-vs-annulus check passes with room to
     # spare at 6.00 kg). Raised to leave headroom before MTOM actually binds.
+    # A follow-up search pinned the widened bound too, at 9.00 kg, but with
+    # mass margin now down to 1.49 kg -- i.e. this bound is now close to
+    # where MTOM will actually start pushing back; do not widen it again
+    # without first checking mass margin at the new ceiling.
     loaded_fuel_mass_kg=(2.50, 9.00),
     # Same search pinned ramjet_fuel_fraction at the old 0.80 ceiling, which
     # was an arbitrary round number short of the fraction's own hard upper
@@ -140,9 +144,14 @@ DEFAULT_BOUNDS = DesignVariableBounds(
     # Same search pinned climb_angle_deg at the old 15 deg ceiling; no
     # documented structural or aerodynamic cap motivated that number (see
     # trajectory.py's flight-path-angle climb, which has no small-angle
-    # assumption). Raised to give the search more room before concluding
-    # climb angle is not the limiting variable.
-    climb_angle_deg=(3.0, 20.0),
+    # assumption). Raised to 20, which the next search pinned again (19.98) --
+    # a steeper climb reaches trajectory.py's top_of_climb_m gate in less
+    # time, spending less of the climb phase fighting the mass*g*sin(gamma)
+    # term before leveling off into the more efficient pulsejet_accel phase,
+    # a real mechanism, not a search artifact. Raised again; still no
+    # documented structural/stall cap on how steep a climb this energy-state
+    # model can represent.
+    climb_angle_deg=(3.0, 30.0),
     dive_angle_deg=(-20.0, -3.0),
     dive_entry_mach=(0.30, 0.78),
     sled_release_speed_m_per_s=(35.0, _SLED_RELEASE_SPEED_UPPER_BOUND_M_PER_S),
