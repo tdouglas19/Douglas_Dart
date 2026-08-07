@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .atmosphere import standard_atmosphere
+from .atmosphere import G0_M_PER_S2, standard_atmosphere
 from .compressible import (
     fixed_cd_nozzle,
     normal_shock_total_pressure_ratio,
@@ -16,6 +16,16 @@ from .config import Fuel, NozzleConfig, RamjetConfig, SelectorConfig
 
 def ideal_inlet_shock_recovery(mach: float, gamma: float) -> float:
     """Return the idealized (loss-free duct) inlet total-pressure recovery.
+
+    docs/pulsejet_ramjet_governing_equations.md sec. 2.2 warns that a common early-stage-sizing-code
+    oversimplification is a single flat pi_d across the whole Mach range. This is
+    already Mach-dependent (verified, not changed): a stationary normal shock
+    below/at Mach 1 is loss-free (1.0), and above Mach 1 the loss follows the
+    normal-shock stagnation-pressure-ratio relation. It is a single-normal-shock
+    model, not a multi-oblique-shock MIL-E-5008B-style correlation -- adequate at
+    this vehicle's transonic/low-supersonic design range (~Mach 1.0-1.2), but it
+    would need replacing with a real shock-train correlation before extending to
+    higher supersonic Mach numbers.
 
     Below Mach 1 there is no shock, so an idealized inlet has no theoretical
     stagnation-pressure loss (``1.0``); above Mach 1, the loss is exactly the
@@ -58,6 +68,7 @@ class RamjetResult:
     gross_thrust_n: float
     net_thrust_n: float
     specific_thrust_n_s_per_kg_air: float
+    specific_impulse_s: float
     self_sustaining_candidate: bool
     status: tuple[str, ...]
 
@@ -84,10 +95,15 @@ def evaluate_ramjet(
     ideal_total_pressure_pa = stagnation_pressure(atmosphere.pressure_pa, mach)
     shock_recovery = ideal_inlet_shock_recovery(mach, config.gamma)
     installed_total_pressure_recovery = shock_recovery * selector.ramjet_total_pressure_recovery
+    # docs/pulsejet_ramjet_governing_equations.md sec. 2.3: pi_b = combustor_total_pressure_loss_fraction
+    # complement, a nonzero configured loss (not assumed = 1 / lossless).
     inlet_total_pressure_pa = ideal_total_pressure_pa * installed_total_pressure_recovery
     combustor_exit_pressure_pa = inlet_total_pressure_pa * (
         1.0 - config.combustor_total_pressure_loss_fraction
     )
+    # docs/pulsejet_ramjet_governing_equations.md sec. 2.3, Brayton-cycle combustor energy balance:
+    # f = cp*(Tt3 - Tt2) / (eta_b * h_PR - cp*Tt3). Already matches the reference
+    # exactly -- verified, not changed.
     cp_j_per_kg_k = config.gamma * config.gas_constant_j_per_kg_k / (config.gamma - 1.0)
     target_temperature_k = config.target_combustor_exit_temperature_k
     numerator = cp_j_per_kg_k * max(target_temperature_k - inlet_total_temperature_k, 0.0)
@@ -111,6 +127,65 @@ def evaluate_ramjet(
         config.gamma,
         config.gas_constant_j_per_kg_k,
     )
+
+    # docs/pulsejet_ramjet_governing_equations.md sec. 2.5: "if the nozzle's mass-flow capacity ...
+    # is less than the engine's ingested mass flow, inlet spillage must
+    # increase; if nozzle capacity exceeds engine mass flow, the inlet must go
+    # supercritical, reducing delivered stagnation pressure -- both cases
+    # require an iterative balance, not a single-pass calculation."
+    #
+    # Subcritical (nozzle_result.mass_flow_kg_per_s < demanded): the existing
+    # inlet-spillage treatment below already satisfies this branch structurally
+    # -- spillage happens upstream of the inlet and does not itself change the
+    # captured stream's stagnation pressure, so no iteration is needed here.
+    #
+    # Supercritical (nozzle_result.mass_flow_kg_per_s >= demanded, i.e. the
+    # fixed nozzle geometry could pass more than the inlet is actually
+    # delivering): iterate an additional recovery penalty, driven by how far
+    # capacity exceeds demand (oversupply_ratio), against nozzle capacity until
+    # that ratio converges, rather than a single post-hoc thrust scaling. Note
+    # the penalty cannot be driven by a capacity/demand "fill fraction" here,
+    # since min(demand, capacity)/demand saturates at exactly 1.0 throughout
+    # this whole branch by construction and so carries no information about
+    # how oversized the nozzle capacity actually is.
+    # Convergence criterion: |delta oversupply_ratio| < 1e-6, capped at 30
+    # iterations (this low-order model converges in a handful of iterations in
+    # practice; the cap only guards against a pathological configuration).
+    if (
+        demanded_nozzle_mass_flow_kg_per_s > 1e-12
+        and nozzle_result.mass_flow_kg_per_s >= demanded_nozzle_mass_flow_kg_per_s
+    ):
+        oversupply_ratio = (
+            nozzle_result.mass_flow_kg_per_s / demanded_nozzle_mass_flow_kg_per_s - 1.0
+        )
+        for _ in range(30):
+            recovery_penalty = config.supercritical_recovery_penalty_coefficient * min(
+                oversupply_ratio, 1.0
+            )
+            penalized_recovery = installed_total_pressure_recovery * (1.0 - recovery_penalty)
+            inlet_total_pressure_pa = ideal_total_pressure_pa * penalized_recovery
+            combustor_exit_pressure_pa = inlet_total_pressure_pa * (
+                1.0 - config.combustor_total_pressure_loss_fraction
+            )
+            nozzle_result = fixed_cd_nozzle(
+                combustor_exit_pressure_pa,
+                target_temperature_k,
+                atmosphere.pressure_pa,
+                nozzle.throat_area_m2,
+                nozzle.exit_area_m2,
+                nozzle.discharge_coefficient,
+                config.gamma,
+                config.gas_constant_j_per_kg_k,
+            )
+            new_oversupply_ratio = max(
+                0.0,
+                nozzle_result.mass_flow_kg_per_s / demanded_nozzle_mass_flow_kg_per_s - 1.0,
+            )
+            if abs(new_oversupply_ratio - oversupply_ratio) < 1e-6:
+                oversupply_ratio = new_oversupply_ratio
+                break
+            oversupply_ratio = new_oversupply_ratio
+
     if demanded_nozzle_mass_flow_kg_per_s > 1e-12:
         residual_fraction = (
             nozzle_result.mass_flow_kg_per_s - demanded_nozzle_mass_flow_kg_per_s
@@ -133,13 +208,21 @@ def evaluate_ramjet(
         if nozzle_result.mass_flow_kg_per_s > 1e-12
         else 0.0
     )
-    # Scaling the complete fixed-nozzle gross thrust is an explicit low-order
-    # treatment for under-fed cases. A future matching solver will instead adjust
-    # combustor back pressure until captured and discharged flow agree.
+    # Any remaining mismatch after the supercritical iteration above (or the
+    # unmodified subcritical/throat-limited case) is still scaled the same way;
+    # in the converged supercritical case this scale factor is now consistent
+    # with the penalized combustor_exit_pressure_pa, not the unpenalized
+    # first-pass value.
     gross_thrust_n = nozzle_result.gross_thrust_n * nozzle_flow_scale
     net_thrust_n = gross_thrust_n - air_mass_flow_kg_per_s * velocity_m_per_s
     specific_thrust = (
         net_thrust_n / air_mass_flow_kg_per_s if air_mass_flow_kg_per_s > 1e-12 else 0.0
+    )
+    # docs/pulsejet_ramjet_governing_equations.md sec. 2.5: I_sp = F_net / (mdot_fuel * g0).
+    specific_impulse_s = (
+        net_thrust_n / (fuel_mass_flow_kg_per_s * G0_M_PER_S2)
+        if fuel_mass_flow_kg_per_s > 1e-12
+        else 0.0
     )
 
     status: list[str] = []
@@ -189,6 +272,7 @@ def evaluate_ramjet(
         gross_thrust_n=gross_thrust_n,
         net_thrust_n=net_thrust_n,
         specific_thrust_n_s_per_kg_air=specific_thrust,
+        specific_impulse_s=specific_impulse_s,
         self_sustaining_candidate=self_sustaining_candidate,
         status=tuple(status),
     )

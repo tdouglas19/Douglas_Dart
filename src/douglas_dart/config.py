@@ -41,6 +41,9 @@ class Fuel:
         _positive("density_kg_per_m3", self.density_kg_per_m3)
 
 
+_VALID_INLET_TYPES = ("straight", "side")
+
+
 @dataclass(frozen=True)
 class SelectorConfig:
     """``ramjet_total_pressure_recovery`` is an *installed-efficiency* factor.
@@ -51,6 +54,14 @@ class SelectorConfig:
     model does not capture -- duct friction, bends, boundary-layer bleed, and this
     vehicle's own pulsejet/ramjet selector losses -- and stays roughly constant
     with Mach, unlike the idealized shock term.
+
+    ``inlet_type`` selects which pulsejet-mode thermodynamic-cycle regime applies
+    (docs/pulsejet_ramjet_governing_equations.md, sec. 2.2, 2.4): a ``"straight"`` inlet
+    genuinely pre-compresses the charge as flight speed increases (Lenoir cycle at
+    zero/low speed, shifting toward the Humphrey cycle as ram pressure rises), while
+    a ``"side"`` inlet shows little pre-compression at any speed and stays close to
+    the Lenoir cycle throughout. ``pulsejet.py`` uses this to cap how much of the
+    Mach-dependent stagnation-pressure rise is credited as real pre-compression.
     """
 
     circular_intake_diameter_m: float
@@ -58,6 +69,7 @@ class SelectorConfig:
     discharge_coefficient: float
     pulsejet_total_pressure_recovery: float
     ramjet_total_pressure_recovery: float
+    inlet_type: str = "straight"
 
     def __post_init__(self) -> None:
         _positive("circular_intake_diameter_m", self.circular_intake_diameter_m)
@@ -74,6 +86,8 @@ class SelectorConfig:
             "ramjet_total_pressure_recovery",
             self.ramjet_total_pressure_recovery,
         )
+        if self.inlet_type not in _VALID_INLET_TYPES:
+            raise ValueError(f"inlet_type must be one of {_VALID_INLET_TYPES}")
 
     @property
     def circular_area_m2(self) -> float:
@@ -146,6 +160,22 @@ class PulsejetConfig:
 
 @dataclass(frozen=True)
 class RamjetConfig:
+    """``minimum_lightoff_test_mach``/``minimum_self_sustaining_mach`` are the
+    pulsejet-to-ramjet mode-transition thresholds this vehicle's own selector
+    switches on.
+
+    docs/pulsejet_ramjet_governing_equations.md sec. 1.1/1.3: no patent in the
+    switchable-engine lineage (Collins, Winter/McDonnell, Ghougasian) gives a
+    quantitative transition Mach-number control law or valve-loss coefficient --
+    the transition in those designs is geometric/mechanical (a valve or
+    centerbody physically reconfigures), not aerodynamically automatic from a
+    formula. These two thresholds are therefore engineering assumptions tuned
+    for this vehicle, not sourced values from the reference literature; treat
+    them as open trade variables (see ``docs/design_convergence.md``), the same
+    way this codebase already treats them as ordinary tunable config fields
+    rather than hardcoded constants.
+    """
+
     gamma: float
     gas_constant_j_per_kg_k: float
     mass_capture_coefficient: float
@@ -154,6 +184,17 @@ class RamjetConfig:
     target_combustor_exit_temperature_k: float
     minimum_lightoff_test_mach: float
     minimum_self_sustaining_mach: float
+    # pulsejet_ramjet_governing_equations.md sec. 2.5: when the nozzle's
+    # mass-flow capacity exceeds the engine's ingested mass flow, "the inlet
+    # must go supercritical, reducing delivered stagnation pressure" -- an
+    # iterative inlet/combustor/nozzle mass-flow-and-pressure balance, not a
+    # one-pass calculation. This coefficient sets how much additional
+    # total-pressure recovery is lost as a function of how under-filled the
+    # nozzle is (0 = no penalty, i.e. the old one-pass behavior). It is NOT a
+    # sourced value -- the reference confirms this physical coupling exists but
+    # gives no correlation for its magnitude; treat as a tunable placeholder
+    # until validated against test data.
+    supercritical_recovery_penalty_coefficient: float = 0.10
 
     def __post_init__(self) -> None:
         if self.gamma <= 1.0:
@@ -168,6 +209,8 @@ class RamjetConfig:
         )
         _positive("minimum_lightoff_test_mach", self.minimum_lightoff_test_mach)
         _positive("minimum_self_sustaining_mach", self.minimum_self_sustaining_mach)
+        if not 0.0 <= self.supercritical_recovery_penalty_coefficient < 1.0:
+            raise ValueError("supercritical recovery penalty coefficient must be in [0, 1)")
         if self.minimum_self_sustaining_mach < self.minimum_lightoff_test_mach:
             raise ValueError("self-sustaining Mach cannot be below the light-off test Mach")
 

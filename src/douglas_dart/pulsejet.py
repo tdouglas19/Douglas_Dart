@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from statistics import fmean
 
-from .atmosphere import Atmosphere, standard_atmosphere
+from .atmosphere import G0_M_PER_S2, Atmosphere, standard_atmosphere
 from .compressible import (
     compressible_orifice_mass_flow,
     fixed_cd_nozzle,
@@ -21,6 +21,111 @@ from .config import Fuel, NozzleConfig, PulsejetConfig, SelectorConfig
 _INLET_AIR_GAMMA = 1.4
 _INLET_AIR_GAS_CONSTANT_J_PER_KG_K = 287.05287
 _FUEL_SENSIBLE_SPECIFIC_HEAT_J_PER_KG_K = 2_000.0
+
+# docs/pulsejet_ramjet_governing_equations.md sec. 2.2: a side-mounted inlet shows
+# "little pre-compression regardless of flight speed," unlike a straight inlet
+# whose pre-compression genuinely grows with Mach. The reference gives no
+# quantitative side-inlet correlation, only that qualitative statement -- this
+# fraction (how much of the Mach-dependent ram-pressure rise a side inlet is
+# credited with) is therefore an UNSOURCED engineering placeholder, not a value
+# from the reference or literature. Tune or replace once real data exists.
+SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION = 0.15
+
+
+def pulsejet_cycle_mode(mach: float, inlet_type: str) -> str:
+    """Return which idealized pulsejet cycle regime applies (sec. 2.2, 2.4).
+
+    A straight inlet's charge genuinely pre-compresses as flight speed increases:
+    Lenoir (no pre-compression) at zero/near-zero Mach, shifting toward Humphrey
+    (real pre-compression before constant-volume heat addition) as Mach rises. A
+    side inlet stays close to Lenoir at any speed. This is diagnostic/reporting
+    only -- ``PulsejetSimulator`` itself is a numerical mass/energy-conservation
+    model, not a closed-form cycle calculation, so it does not branch on this
+    label; instead it reproduces the same physical trend through the Mach-
+    dependent inlet stagnation pressure computed in ``__init__`` (damped for side
+    inlets via ``SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION``).
+    """
+
+    if inlet_type == "side":
+        return "lenoir"
+    if mach < 0.05:
+        return "lenoir"
+    if mach < 0.30:
+        return "lenoir_to_humphrey_transitional"
+    return "humphrey"
+
+
+def humphrey_cycle_thermal_efficiency(pressure_ratio: float, gamma: float) -> float:
+    """Idealized Humphrey (constant-volume heat addition) thermal efficiency.
+
+    docs/pulsejet_ramjet_governing_equations.md sec. 2.4:
+    ``eta = 1 - gamma * (tau**(1/gamma) - 1) / (tau - 1)``, tau = p3/p2 the
+    constant-volume pressure ratio. This is the idealized closed-form reference
+    value, provided for validating/sanity-checking the numerical simulator's own
+    effective thermal efficiency -- ``PulsejetSimulator`` does not use this
+    formula directly, since it integrates real unsteady mass/energy flows rather
+    than an idealized closed cycle.
+    """
+
+    if pressure_ratio <= 1.0 or gamma <= 1.0:
+        raise ValueError("pressure ratio must exceed one and gamma must exceed one")
+    return 1.0 - gamma * (pressure_ratio ** (1.0 / gamma) - 1.0) / (pressure_ratio - 1.0)
+
+
+# docs/pulsejet_ramjet_governing_equations.md sec. 2.4 explicitly flags an UNRESOLVED debate over
+# whether valved-pulsejet combustion behaves like a quarter-wave organ-pipe tube
+# or a Helmholtz resonator. Only the quarter-wave model is implemented below;
+# treat its output as one candidate estimate to validate against test data, not
+# a settled closed-form truth. A Helmholtz-resonator model is NOT implemented.
+RESONANCE_FREQUENCY_MODEL = "quarter_wave"
+RESONANCE_FREQUENCY_MODEL_ALTERNATIVES = ("helmholtz",)  # not implemented; sec. 2.4
+
+
+def quarter_wave_resonance_frequency_hz(
+    hot_gas_speed_of_sound_m_per_s: float, effective_tube_length_m: float
+) -> float:
+    """Quarter-wave (one-open/one-closed-end organ-pipe) resonance frequency.
+
+    docs/pulsejet_ramjet_governing_equations.md sec. 2.4: ``f = a / (4*L_eff)``, where ``a`` is the
+    local speed of sound in the hot combustion gas (not ambient air) and
+    ``L_eff`` is the acoustic length from the combustion-chamber center to the
+    tailpipe exit, including end corrections. See ``RESONANCE_FREQUENCY_MODEL``
+    for the competing-model caveat.
+    """
+
+    if hot_gas_speed_of_sound_m_per_s <= 0.0 or effective_tube_length_m <= 0.0:
+        raise ValueError("speed of sound and effective tube length must be positive")
+    return hot_gas_speed_of_sound_m_per_s / (4.0 * effective_tube_length_m)
+
+
+# docs/pulsejet_ramjet_governing_equations.md sec. 2.4: the semi-empirical valveless-pulsejet
+# frequency/mean-thrust correlation is reported to have errors under 10%
+# (frequency) and up to +-17% (mean thrust) against experimental data, and is
+# stated to also apply to valved pulsejets. The reference describes this
+# correlation's existence and reported accuracy but does NOT give its closed-
+# form equation, so it is not implemented here (see the session changelog's
+# "still open" list). These constants exist so downstream callers can apply the
+# reported accuracy ceiling to this codebase's own thrust numbers, not as a
+# claim that this simulator has itself been validated to that accuracy.
+RESONANCE_FREQUENCY_RELATIVE_UNCERTAINTY = 0.10
+RESONANCE_MEAN_THRUST_RELATIVE_UNCERTAINTY = 0.17
+
+
+def resonance_mean_thrust_uncertainty_band_n(mean_thrust_n: float) -> tuple[float, float]:
+    """Return a (low, high) bound applying the sec. 2.4 +-17% thrust uncertainty.
+
+    A useful reality check per the reference: "a sizing tool claiming much
+    tighter agreement without equivalent experimental validation should be
+    treated with suspicion." Apply this to any mean thrust value from this
+    codebase's own model (e.g. ``PulsejetSummary.mean_net_thrust_n``).
+    """
+
+    if mean_thrust_n < 0.0:
+        raise ValueError("mean thrust cannot be negative")
+    return (
+        mean_thrust_n * (1.0 - RESONANCE_MEAN_THRUST_RELATIVE_UNCERTAINTY),
+        mean_thrust_n * (1.0 + RESONANCE_MEAN_THRUST_RELATIVE_UNCERTAINTY),
+    )
 
 
 @dataclass
@@ -78,6 +183,8 @@ class PulsejetSummary:
     peak_chamber_pressure_pa: float
     peak_chamber_temperature_k: float
     final_chamber_pressure_pa: float
+    # docs/pulsejet_ramjet_governing_equations.md sec. 2.5: I_sp = F_net / (mdot_fuel * g0).
+    specific_impulse_s: float
     numerical_reference_only: bool = True
 
 
@@ -134,7 +241,19 @@ class PulsejetSimulator:
         self.inlet_total_temperature_k = stagnation_temperature(
             self.atmosphere.temperature_k, mach
         )
+        # docs/pulsejet_ramjet_governing_equations.md sec. 2.2: a straight inlet's
+        # pre-compression genuinely grows with Mach (credit the full ram-pressure
+        # rise); a side inlet shows little pre-compression at any speed, so only a
+        # small, unsourced fraction of that rise is credited (see
+        # SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION).
         ideal_total_pressure_pa = stagnation_pressure(self.atmosphere.pressure_pa, mach)
+        if selector.inlet_type == "side":
+            ram_pressure_rise_pa = ideal_total_pressure_pa - self.atmosphere.pressure_pa
+            ideal_total_pressure_pa = (
+                self.atmosphere.pressure_pa
+                + SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION * ram_pressure_rise_pa
+            )
+        self.cycle_mode = pulsejet_cycle_mode(mach, selector.inlet_type)
         self.inlet_total_pressure_pa = (
             ideal_total_pressure_pa * selector.pulsejet_total_pressure_recovery
         )
@@ -195,6 +314,16 @@ class PulsejetSimulator:
         )
 
     def _ignite_if_ready(self) -> str | None:
+        # Humphrey/Lenoir cycle mapping (docs/pulsejet_ramjet_governing_equations.md sec. 2.4): the
+        # mass-flow-in phase between ignitions is this simulation's analogue of
+        # process 1->2 (isentropic pre-compression, credited per inlet_type and
+        # Mach in __init__'s inlet_total_pressure_pa); the constant-chamber-volume
+        # heat release below is process 2->3 (p3/p2 = T3/T2 at fixed volume); the
+        # nozzle expansion in step() is process 3->4. This is an unsteady
+        # conservation simulation, not the closed-form idealized cycle, so it does
+        # not evaluate humphrey_cycle_thermal_efficiency() directly -- that
+        # function exists to sanity-check this simulation's own effective
+        # efficiency against the idealized reference value.
         state = self.state
         config = self.config
         ready = (
@@ -460,6 +589,15 @@ def summarize_pulsejet(
     if not window:
         raise ValueError("summary window begins after the final sample")
     duration_s = window[-1].time_s - window[0].time_s
+    mean_net_thrust_n = fmean(sample.net_thrust_n for sample in window)
+    mean_fuel_mass_flow_kg_per_s = fmean(
+        sample.fuel_mass_flow_kg_per_s for sample in window
+    )
+    specific_impulse_s = (
+        mean_net_thrust_n / (mean_fuel_mass_flow_kg_per_s * G0_M_PER_S2)
+        if mean_fuel_mass_flow_kg_per_s > 1e-12
+        else 0.0
+    )
     return PulsejetSummary(
         window_start_s=window[0].time_s,
         window_end_s=window[-1].time_s,
@@ -467,14 +605,13 @@ def summarize_pulsejet(
         completed_cycles=sum(sample.event == "ignition" for sample in window),
         mean_gross_thrust_n=fmean(sample.gross_thrust_n for sample in window),
         peak_gross_thrust_n=max(sample.gross_thrust_n for sample in window),
-        mean_net_thrust_n=fmean(sample.net_thrust_n for sample in window),
+        mean_net_thrust_n=mean_net_thrust_n,
         peak_net_thrust_n=max(sample.net_thrust_n for sample in window),
-        mean_fuel_mass_flow_kg_per_s=fmean(
-            sample.fuel_mass_flow_kg_per_s for sample in window
-        ),
+        mean_fuel_mass_flow_kg_per_s=mean_fuel_mass_flow_kg_per_s,
         peak_chamber_pressure_pa=max(sample.chamber_pressure_pa for sample in window),
         peak_chamber_temperature_k=max(
             sample.chamber_temperature_k for sample in window
         ),
         final_chamber_pressure_pa=window[-1].chamber_pressure_pa,
+        specific_impulse_s=specific_impulse_s,
     )

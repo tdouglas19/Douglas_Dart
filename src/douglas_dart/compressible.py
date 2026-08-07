@@ -374,6 +374,11 @@ def fixed_cd_nozzle(
     exit_velocity_m_per_s = exit_mach * sqrt(
         gamma * gas_constant_j_per_kg_k * exit_temperature_k
     )
+    # docs/pulsejet_ramjet_governing_equations.md sec. 2.5: gross thrust here is the stream-thrust
+    # form m_dot*V + A*(p-p0), not a naive momentum-only m_dot*V. Verified
+    # already present -- not added by this pass. This A9*(p9-p0) pressure term is
+    # frequently non-negligible for ramjet nozzles, which are routinely under- or
+    # over-expanded away from their design point.
     raw_thrust_n = (
         mass_flow_kg_per_s * exit_velocity_m_per_s
         + (exit_pressure_pa - ambient_pressure_pa)
