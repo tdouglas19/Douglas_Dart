@@ -41,7 +41,8 @@ resolves.
 | Shared throat / `Ae/At` | 0.170 m / 1.05 | Candidate B shared-nozzle compromise; revised from 0.160 m after the ramjet inlet-recovery correction below |
 | Lifting surfaces | Two; 0.16 m exposed semispan, 0.42/0.14 m chords | OpenVSP starting geometry |
 | Fins | Four X-clocked; 0.10 m exposed span | OpenVSP starting geometry |
-| Field / sled release | 900 m MSL / 39–42 m/s TAS | Prior mission baseline |
+| Field elevation | 900 m MSL | Prior mission baseline |
+| Sled release speed | 39–42 m/s TAS in this static config; **reclassified as a Level 2 search variable** (35–90 m/s) in `optimizer.py`, not a fixed requirement -- see `docs/assumptions_registry.md` | Bounded by `sled_rail_length_m` (75 m, representative) and an as-yet-unset launch-acceleration limit; raising release speed directly closes some of the Gate 1 stall-speed margin found in `docs/level0_feasibility_bounds.md` |
 | Top of climb | 6,000–6,500 m MSL | Optimize with trajectory and loads |
 | Speed-run static point | 4,500 m MSL, Mach 1.10 | Analysis point, not altitude closure |
 | Drag-area ceiling | 0.0095 m² at 0.200 m body | Prior conservative budget, not an aerodynamic prediction |

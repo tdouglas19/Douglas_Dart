@@ -31,6 +31,27 @@ class TrajectoryIntegrationTests(unittest.TestCase):
             ROOT / "configs" / "shared_nozzle_candidate_b.yaml"
         )
 
+    def test_stall_margin_and_dynamic_pressure_are_reported(self):
+        result = simulate_mission(
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+        )
+        self.assertIsInstance(result.minimum_stall_margin_fraction, float)
+        self.assertGreater(result.peak_dynamic_pressure_pa, 0.0)
+        self.assertEqual(
+            result.stall_margin_violated, result.minimum_stall_margin_fraction < 0.0
+        )
+
+    def test_stall_margin_violation_is_recorded_in_status_when_it_occurs(self):
+        # Candidate B's configured sled-release speed is below its own 1g
+        # stall speed at max mass (docs/level0_feasibility_bounds.md) -- this
+        # test documents that the trajectory-level check independently
+        # surfaces the same finding, not that the finding is desirable.
+        result = simulate_mission(
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+        )
+        if result.stall_margin_violated:
+            self.assertIn("stall_margin_violated_1g_level_flight_bound", result.final_status)
+
     def test_nominal_mission_produces_monotonic_time_and_bounded_fuel(self):
         result = simulate_mission(
             self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0

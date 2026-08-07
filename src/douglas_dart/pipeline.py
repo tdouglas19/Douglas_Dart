@@ -24,8 +24,8 @@ from .config import load_fuels, load_reference_case
 from .fuel_trade import fuel_performance_trade
 from .jsbsim_model import validate_with_jsbsim, write_jsbsim_aircraft
 from .openvsp_geometry import build_openvsp_geometry
+from .propulsion_map import RAMJET_MODE, evaluate_propulsion_map_point
 from .pulsejet import PulsejetSimulator, summarize_pulsejet
-from .ramjet import evaluate_ramjet
 from .robustness import run_robustness_trade
 from .sensitivity import (
     pulsejet_local_sensitivities,
@@ -501,7 +501,7 @@ def _write_summary_markdown(
         lines.extend(
             [
                 f"- Ramjet net thrust at Mach {case.mission.peak_mach:.2f}: {ramjet_result.net_thrust_n:.1f} N",
-                f"- Ramjet inlet spillage: {100.0 * ramjet_result.inlet_spillage_fraction:.1f}%",
+                f"- Ramjet inlet spillage: {100.0 * ramjet_result.spilled_mass_flow_fraction:.1f}%",
             ]
         )
     if convergence is not None:
@@ -662,6 +662,10 @@ def run_all_analyses(
 
     def pulsejet_stage() -> Sequence[Path]:
         nonlocal pulsejet_summary, pulsejet_samples
+        # Intentionally NOT migrated to propulsion_map.py: this diagnostic
+        # pipeline stage needs the raw per-step sample time series and the
+        # full conservation audit for its own report artifacts, neither of
+        # which PropulsionMapPoint's common cross-mode schema carries.
         simulator = PulsejetSimulator(
             case.pulsejet,
             case.selector,
@@ -693,13 +697,11 @@ def run_all_analyses(
 
     def ramjet_point_stage() -> Path:
         nonlocal ramjet_result
-        ramjet_result = evaluate_ramjet(
-            case.ramjet,
-            case.selector,
-            case.nozzle,
-            case.fuel,
-            case.mission.speed_run_altitude_msl_m,
+        ramjet_result = evaluate_propulsion_map_point(
+            case,
             case.mission.peak_mach,
+            case.mission.speed_run_altitude_msl_m,
+            RAMJET_MODE,
         )
         return _write_json(json_dir / "ramjet_peak_mach.json", ramjet_result)
 

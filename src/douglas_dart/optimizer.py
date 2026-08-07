@@ -15,14 +15,31 @@ and the ``ValueError``s raised by an infeasible `ReferenceCase` combination all
 produce discontinuities that would break a gradient-based method. No SciPy
 dependency; the algorithm is small enough to keep in-repo and inspectable.
 
-## What is NOT optimized here
+## Mass model
 
-Body diameter growth's structural-mass penalty is not modeled (there is no
-parametric mass-vs-geometry relationship yet — see `robustness.py`'s fixed component
-list). Growing the body or throat only changes drag area and nozzle flow capacity in
-this search; the resulting "empty" (non-fuel) mass is held at the configured value.
-Any candidate the search prefers with a substantially different body diameter should
-be re-checked against a real mass budget before it is taken seriously.
+`mass_model.py` now supplies a real, geometry-linked empty-mass calculation
+(body skin, lifting surfaces, propulsion hardware, and selector each scale
+with their own geometry; everything else is a fixed lump sum) instead of
+holding empty mass at the configured value regardless of body diameter,
+length, or throat size. Its density coefficients are calibrated to reproduce
+today's configured mass budget at today's configured geometry -- a
+consistency anchor, not independent structural validation (see
+`mass_model.py`'s module docstring and `docs/assumptions_registry.md`). Body
+length is now an active search variable for the same reason it is in
+`docs/design_workflow.md`'s Level 3: it changes wetted area and therefore
+structural mass, not just packaging.
+
+Lifting-surface area is now a search variable too (`wing_area_scale_factor`):
+root chord, tip chord, and exposed semispan all scale by
+``sqrt(wing_area_scale_factor)``, so planform area scales by exactly
+``wing_area_scale_factor`` while aspect ratio and taper ratio stay fixed at
+the baseline config's shape (geometric similarity, not independent shape
+optimization). `flight.reference_area_m2` is recomputed to exactly match
+(`ReferenceCase`'s own validated invariant), so `mass_model.py`'s
+lifting-surface mass and every drag/lift calculation that reads
+`reference_area_m2` see the same, consistent number. Fin geometry and
+lifting-surface x-location/sweep/thickness are still read from the baseline
+config, not independently searched.
 """
 
 from __future__ import annotations
@@ -34,7 +51,9 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from .atmosphere import G0_M_PER_S2
 from .config import ReferenceCase
+from .mass_model import MassModelCalibration, calibrate_mass_model, evaluate_parametric_mass
 from .trajectory import (
     ADVERSE_SCENARIO,
     CONSERVATIVE_SCENARIO,
@@ -49,6 +68,7 @@ class DesignVariableBounds:
     """Search bounds for each coupled design variable, in SI units."""
 
     body_diameter_m: tuple[float, float]
+    body_length_m: tuple[float, float]
     throat_diameter_m: tuple[float, float]
     exit_to_throat_area_ratio: tuple[float, float]
     loaded_fuel_mass_kg: tuple[float, float]
@@ -56,10 +76,13 @@ class DesignVariableBounds:
     climb_angle_deg: tuple[float, float]
     dive_angle_deg: tuple[float, float]
     dive_entry_mach: tuple[float, float]
+    sled_release_speed_m_per_s: tuple[float, float]
+    wing_area_scale_factor: tuple[float, float]
 
     def names(self) -> tuple[str, ...]:
         return (
             "body_diameter_m",
+            "body_length_m",
             "throat_diameter_m",
             "exit_to_throat_area_ratio",
             "loaded_fuel_mass_kg",
@@ -67,14 +90,40 @@ class DesignVariableBounds:
             "climb_angle_deg",
             "dive_angle_deg",
             "dive_entry_mach",
+            "sled_release_speed_m_per_s",
+            "wing_area_scale_factor",
         )
 
     def as_pairs(self) -> tuple[tuple[float, float], ...]:
         return tuple(getattr(self, name) for name in self.names())
 
 
+# sled_release_speed_m_per_s: reclassified from a fixed mission requirement to
+# a Level 2 search variable (see MissionConfig's docstring and
+# docs/level0_feasibility_bounds.md -- release speed directly sets the
+# Gate 1 stall-speed margin). The lower bound (35 m/s) sits just under the
+# previously configured 39-42 m/s range. The upper bound is v_max =
+# sqrt(2 * a * L) at MissionConfig's own default rail length (75 m) and
+# launch-acceleration placeholder (10 g) -- i.e. it is tied to the one real,
+# user-stated requirement ("reach release speed within the rail"), not an
+# arbitrary speed literal. `a` is still an UNSOURCED placeholder (see
+# MissionConfig's docstring and feasibility.py's `sled_launch_feasibility`,
+# which reports the required acceleration for whatever speed a search picks
+# so a human can judge it, rather than hard-failing on this placeholder).
+# If a case's own sled_rail_length_m/sled_launch_acceleration_g differ from
+# these defaults, recompute this bound to match.
+_SLED_RAIL_LENGTH_DEFAULT_M = 75.0
+_SLED_LAUNCH_ACCELERATION_DEFAULT_G = 10.0
+_SLED_RELEASE_SPEED_UPPER_BOUND_M_PER_S = (
+    2.0 * _SLED_LAUNCH_ACCELERATION_DEFAULT_G * G0_M_PER_S2 * _SLED_RAIL_LENGTH_DEFAULT_M
+) ** 0.5
+
 DEFAULT_BOUNDS = DesignVariableBounds(
     body_diameter_m=(0.195, 0.260),
+    # Wide enough to matter for wetted area/structural mass (mass_model.py)
+    # and tail moment arm, narrow enough to stay near the configured 2.20-
+    # 2.30 m baseline this search's other bounds were tuned against.
+    body_length_m=(1.80, 2.80),
     throat_diameter_m=(0.110, 0.190),
     exit_to_throat_area_ratio=(1.02, 1.30),
     loaded_fuel_mass_kg=(2.50, 6.00),
@@ -82,12 +131,20 @@ DEFAULT_BOUNDS = DesignVariableBounds(
     climb_angle_deg=(3.0, 15.0),
     dive_angle_deg=(-20.0, -3.0),
     dive_entry_mach=(0.30, 0.78),
+    sled_release_speed_m_per_s=(35.0, _SLED_RELEASE_SPEED_UPPER_BOUND_M_PER_S),
+    # docs/level0_feasibility_bounds.md found the configured reference area is
+    # roughly 3.6x too small for the configured release speed at max mass;
+    # the upper bound here is set generously above that so the search can
+    # actually reach and cross that threshold rather than stopping just short
+    # of it.
+    wing_area_scale_factor=(0.5, 6.0),
 )
 
 
 @dataclass(frozen=True)
 class DesignVariables:
     body_diameter_m: float
+    body_length_m: float
     throat_diameter_m: float
     exit_to_throat_area_ratio: float
     loaded_fuel_mass_kg: float
@@ -95,6 +152,8 @@ class DesignVariables:
     climb_angle_deg: float
     dive_angle_deg: float
     dive_entry_mach: float
+    sled_release_speed_m_per_s: float
+    wing_area_scale_factor: float
 
     def as_vector(self, bounds: DesignVariableBounds) -> list[float]:
         return [getattr(self, name) for name in bounds.names()]
@@ -104,31 +163,88 @@ class DesignVariables:
         return cls(**dict(zip(bounds.names(), vector)))
 
 
-def apply_design_variables(case: ReferenceCase, variables: DesignVariables) -> ReferenceCase:
+def apply_design_variables(
+    case: ReferenceCase,
+    variables: DesignVariables,
+    mass_calibration: MassModelCalibration,
+) -> ReferenceCase:
     """Build a candidate `ReferenceCase` from a baseline case and one design vector.
 
-    Non-fuel ("empty") mass is held fixed at the baseline's configured value; only
-    the fuel-mass contribution changes with `loaded_fuel_mass_kg`. This keeps the
-    mass model honest about what it actually represents (see module docstring).
+    Non-fuel ("empty") mass now comes from `mass_model.py`'s geometry-linked
+    calculation (body diameter/length, throat diameter, lifting-surface area)
+    instead of being held fixed at the baseline's configured value regardless
+    of geometry -- see this module's docstring and `mass_model.py`'s for what
+    is and is not scaled. `mass_calibration` is required, not defaulted, so a
+    caller cannot silently fall back to the old fixed-mass behavior by
+    omitting it.
     """
 
-    baseline_empty_mass_kg = case.flight.initial_mass_kg - case.mission.loaded_fuel_mass_kg
-    new_initial_mass_kg = baseline_empty_mass_kg + variables.loaded_fuel_mass_kg
+    # Geometric-similarity wing scaling: root/tip chord and semispan all scale
+    # by sqrt(factor) so planform area scales by exactly `factor` while aspect
+    # and taper ratio stay fixed at the baseline shape (see module docstring).
+    linear_scale = variables.wing_area_scale_factor**0.5
+    lifting_surface = replace(
+        case.geometry.lifting_surface,
+        root_chord_m=case.geometry.lifting_surface.root_chord_m * linear_scale,
+        tip_chord_m=case.geometry.lifting_surface.tip_chord_m * linear_scale,
+        exposed_semispan_m=case.geometry.lifting_surface.exposed_semispan_m * linear_scale,
+    )
+    geometry = replace(case.geometry, lifting_surface=lifting_surface)
+    new_reference_area_m2 = (
+        geometry.lifting_surface_count * lifting_surface.exposed_area_per_surface_m2
+        if geometry.lifting_surface_count
+        else case.flight.reference_area_m2
+    )
+
+    vehicle = replace(
+        case.vehicle,
+        body_diameter_m=variables.body_diameter_m,
+        body_length_m=variables.body_length_m,
+    )
+    # A case reflecting the new body + wing geometry (and the reference area
+    # that must match it, per ReferenceCase's own validated invariant), built
+    # before the mass calculation so evaluate_parametric_mass's own geometry
+    # reads (wetted area, lifting/fin area) see the scaled values
+    # automatically instead of needing every scaled quantity threaded through
+    # as a separate override.
+    geometry_case = replace(
+        case,
+        vehicle=vehicle,
+        geometry=geometry,
+        flight=replace(case.flight, reference_area_m2=new_reference_area_m2),
+    )
+    empty_mass_kg = evaluate_parametric_mass(
+        geometry_case,
+        mass_calibration,
+        throat_diameter_m=variables.throat_diameter_m,
+    ).empty_mass_kg
+    new_initial_mass_kg = empty_mass_kg + variables.loaded_fuel_mass_kg
     ramjet_fuel_kg = variables.ramjet_fuel_fraction * variables.loaded_fuel_mass_kg
 
-    vehicle = replace(case.vehicle, body_diameter_m=variables.body_diameter_m)
     nozzle = replace(
         case.nozzle,
         throat_diameter_m=variables.throat_diameter_m,
         exit_to_throat_area_ratio=variables.exit_to_throat_area_ratio,
     )
-    flight = replace(case.flight, initial_mass_kg=new_initial_mass_kg)
+    flight = replace(
+        case.flight,
+        initial_mass_kg=new_initial_mass_kg,
+        reference_area_m2=new_reference_area_m2,
+    )
+    # trajectory.py's mission solver reads sled_release_speed_max_m_per_s as the
+    # initial condition; both min and max are set to the searched value here
+    # rather than kept as an independent range, since the range previously
+    # represented sled-performance uncertainty, not a design choice.
     mission = replace(
         case.mission,
         loaded_fuel_mass_kg=variables.loaded_fuel_mass_kg,
         ramjet_speed_run_fuel_budget_kg=ramjet_fuel_kg,
+        sled_release_speed_min_m_per_s=variables.sled_release_speed_m_per_s,
+        sled_release_speed_max_m_per_s=variables.sled_release_speed_m_per_s,
     )
-    return replace(case, vehicle=vehicle, nozzle=nozzle, flight=flight, mission=mission)
+    return replace(
+        case, vehicle=vehicle, nozzle=nozzle, flight=flight, mission=mission, geometry=geometry
+    )
 
 
 @dataclass(frozen=True)
@@ -164,6 +280,7 @@ _BODY_DIAMETER_TIEBREAK_PENALTY_PER_M = 1000.0
 def evaluate_design(
     baseline_case: ReferenceCase,
     variables: DesignVariables,
+    mass_calibration: MassModelCalibration,
     *,
     fast_time_step_s: float = 0.08,
     fast_pulsejet_warmup_s: float = 0.10,
@@ -178,7 +295,7 @@ def evaluate_design(
     """
 
     try:
-        candidate_case = apply_design_variables(baseline_case, variables)
+        candidate_case = apply_design_variables(baseline_case, variables, mass_calibration)
     except Exception as exc:  # noqa: BLE001 - a long unattended search must not die on one bad candidate
         return CandidateEvaluation(
             variables=variables,
@@ -279,6 +396,7 @@ def _clip(value: float, lower: float, upper: float) -> float:
 def run_differential_evolution(
     baseline_case: ReferenceCase,
     *,
+    mass_budget_path: str | Path = "configs/robustness_candidate_b.yaml",
     bounds: DesignVariableBounds = DEFAULT_BOUNDS,
     population_size: int = 20,
     generations: int = 30,
@@ -294,8 +412,14 @@ def run_differential_evolution(
     generation if given, so a long unattended run can be inspected or killed and
     resumed from the CSV log without losing progress. This function itself never
     calls out to any AI model; it is meant to be started once and left running.
+
+    `mass_budget_path` calibrates `mass_model.py` once, from `baseline_case`'s
+    own configured geometry, before the search starts (see
+    `apply_design_variables`'s docstring for what that calibration means and
+    does not mean).
     """
 
+    mass_calibration = calibrate_mass_model(baseline_case, mass_budget_path)
     rng = random.Random(seed)
     pairs = bounds.as_pairs()
     dimension = len(pairs)
@@ -308,7 +432,7 @@ def run_differential_evolution(
 
     population = [random_vector() for _ in range(population_size)]
     evaluations = [
-        evaluate_design(baseline_case, DesignVariables.from_vector(vector, bounds))
+        evaluate_design(baseline_case, DesignVariables.from_vector(vector, bounds), mass_calibration)
         for vector in population
     ]
 
@@ -329,7 +453,7 @@ def run_differential_evolution(
                 if d == forced_dimension or rng.random() < crossover_probability:
                     trial[d] = mutant[d]
             trial_evaluation = evaluate_design(
-                baseline_case, DesignVariables.from_vector(trial, bounds)
+                baseline_case, DesignVariables.from_vector(trial, bounds), mass_calibration
             )
             if trial_evaluation.score >= evaluations[index].score:
                 population[index] = trial

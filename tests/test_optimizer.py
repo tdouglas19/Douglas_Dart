@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from douglas_dart.config import load_reference_case
+from douglas_dart.mass_model import calibrate_mass_model
 from douglas_dart.optimizer import (
     DEFAULT_BOUNDS,
     DesignVariables,
@@ -16,8 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 class OptimizerTests(unittest.TestCase):
     def setUp(self):
         self.case = load_reference_case(ROOT / "configs" / "shared_nozzle_candidate_b.yaml")
+        self.mass_calibration = calibrate_mass_model(
+            self.case, ROOT / "configs" / "robustness_candidate_b.yaml"
+        )
         self.baseline_variables = DesignVariables(
             body_diameter_m=self.case.vehicle.body_diameter_m,
+            body_length_m=self.case.vehicle.body_length_m,
             throat_diameter_m=self.case.nozzle.throat_diameter_m,
             exit_to_throat_area_ratio=self.case.nozzle.exit_to_throat_area_ratio,
             loaded_fuel_mass_kg=self.case.mission.loaded_fuel_mass_kg,
@@ -28,19 +33,68 @@ class OptimizerTests(unittest.TestCase):
             climb_angle_deg=8.0,
             dive_angle_deg=-10.0,
             dive_entry_mach=0.45,
+            sled_release_speed_m_per_s=self.case.mission.sled_release_speed_max_m_per_s,
+            wing_area_scale_factor=1.0,
         )
 
-    def test_apply_design_variables_preserves_empty_mass(self):
-        candidate = apply_design_variables(self.case, self.baseline_variables)
+    def test_apply_design_variables_reproduces_baseline_empty_mass_at_baseline_geometry(self):
+        candidate = apply_design_variables(self.case, self.baseline_variables, self.mass_calibration)
         self.assertAlmostEqual(
             candidate.flight.initial_mass_kg - candidate.mission.loaded_fuel_mass_kg,
             self.case.flight.initial_mass_kg - self.case.mission.loaded_fuel_mass_kg,
+            places=6,
         )
         self.assertAlmostEqual(candidate.vehicle.body_diameter_m, self.case.vehicle.body_diameter_m)
+
+    def test_apply_design_variables_grows_empty_mass_with_body_geometry(self):
+        larger = DesignVariables(
+            body_diameter_m=self.case.vehicle.body_diameter_m * 1.15,
+            body_length_m=self.case.vehicle.body_length_m * 1.15,
+            throat_diameter_m=self.case.nozzle.throat_diameter_m,
+            exit_to_throat_area_ratio=self.case.nozzle.exit_to_throat_area_ratio,
+            loaded_fuel_mass_kg=self.case.mission.loaded_fuel_mass_kg,
+            ramjet_fuel_fraction=0.3,
+            climb_angle_deg=8.0,
+            dive_angle_deg=-10.0,
+            dive_entry_mach=0.45,
+            sled_release_speed_m_per_s=self.case.mission.sled_release_speed_max_m_per_s,
+            wing_area_scale_factor=1.0,
+        )
+        baseline_candidate = apply_design_variables(
+            self.case, self.baseline_variables, self.mass_calibration
+        )
+        larger_candidate = apply_design_variables(self.case, larger, self.mass_calibration)
+        baseline_empty_mass_kg = (
+            baseline_candidate.flight.initial_mass_kg
+            - baseline_candidate.mission.loaded_fuel_mass_kg
+        )
+        larger_empty_mass_kg = (
+            larger_candidate.flight.initial_mass_kg - larger_candidate.mission.loaded_fuel_mass_kg
+        )
+        self.assertGreater(larger_empty_mass_kg, baseline_empty_mass_kg)
+
+    def test_apply_design_variables_wires_sled_release_speed_into_min_and_max(self):
+        variables = DesignVariables(
+            body_diameter_m=self.case.vehicle.body_diameter_m,
+            body_length_m=self.case.vehicle.body_length_m,
+            throat_diameter_m=self.case.nozzle.throat_diameter_m,
+            exit_to_throat_area_ratio=self.case.nozzle.exit_to_throat_area_ratio,
+            loaded_fuel_mass_kg=self.case.mission.loaded_fuel_mass_kg,
+            ramjet_fuel_fraction=0.3,
+            climb_angle_deg=8.0,
+            dive_angle_deg=-10.0,
+            dive_entry_mach=0.45,
+            sled_release_speed_m_per_s=55.0,
+            wing_area_scale_factor=1.0,
+        )
+        candidate = apply_design_variables(self.case, variables, self.mass_calibration)
+        self.assertAlmostEqual(candidate.mission.sled_release_speed_min_m_per_s, 55.0)
+        self.assertAlmostEqual(candidate.mission.sled_release_speed_max_m_per_s, 55.0)
 
     def test_apply_design_variables_rejects_infeasible_combination(self):
         bad_variables = DesignVariables(
             body_diameter_m=0.05,  # smaller than the fixed 0.195 m intake diameter
+            body_length_m=self.case.vehicle.body_length_m,
             throat_diameter_m=0.16,
             exit_to_throat_area_ratio=1.05,
             loaded_fuel_mass_kg=3.8,
@@ -48,13 +102,16 @@ class OptimizerTests(unittest.TestCase):
             climb_angle_deg=8.0,
             dive_angle_deg=-10.0,
             dive_entry_mach=0.45,
+            sled_release_speed_m_per_s=40.0,
+            wing_area_scale_factor=1.0,
         )
         with self.assertRaises(ValueError):
-            apply_design_variables(self.case, bad_variables)
+            apply_design_variables(self.case, bad_variables, self.mass_calibration)
 
     def test_evaluate_design_reports_infeasible_without_raising(self):
         bad_variables = DesignVariables(
             body_diameter_m=0.05,
+            body_length_m=self.case.vehicle.body_length_m,
             throat_diameter_m=0.16,
             exit_to_throat_area_ratio=1.05,
             loaded_fuel_mass_kg=3.8,
@@ -62,14 +119,16 @@ class OptimizerTests(unittest.TestCase):
             climb_angle_deg=8.0,
             dive_angle_deg=-10.0,
             dive_entry_mach=0.45,
+            sled_release_speed_m_per_s=40.0,
+            wing_area_scale_factor=1.0,
         )
-        evaluation = evaluate_design(self.case, bad_variables)
+        evaluation = evaluate_design(self.case, bad_variables, self.mass_calibration)
         self.assertFalse(evaluation.feasible)
         self.assertIsNotNone(evaluation.infeasibility_reason)
         self.assertLess(evaluation.score, -1e8)
 
     def test_evaluate_design_feasible_candidate_wires_all_variables(self):
-        evaluation = evaluate_design(self.case, self.baseline_variables)
+        evaluation = evaluate_design(self.case, self.baseline_variables, self.mass_calibration)
         self.assertTrue(evaluation.feasible)
         self.assertIsNotNone(evaluation.nominal_peak_mach)
         self.assertIsNotNone(evaluation.adverse_peak_mach)
@@ -78,6 +137,7 @@ class OptimizerTests(unittest.TestCase):
     def test_tiny_differential_evolution_run_improves_or_holds_best_score(self):
         records = run_differential_evolution(
             self.case,
+            mass_budget_path=ROOT / "configs" / "robustness_candidate_b.yaml",
             population_size=4,
             generations=2,
             seed=1,

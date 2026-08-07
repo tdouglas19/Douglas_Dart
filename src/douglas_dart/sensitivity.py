@@ -6,8 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Iterable
 
 from .config import ReferenceCase
-from .pulsejet import PulsejetSimulator, summarize_pulsejet
-from .ramjet import evaluate_ramjet
+from .propulsion_map import PULSEJET_MODE, RAMJET_MODE, evaluate_propulsion_map_point
 
 
 @dataclass(frozen=True)
@@ -192,22 +191,19 @@ def _pulsejet_outputs(
     measurement_s: float,
     time_step_s: float,
 ) -> tuple[float, float, float]:
-    simulator = PulsejetSimulator(
-        case.pulsejet,
-        case.selector,
-        case.nozzle,
-        case.fuel,
-        case.altitude_m,
+    point = evaluate_propulsion_map_point(
+        case,
         case.mach,
-    )
-    summary = summarize_pulsejet(
-        simulator.run(warmup_s + measurement_s, time_step_s),
-        minimum_time_s=warmup_s,
+        case.altitude_m,
+        PULSEJET_MODE,
+        pulsejet_warmup_s=warmup_s,
+        pulsejet_measurement_s=measurement_s,
+        pulsejet_time_step_s=time_step_s,
     )
     return (
-        summary.mean_net_thrust_n,
-        summary.mean_fuel_mass_flow_kg_per_s,
-        summary.peak_chamber_pressure_pa,
+        point.net_thrust_n,
+        point.fuel_mass_flow_kg_per_s,
+        point.peak_chamber_pressure_pa,
     )
 
 
@@ -292,19 +288,17 @@ def pulsejet_local_sensitivities(
 def _ramjet_outputs(
     case: ReferenceCase,
 ) -> tuple[float, float, float, tuple[str, ...]]:
-    result = evaluate_ramjet(
-        case.ramjet,
-        case.selector,
-        case.nozzle,
-        case.fuel,
-        case.mission.speed_run_altitude_msl_m,
+    point = evaluate_propulsion_map_point(
+        case,
         case.mission.peak_mach,
+        case.mission.speed_run_altitude_msl_m,
+        RAMJET_MODE,
     )
     return (
-        result.net_thrust_n,
-        result.fuel_mass_flow_kg_per_s,
-        result.inlet_spillage_fraction,
-        result.status,
+        point.net_thrust_n,
+        point.fuel_mass_flow_kg_per_s,
+        point.spilled_mass_flow_fraction,
+        point.validity_flags,
     )
 
 

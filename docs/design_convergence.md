@@ -15,6 +15,36 @@ Candidate B is selected by the visible score in
 `configs/robustness_candidate_b.yaml` after passing the named nominal and
 conservative static screens. It is not a closed mission or a hardware recommendation.
 
+**Gate 1 (Level 0 hand-calc bounds, new) does not pass on this candidate.**
+`python -m douglas_dart level0-bounds` finds the configured 0.0896 m&sup2;
+lifting-surface reference area is roughly 3.6x too small to fly at the
+configured 39-42 m/s sled-release speed at 25 kg maximum takeoff mass and the
+configured CL_max = 0.90 -- a stall-speed bound of ~73.6 m/s. The pulsejet
+chamber also fails packaging even at the loosest possible bound (needs
+&ge;722 mm length at full body cross-section vs. a 180 mm forebody). Neither
+finding was visible from the static propulsion/drag screens below, which
+never checked lift-available-vs.-required. See
+`docs/level0_feasibility_bounds.md` for the full result and
+`docs/design_workflow.md` for how this gate fits the overall convergence
+process. This does not retract Candidate B's static propulsion closure below
+-- it adds a previously-missing check that the static screens don't cover.
+
+**Gate 3's new stall-margin check confirms the same finding at the full
+mission-integration level, not just the static Level 0 bound.**
+`python -m douglas_dart mission-trajectory` now reports
+`minimum_stall_margin_fraction = -0.377` nominal (`stall_margin_violated =
+true`) -- the vehicle spends time below its own 1g stall speed during the
+simulated mission. This is the expected, consistent consequence of the same
+undersized reference area Gate 1 found, surfaced independently by a second,
+higher-fidelity model rather than contradicted by it. `mass_model.py`,
+`body_length_m`, and now `wing_area_scale_factor` are real search variables
+in `optimizer.py` (`design-optimize`); the latter directly grows
+lifting-surface reference area (at a structural-mass cost) and is the
+mechanism that can actually close this gap -- rerun `design-optimize` and
+check the winning candidate's `wing_area_scale_factor` and resulting
+`reference_area_m2` against the Gate 1 bound before declaring it closed. See
+`docs/design_workflow.md`'s Level 3 row.
+
 ## Model correction that rejected Candidate A
 
 Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of

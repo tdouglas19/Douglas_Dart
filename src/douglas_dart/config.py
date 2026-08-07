@@ -261,7 +261,29 @@ class VehicleConfig:
 
 @dataclass(frozen=True)
 class MissionConfig:
-    """User mission requirements and recovered prior sizing allocations."""
+    """User mission requirements and recovered prior sizing allocations.
+
+    ``sled_release_speed_min/max_m_per_s`` were previously filed as a fixed
+    user requirement (see ``docs/assumptions_registry.md``). They are not one:
+    release speed is bounded by real sled hardware
+    (``v_max = sqrt(2 * a_sled * sled_rail_length_m)``), and a higher release
+    speed directly reduces the required lift area found infeasible by
+    ``feasibility.py``'s Gate 1 stall-speed check
+    (``docs/level0_feasibility_bounds.md``). Reclassified here as a
+    rail-length-bounded Level 2 design/search variable.
+
+    ``sled_rail_length_m`` (75 m) is the midpoint of a stated 50-100 m range,
+    not a measured spec -- flag as representative pending the real sled
+    design. The user has explicitly not set a real launch-acceleration (g)
+    ceiling for the sled/airframe. ``sled_launch_acceleration_g`` (10 g) is
+    therefore NOT a validated structural or physiological limit -- it exists
+    only so a release-speed search has *some* bound tied to the real 75 m
+    rail (v_max = sqrt(2 * a * L)) instead of an arbitrary speed literal. The
+    only real, user-stated requirement is "reach release speed within the
+    rail length" -- see ``feasibility.py``'s ``sled_launch_feasibility``,
+    which reports required acceleration for whatever speed is chosen without
+    hard-failing on it, since no real ceiling exists yet.
+    """
 
     field_elevation_msl_m: float
     sled_release_speed_min_m_per_s: float
@@ -272,6 +294,8 @@ class MissionConfig:
     peak_mach: float
     loaded_fuel_mass_kg: float
     ramjet_speed_run_fuel_budget_kg: float
+    sled_rail_length_m: float = 75.0
+    sled_launch_acceleration_g: float = 10.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -280,6 +304,8 @@ class MissionConfig:
             "peak_mach",
             "loaded_fuel_mass_kg",
             "ramjet_speed_run_fuel_budget_kg",
+            "sled_rail_length_m",
+            "sled_launch_acceleration_g",
         ):
             _positive(name, getattr(self, name))
         for name in (

@@ -62,6 +62,7 @@ class RamjetResult:
     combustor_inlet_total_temperature_k: float
     combustor_exit_total_temperature_k: float
     nozzle_capacity_kg_per_s: float
+    nozzle_flow_regime: str
     nozzle_mass_flow_residual_fraction: float
     inlet_spillage_fraction: float
     inlet_momentum_drag_n: float
@@ -266,6 +267,7 @@ def evaluate_ramjet(
         combustor_inlet_total_temperature_k=inlet_total_temperature_k,
         combustor_exit_total_temperature_k=target_temperature_k,
         nozzle_capacity_kg_per_s=nozzle_result.mass_flow_kg_per_s,
+        nozzle_flow_regime=nozzle_result.regime,
         nozzle_mass_flow_residual_fraction=residual_fraction,
         inlet_spillage_fraction=inlet_spillage_fraction,
         inlet_momentum_drag_n=air_mass_flow_kg_per_s * velocity_m_per_s,

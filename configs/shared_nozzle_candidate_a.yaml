@@ -67,6 +67,8 @@ mission:
   peak_mach: 1.10
   loaded_fuel_mass_kg: 3.80
   ramjet_speed_run_fuel_budget_kg: 1.40
+  sled_rail_length_m: 75.0  # midpoint of stated 50-100 m range, representative pending real sled spec
+  sled_launch_acceleration_g: 10.0  # UNSOURCED placeholder, no real accel ceiling set -- only bounds the search vs. the 75 m rail
 
 requirements:
   maximum_takeoff_mass_kg: 25.0
