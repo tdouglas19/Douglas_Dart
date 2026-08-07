@@ -292,6 +292,61 @@ to 0.867, plateauing exactly where the pulsejet-margin crossover predicts.
 Regression tests: `test_apply_design_variables_wires_minimum_lightoff_test_mach`,
 `test_raising_lightoff_threshold_lets_pulsejet_close_more_of_the_adverse_gap`.
 
+## Grounding the adverse-scenario multipliers (2026-08-07)
+
+`trajectory.py`'s `ADVERSE_SCENARIO` (0.75x thrust, 1.20x drag, 0.82 ramjet
+recovery, +2.90 kg mass) has always been filed as a "provisional
+assumption, explicitly non-probabilistic" (`docs/assumptions.md`: "these
+are engineering screens, not probability statements"). This section checks
+each number against published aerospace conceptual-design margin
+literature where a comparison is possible. **No values were changed as a
+result** -- see "What this does and does not settle" below for why.
+
+**Mass growth (+2.90 kg): benchmarked, and the current value looks
+*low*, not high.** The AIAA/SAWE mass-growth-allowance convention
+(ANSI/AIAA S-120A-2015, summarized in NASA/SAWE mass-properties-control
+literature) commonly cites roughly 15% growth allowance at "Design"
+maturity -- the conceptual-design stage this vehicle is at -- rising toward
+30%+ for the least mature technology categories. +2.90 kg against this
+vehicle's ~21-26 kg mass range is roughly 11-14%, *below* even the more
+conservative 15% figure. If anything, literature convention suggests the
+adverse mass-growth term is a bit optimistic, not pessimistic -- the
+opposite of what would make closure easier.
+
+**Drag (1.20x): directionally plausible, not a precise sourced match.**
+Published CFD-versus-experiment comparisons cite combined drag error bands
+around 7% for well-resolved grids near buffet onset -- but that is for
+CFD, a fidelity level well above this codebase's own drag model, which is
+explicitly documented (`drag.py`'s module docstring) as "a budget/proxy,
+not a validated aerodynamic prediction," anchored at one calibration point
+with a literature-typical (not measured) transonic-rise shape. Early-stage,
+semi-empirical drag build-up methods are understood in the literature to
+carry meaningfully wider uncertainty than resolved CFD, which is
+consistent with (though does not precisely derive) a 20% margin. No single
+authoritative percentage for *this specific class* of model was found.
+
+**Thrust (0.75x): no comparable literature benchmark found at all.** The
+closest results found were in-flight thrust *measurement* accuracy figures
+for instrumented, already-built engines (on the order of 1-4%) -- a
+fundamentally different question (post-hardware measurement precision) from
+pre-hardware design uncertainty for a novel, switchable pulsejet/ramjet
+architecture with no comparable production baseline to benchmark against.
+This number remains exactly as unsourced as `docs/assumptions.md` already
+says it is.
+
+**What this does and does not settle.** This is a literature comparison,
+not a validation -- none of these margins are being claimed as now
+"sourced" in `docs/assumptions_registry.md`'s taxonomy sense (a specific
+citable number for *this* vehicle class). The mass-growth finding is the
+one actionable result: it argues for *raising* +2.90 kg toward the ~15%
+convention, which would make the adverse scenario measurably harder to
+close, not easier -- the opposite direction from what searching for
+"grounding" might have been hoped to produce. Per this session's own stated
+principle (propose grounded values with citations for review rather than
+silently changing them), `ADVERSE_SCENARIO`'s literal values in
+`trajectory.py` were left unchanged; this is a documented recommendation
+for deliberate review, not an applied fix.
+
 ## Model correction that rejected Candidate A
 
 Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of
