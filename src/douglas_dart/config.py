@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 from math import isclose, pi
 from pathlib import Path
 from typing import Any, Mapping
@@ -89,11 +90,18 @@ class SelectorConfig:
         if self.inlet_type not in _VALID_INLET_TYPES:
             raise ValueError(f"inlet_type must be one of {_VALID_INLET_TYPES}")
 
-    @property
+    # cached_property, not property: read every pulsejet/ramjet time step
+    # (pulsejet.py, ramjet.py, propulsion.py) but fixed for the lifetime of
+    # this frozen, immutable instance -- caching cannot change the value,
+    # only skip recomputing it. Safe on a frozen dataclass because
+    # cached_property writes directly to instance.__dict__, bypassing the
+    # dataclass-generated __setattr__ that blocks normal attribute sets
+    # (the same bypass __post_init__ uses via object.__setattr__ elsewhere).
+    @cached_property
     def circular_area_m2(self) -> float:
         return pi * self.circular_intake_diameter_m**2 / 4.0
 
-    @property
+    @cached_property
     def available_area_m2(self) -> float:
         return self.open_fraction * self.circular_area_m2
 
@@ -110,11 +118,14 @@ class NozzleConfig:
             raise ValueError("exit_to_throat_area_ratio must be at least one")
         _fraction("discharge_coefficient", self.discharge_coefficient)
 
-    @property
+    # See SelectorConfig.circular_area_m2 above for why cached_property is
+    # safe here (frozen dataclass, no __slots__, value fixed for instance
+    # lifetime, read every pulsejet/ramjet nozzle time step).
+    @cached_property
     def throat_area_m2(self) -> float:
         return pi * self.throat_diameter_m**2 / 4.0
 
-    @property
+    @cached_property
     def exit_area_m2(self) -> float:
         return self.throat_area_m2 * self.exit_to_throat_area_ratio
 

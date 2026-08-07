@@ -378,6 +378,12 @@ def simulate_mission(
         thrust_n = 0.0
         fuel_flow_kg_per_s = 0.0
         fuel_ledger = "none"
+        # Set by the "mach_hold" branch below, which already computes drag
+        # with the exact args (case, case.flight, altitude_m, mach,
+        # lift_coefficient=0.0, drag_multiplier=scenario.drag_multiplier)
+        # the shared block after this if/elif chain would otherwise
+        # recompute unconditionally -- reused there instead of rerun.
+        drag = None
 
         if phase_name == "pulsejet_climb":
             gamma_deg = climb_angle_deg
@@ -536,14 +542,15 @@ def simulate_mission(
                 break
 
         gamma_rad = radians(gamma_deg)
-        drag = evaluate_total_drag(
-            case,
-            case.flight,
-            altitude_m,
-            mach,
-            lift_coefficient=0.0,
-            drag_multiplier=scenario.drag_multiplier,
-        )
+        if drag is None:
+            drag = evaluate_total_drag(
+                case,
+                case.flight,
+                altitude_m,
+                mach,
+                lift_coefficient=0.0,
+                drag_multiplier=scenario.drag_multiplier,
+            )
         net_axial_force_n = thrust_n - drag.total_drag_n - mass_kg * G0_M_PER_S2 * sin(gamma_rad)
         acceleration_m_per_s2 = net_axial_force_n / mass_kg
 
