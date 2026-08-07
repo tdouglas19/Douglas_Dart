@@ -96,6 +96,16 @@ mass calibration, all 11 `optimizer.py` design variables:
   search's objective can still fail Level 0 packaging silently; treat every
   `design-optimize` result as requiring a `level0-bounds` check before
   trusting it, per `docs/design_workflow.md`'s closing rule for every gate.
+  **Fixed 2026-08-07**: `evaluate_design` now calls `feasibility.py`'s
+  `packaging_bounds` (pure geometry, no simulation, negligible added cost)
+  and applies `_PACKAGING_VIOLATION_PENALTY` (2000, same order as
+  `_RULE_VIOLATION_PENALTY`) per failing check, once per candidate. The
+  search can no longer score a packaging-impossible candidate as if it were
+  free; `CandidateEvaluation.packaging_failures`/`packaging_failure_names`
+  make this visible in every checkpoint/CSV row instead of requiring a
+  separate manual `level0-bounds` check. Note this does not retroactively
+  fix Runs 1-4 above, which all predate this change -- their winning
+  candidates should be re-screened before being trusted.
 - **Run 3** (widened `loaded_fuel_mass_kg`/`ramjet_fuel_fraction`/
   `climb_angle_deg`) did not close the gap either -- adverse peak Mach
   0.620, slightly *worse* than Run 2's 0.802, while the overall score still
@@ -131,6 +141,33 @@ mass calibration, all 11 `optimizer.py` design variables:
   per-candidate `evaluate_design` cost at the search's default fast-fidelity
   settings. No calculation or output changed (121/121 tests unchanged); see
   the commit for the full before/after measurement.
+- **Run 4** (250 generations, sped-up code, same bounds as Run 3 plus
+  `climb_angle_deg` raised to 30) confirms the plateau is real, not a search-
+  budget problem: adverse peak Mach 0.596, statistically the same as (if not
+  slightly worse than) Runs 2 and 3, and `climb_angle_deg` pinned again at
+  its new ceiling (29.96) with no further score improvement from the extra
+  room -- i.e. climbing steeper stopped helping well before 30 deg. Four
+  searches (200-250 generations, populations 50-70, three different bound
+  sets) have now converged to the same ~0.6-0.8 adverse-Mach band. Further
+  identical-shape searches over the current 11 variables are not expected to
+  close this gap.
+- **The one remaining physically-real, untapped lever is not currently a
+  usable search variable**: `case.pulsejet.chamber_volume_m3` (pulsejet
+  chamber size) directly sets captured-mass-flow/cycle thrust, and the
+  entire adverse shortfall is a pulsejet-phase thrust-margin problem per the
+  isolation above -- but `mass_model.py` does not reference
+  `chamber_volume_m3` anywhere. `configs/robustness_candidate_b.yaml`'s
+  `shared_engine_body_combustor_nozzle` component (the only budget line that
+  would cover it) is a single `conceptual_allocation` lump already
+  calibrated against throat area alone, with no separate chamber-volume
+  breakdown to split from. Making chamber volume a search variable today
+  would let the optimizer grow it for free thrust with zero mass penalty --
+  exactly the "exploit missing physics" failure mode
+  `docs/design_workflow.md`'s Optimizer rules warn against. Closing this
+  requires a real calibration decision (how chamber-wall mass should scale
+  with volume, sourced or explicitly flagged provisional per
+  `docs/assumptions_registry.md`), not a bound change -- deliberately left
+  undone rather than inventing an unaudited coefficient.
 
 ## Model correction that rejected Candidate A
 

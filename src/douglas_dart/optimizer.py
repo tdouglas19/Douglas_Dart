@@ -53,6 +53,7 @@ from typing import Any
 
 from .atmosphere import G0_M_PER_S2
 from .config import ReferenceCase
+from .feasibility import packaging_bounds
 from .mass_model import MassModelCalibration, calibrate_mass_model, evaluate_parametric_mass
 from .trajectory import (
     ADVERSE_SCENARIO,
@@ -283,6 +284,15 @@ class CandidateEvaluation:
     nominal_rule_satisfied: bool | None
     adverse_rule_satisfied: bool | None
     mass_margin_kg: float | None
+    packaging_failures: int | None
+    """Count of feasibility.py's Level 0 packaging_bounds checks this
+    candidate fails (None if the candidate never reached that check -- see
+    infeasibility_reason). Not previously scored at all: a candidate could
+    win this search's objective while being physically impossible to build
+    (docs/design_convergence.md's Run 2 finding -- the selector no longer
+    fit within the shrunk body). packaging_bounds is pure geometry, no
+    simulation, so this adds negligible per-candidate cost."""
+    packaging_failure_names: tuple[str, ...] | None
 
 
 # Every weight below is visible here, not hidden inside the score, per the same
@@ -310,6 +320,14 @@ _BODY_DIAMETER_TIEBREAK_PENALTY_PER_M = 1000.0
 # to outweigh a plausible few-kg mass-margin trade so the search is pulled
 # toward closing distance instead of being indifferent to it.
 _PEAK_MACH_PROGRESS_REWARD_PER_MACH = 150.0
+# Same order of magnitude as _RULE_VIOLATION_PENALTY, applied once per
+# candidate (not per scenario, since packaging is a property of the
+# geometry, not the mission) per feasibility.py Level 0 packaging check
+# failed. Added because Run 2 (docs/design_convergence.md) found the
+# highest-scoring candidate under this search's prior objective was not
+# buildable -- the search had no term telling it that shrinking body
+# diameter to save the tiebreak penalty could break packaging elsewhere.
+_PACKAGING_VIOLATION_PENALTY = 2000.0
 
 
 def evaluate_design(
@@ -344,6 +362,8 @@ def evaluate_design(
             nominal_rule_satisfied=None,
             adverse_rule_satisfied=None,
             mass_margin_kg=None,
+            packaging_failures=None,
+            packaging_failure_names=None,
         )
 
     results: dict[str, TrajectoryResult] = {}
@@ -399,6 +419,12 @@ def evaluate_design(
     score += mass_margin_kg * _MASS_MARGIN_REWARD_PER_KG
     score -= candidate_case.vehicle.body_diameter_m * _BODY_DIAMETER_TIEBREAK_PENALTY_PER_M
 
+    packaging_checks = packaging_bounds(candidate_case)
+    failing_packaging_checks = tuple(
+        check.name for check in packaging_checks if not check.passes
+    )
+    score -= len(failing_packaging_checks) * _PACKAGING_VIOLATION_PENALTY
+
     return CandidateEvaluation(
         variables=variables,
         feasible=True,
@@ -411,6 +437,8 @@ def evaluate_design(
         nominal_rule_satisfied=results["nominal"].transonic_no_altitude_loss_rule_satisfied,
         adverse_rule_satisfied=results["adverse"].transonic_no_altitude_loss_rule_satisfied,
         mass_margin_kg=mass_margin_kg,
+        packaging_failures=len(failing_packaging_checks),
+        packaging_failure_names=failing_packaging_checks,
     )
 
 
@@ -551,6 +579,7 @@ def write_generation_log_csv(path: str | Path, records: list[GenerationRecord]) 
         "nominal_meets_duration",
         "adverse_meets_duration",
         "mass_margin_kg",
+        "packaging_failures",
         *DEFAULT_BOUNDS.names(),
     ]
     with path.open("w", newline="", encoding="utf-8") as stream:
@@ -568,6 +597,7 @@ def write_generation_log_csv(path: str | Path, records: list[GenerationRecord]) 
                 "nominal_meets_duration": record.best_evaluation.nominal_meets_duration,
                 "adverse_meets_duration": record.best_evaluation.adverse_meets_duration,
                 "mass_margin_kg": record.best_evaluation.mass_margin_kg,
+                "packaging_failures": record.best_evaluation.packaging_failures,
             }
             row.update(asdict(record.best_variables))
             writer.writerow(row)

@@ -134,6 +134,22 @@ class OptimizerTests(unittest.TestCase):
         self.assertIsNotNone(evaluation.adverse_peak_mach)
         self.assertIsNotNone(evaluation.mass_margin_kg)
 
+    def test_evaluate_design_scores_packaging_failures_it_does_not_hide(self):
+        # docs/design_convergence.md: the baseline candidate B geometry fails
+        # Level 0 packaging (pulsejet chamber needs far more forebody length
+        # than configured) even before any search touches it -- this is not
+        # a search-found failure, it's the starting point's own known gap.
+        # evaluate_design must surface and penalize this, not silently score
+        # a candidate that packaging_bounds says cannot be built.
+        evaluation = evaluate_design(self.case, self.baseline_variables, self.mass_calibration)
+        self.assertTrue(evaluation.feasible)
+        self.assertIsNotNone(evaluation.packaging_failures)
+        self.assertGreaterEqual(evaluation.packaging_failures, 1)
+        self.assertIn(
+            "pulsejet chamber volume fits within forebody length at full body cross-section",
+            evaluation.packaging_failure_names,
+        )
+
     def test_tiny_differential_evolution_run_improves_or_holds_best_score(self):
         records = run_differential_evolution(
             self.case,
