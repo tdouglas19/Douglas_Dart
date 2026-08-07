@@ -34,13 +34,14 @@ from __future__ import annotations
 
 import csv
 from dataclasses import asdict, dataclass, replace as dataclasses_replace
+from functools import lru_cache
 from pathlib import Path
 from statistics import fmean
 
 from .atmosphere import standard_atmosphere
 from .compressible import stagnation_pressure
-from .config import ReferenceCase
-from .pulsejet import PulsejetSimulator, summarize_pulsejet
+from .config import Fuel, NozzleConfig, PulsejetConfig, ReferenceCase, SelectorConfig
+from .pulsejet import PulsejetSample, PulsejetSimulator, summarize_pulsejet
 from .ramjet import evaluate_ramjet
 
 PULSEJET_MODE = "pulsejet"
@@ -126,6 +127,36 @@ class PropulsionMapPoint:
     numerical_reference_only: bool = True
 
 
+@lru_cache(maxsize=512)
+def _run_pulsejet_simulation(
+    config: PulsejetConfig,
+    selector: SelectorConfig,
+    nozzle: NozzleConfig,
+    fuel: Fuel,
+    altitude_m: float,
+    mach: float,
+    warmup_s: float,
+    measurement_s: float,
+    time_step_s: float,
+) -> tuple[tuple[PulsejetSample, ...], float]:
+    """Run the unsteady chamber simulation and return its raw output.
+
+    Pure and deterministic given these arguments (no RNG, no shared mutable
+    state -- see `PulsejetSimulator`'s docstring), so safe to memoize.
+    `_pulsejet_point` below applies `scenario.thrust_multiplier` only *after*
+    this call returns (see its `mean_net_thrust_n`/`mean_gross_thrust_n`
+    lines) -- the simulation itself never reads `scenario`. Callers
+    (`trajectory.py`'s nominal/adverse/conservative scenarios,
+    `robustness.py`'s screens) therefore re-request this exact
+    (case, altitude, mach, fidelity) combination multiple times per
+    candidate; memoizing avoids re-running the unsteady sim for a result
+    that would come out byte-identical.
+    """
+    simulator = PulsejetSimulator(config, selector, nozzle, fuel, altitude_m, mach)
+    samples = tuple(simulator.run(warmup_s + measurement_s, time_step_s))
+    return samples, simulator.inlet_total_pressure_pa
+
+
 def _pulsejet_point(
     case: ReferenceCase,
     mach: float,
@@ -136,10 +167,17 @@ def _pulsejet_point(
     measurement_s: float,
     time_step_s: float,
 ) -> PropulsionMapPoint:
-    simulator = PulsejetSimulator(
-        case.pulsejet, case.selector, case.nozzle, case.fuel, altitude_m, mach
+    samples, inlet_total_pressure_pa = _run_pulsejet_simulation(
+        case.pulsejet,
+        case.selector,
+        case.nozzle,
+        case.fuel,
+        altitude_m,
+        mach,
+        warmup_s,
+        measurement_s,
+        time_step_s,
     )
-    samples = simulator.run(warmup_s + measurement_s, time_step_s)
     window = [s for s in samples if s.time_s >= warmup_s]
     summary = summarize_pulsejet(samples, minimum_time_s=warmup_s)
 
@@ -151,7 +189,7 @@ def _pulsejet_point(
 
     ambient = standard_atmosphere(altitude_m)
     ideal_total_pressure_pa = stagnation_pressure(ambient.pressure_pa, mach)
-    installed_recovery = simulator.inlet_total_pressure_pa / ideal_total_pressure_pa
+    installed_recovery = inlet_total_pressure_pa / ideal_total_pressure_pa
 
     tsfc_per_hour = None
     if summary.specific_impulse_s > 1e-9:
