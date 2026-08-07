@@ -169,6 +169,87 @@ mass calibration, all 11 `optimizer.py` design variables:
   `docs/assumptions_registry.md`), not a bound change -- deliberately left
   undone rather than inventing an unaudited coefficient.
 
+## Root-cause investigation: why adverse actually stalls (2026-08-07)
+
+Run 5 (300 generations, packaging-scored objective) converged with the same
+character as Runs 2-4: adverse peak Mach 0.592, `ramjet_fuel_fraction`
+pinned near 0.89. This section traces the actual mechanism, replacing the
+"pulsejet-phase thrust-margin problem" framing above with a more precise
+one -- the previous framing was correct that the shortfall is confined to
+the pulsejet phase, but incomplete about *why*.
+
+**Is `minimum_lightoff_test_mach` (0.8) a hard limit, or can ramjet ignite
+earlier?** `config.py`'s `RamjetConfig` docstring already answers this: it
+is an explicit "open trade variable," not a value sourced from the
+switchable-engine patent lineage. It is freely adjustable. But adjusting it
+does not help, for two independent reasons found below.
+
+**Reason 1 -- ramjet has negative net-thrust margin under adverse
+conditions at every Mach tested, not just below 0.8.** Sweeping
+`evaluate_ramjet` for Run 4's winning candidate from Mach 0.5 to 1.1 at
+4500 m under the adverse scenario (0.75x thrust, 1.20x drag, 0.82 recovery)
+shows net thrust below drag at *every* point -- the deficit *worsens* with
+Mach (-48 N at 0.5, -248 N at 1.1). The same sweep under nominal conditions
+(1.0x thrust, 1.0x drag) turns net-thrust-positive around Mach 0.65-0.70 and
+stays positive through 1.10, matching why nominal closes. **Igniting ramjet
+earlier would not help -- it would hand off from a still-accelerating
+pulsejet phase to a mode with negative net thrust, making things worse, not
+better.** Growing the nozzle throat *does* close much of this margin
+(surplus improves from -290 N to -62 N at Mach 1.1 going from throat 0.190
+to 0.220 m, paired with a wider body to keep packaging and captured-air
+spillage consistent) -- worth revisiting once the pulsejet-phase problem
+below is fixed, since throat_diameter_m's current 0.190 m ceiling was never
+approached by the search (it optimizes primarily for nominal, since adverse
+never reaches ramjet mode to put pressure on this dimension at all).
+
+**Reason 2 -- the actual failure has nothing to do with ramjet margin: the
+pulsejet climb phase runs out of fuel first.** Instrumenting Run 4's winner
+directly (`simulate_mission` phase log) shows the adverse mission ends with
+`pulsejet_fuel_exhausted_during_climb` at t=14.3 s, altitude 2039 m (vs. a
+6000 m top-of-climb target), Mach 0.596 -- consistent with the observed
+plateau to the digit. The candidate's `ramjet_fuel_fraction=0.89` leaves
+only ~0.97 kg of the 9.0 kg loaded fuel for the pulsejet phase; at the
+observed ~0.086+ kg/s pulsejet fuel flow this is exhausted in seconds.
+Including the climb's gravity term (`mass*g*sin(gamma)`, non-trivial at
+this candidate's 30 deg climb angle -- about 130 N against a ~26 kg adverse
+mass) alongside thrust and drag shows **net climb-phase acceleration stays
+positive all the way to about Mach 0.75-0.8** -- i.e. thrust margin was
+never the constraint during the climb; fuel supply was.
+
+**Confirmed by direct test: rebalancing the fuel split closes most of the
+gap for free.** Re-running the same candidate with `ramjet_fuel_fraction`
+lowered from 0.89 to 0.6 (pulsejet fuel: 0.97 kg -> 3.6 kg) takes adverse
+peak Mach from 0.595 to *exactly* 0.802 -- it crosses `minimum_lightoff_test_mach`
+-- while nominal's own peak Mach and closure are completely unaffected
+(1.1009, still meets duration). **This is a real, available improvement the
+search was not finding.**
+
+**Why the search wasn't finding it -- a genuine scoring gap, now fixed.**
+Scoring both candidates through the pre-fix `evaluate_design` showed the
+*worse* (0.89) candidate scoring higher: -6915 vs. -7134. Instrumenting the
+difference: nominal's `time_above_mach_one_s` fell from 154.9 s to 92.5 s
+(less ramjet fuel shortens its Mach-1.10 hold) at
+`_TIME_ABOVE_MACH_ONE_REWARD_PER_S=5.0` x weight 1.0 = a 312-point loss;
+adverse's `_PEAK_MACH_PROGRESS_REWARD_PER_MACH` term gained only ~93 points
+(weight already applied) for reaching 0.802 instead of 0.595 -- nowhere
+near enough to compensate, because crossing into ramjet range carried no
+reward of its own, only the same smooth per-Mach credit as any other
+progress. Added `_REACHED_RAMJET_IGNITION_REWARD=300` (weighted to 900 for
+adverse), a discrete bonus for a scenario's peak Mach crossing
+`minimum_lightoff_test_mach`, sized from this exact measured trade-off with
+margin. Re-scored: 0.6 now beats 0.89 (-5934 vs -6615), as it should.
+Regression test: `test_evaluate_design_rewards_crossing_into_ramjet_range_in_adverse`.
+
+**What this does and does not close.** This fixes the search's *incentive*
+to find a better fuel split; it does not by itself guarantee the search
+converges there over the noisy 11-dimensional DE landscape, and it does not
+fix Reason 1 above (ramjet's negative adverse margin once ignition is
+reached) -- a candidate that now reaches Mach 0.8 in adverse will likely
+still stall shortly after entering ramjet mode until nozzle/throat sizing
+is revisited too (see `ramjet_net_thrust_nonpositive_during_acceleration`
+in the rebalanced candidate's own status). Both fixes are necessary; neither
+alone closes adverse.
+
 ## Model correction that rejected Candidate A
 
 Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of

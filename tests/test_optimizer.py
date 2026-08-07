@@ -164,6 +164,38 @@ class OptimizerTests(unittest.TestCase):
         self.assertIsNotNone(evaluation.adverse_peak_mach)
         self.assertIsNotNone(evaluation.mass_margin_kg)
 
+    def test_evaluate_design_rewards_crossing_into_ramjet_range_in_adverse(self):
+        # docs/design_convergence.md: a direct measurement found the search
+        # rationally *avoiding* a fuel split that let the adverse scenario
+        # cross ramjet.py's minimum_lightoff_test_mach (0.595 -> 0.802 peak
+        # Mach) at zero cost to nominal's own closure, because nominal's
+        # shortened Mach-1.10 hold (less ramjet fuel) cost more score than
+        # adverse's smooth peak-Mach credit gained. This is the exact
+        # candidate pair from that measurement -- ramjet_fuel_fraction=0.6
+        # must score strictly better than 0.892 now that crossing the
+        # lightoff threshold carries its own discrete reward.
+        base = dict(
+            body_diameter_m=0.195,
+            body_length_m=2.180399725775693,
+            climb_angle_deg=29.964117719444015,
+            dive_angle_deg=-3.0,
+            dive_entry_mach=0.7793688791066012,
+            exit_to_throat_area_ratio=1.0298163472681163,
+            loaded_fuel_mass_kg=9.0,
+            sled_release_speed_m_per_s=121.28468576040422,
+            throat_diameter_m=0.1246150615512329,
+            wing_area_scale_factor=0.5,
+        )
+        starved = evaluate_design(
+            self.case, DesignVariables(**base, ramjet_fuel_fraction=0.892), self.mass_calibration
+        )
+        balanced = evaluate_design(
+            self.case, DesignVariables(**base, ramjet_fuel_fraction=0.6), self.mass_calibration
+        )
+        self.assertLess(starved.adverse_peak_mach, 0.6)
+        self.assertGreaterEqual(balanced.adverse_peak_mach, 0.8)
+        self.assertGreater(balanced.score, starved.score)
+
     def test_evaluate_design_scores_packaging_failures_it_does_not_hide(self):
         # docs/design_convergence.md: the baseline candidate B geometry fails
         # Level 0 packaging (pulsejet chamber needs far more forebody length

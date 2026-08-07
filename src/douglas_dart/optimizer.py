@@ -328,6 +328,22 @@ _PEAK_MACH_PROGRESS_REWARD_PER_MACH = 150.0
 # buildable -- the search had no term telling it that shrinking body
 # diameter to save the tiebreak penalty could break packaging elsewhere.
 _PACKAGING_VIOLATION_PENALTY = 2000.0
+# Discrete reward for a scenario's peak Mach crossing ramjet.py's own
+# minimum_lightoff_test_mach -- a genuine, structurally meaningful threshold
+# (it unlocks the rest of the mission architecture), distinct from
+# _PEAK_MACH_PROGRESS_REWARD_PER_MACH's smooth per-Mach credit. Added because
+# a direct measurement (docs/design_convergence.md) found the search
+# rationally avoiding this crossing: giving pulsejet-phase fuel a bigger
+# share (via a lower ramjet_fuel_fraction) let one candidate's adverse
+# scenario cross exactly into ramjet range (Mach 0.595 -> 0.802) at zero cost
+# to nominal's own closure, yet the search's *score* went down -- nominal's
+# `_TIME_ABOVE_MACH_ONE_REWARD_PER_S` term lost ~312 points (less ramjet fuel
+# shortened its Mach-1.10 hold by ~62s) against only ~93 points gained from
+# adverse's smooth peak-Mach credit (weight already applied). 300 (weighted
+# by _SCENARIO_WEIGHTS to 900 for adverse) is sized to comfortably outweigh
+# that measured trade, so crossing this threshold is no longer scored worse
+# than staying short of it.
+_REACHED_RAMJET_IGNITION_REWARD = 300.0
 
 
 def evaluate_design(
@@ -413,6 +429,8 @@ def evaluate_design(
             score -= weight * _RULE_VIOLATION_PENALTY
         score += weight * result.time_above_mach_one_s * _TIME_ABOVE_MACH_ONE_REWARD_PER_S
         score += weight * result.peak_mach_reached * _PEAK_MACH_PROGRESS_REWARD_PER_MACH
+        if result.peak_mach_reached >= candidate_case.ramjet.minimum_lightoff_test_mach:
+            score += weight * _REACHED_RAMJET_IGNITION_REWARD
 
     mass_margin_kg = (
         candidate_case.requirements.maximum_takeoff_mass_kg
