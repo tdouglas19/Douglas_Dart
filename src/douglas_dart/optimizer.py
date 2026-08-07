@@ -126,9 +126,23 @@ DEFAULT_BOUNDS = DesignVariableBounds(
     body_length_m=(1.80, 2.80),
     throat_diameter_m=(0.110, 0.190),
     exit_to_throat_area_ratio=(1.02, 1.30),
-    loaded_fuel_mass_kg=(2.50, 6.00),
-    ramjet_fuel_fraction=(0.20, 0.80),
-    climb_angle_deg=(3.0, 15.0),
+    # A 200-generation search (docs/design_convergence.md, post scoring-fix)
+    # pinned the best candidate at the old 6.00 kg ceiling with 4.26 kg of
+    # mass margin still unused against the 25.0 kg MTOM requirement -- the
+    # old bound was an arbitrary round number, not a packaging or mass limit
+    # (feasibility.py's fuel-volume-vs-annulus check passes with room to
+    # spare at 6.00 kg). Raised to leave headroom before MTOM actually binds.
+    loaded_fuel_mass_kg=(2.50, 9.00),
+    # Same search pinned ramjet_fuel_fraction at the old 0.80 ceiling, which
+    # was an arbitrary round number short of the fraction's own hard upper
+    # bound of 1.0 (100% of loaded fuel to the ramjet speed-run budget).
+    ramjet_fuel_fraction=(0.20, 1.00),
+    # Same search pinned climb_angle_deg at the old 15 deg ceiling; no
+    # documented structural or aerodynamic cap motivated that number (see
+    # trajectory.py's flight-path-angle climb, which has no small-angle
+    # assumption). Raised to give the search more room before concluding
+    # climb angle is not the limiting variable.
+    climb_angle_deg=(3.0, 20.0),
     dive_angle_deg=(-20.0, -3.0),
     dive_entry_mach=(0.30, 0.78),
     sled_release_speed_m_per_s=(35.0, _SLED_RELEASE_SPEED_UPPER_BOUND_M_PER_S),

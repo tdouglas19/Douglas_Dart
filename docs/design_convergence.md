@@ -45,6 +45,58 @@ check the winning candidate's `wing_area_scale_factor` and resulting
 `reference_area_m2` against the Gate 1 bound before declaring it closed. See
 `docs/design_workflow.md`'s Level 3 row.
 
+## `design-optimize` runs with `wing_area_scale_factor` (2026-08-07)
+
+Two 150-200 generation, population-50 unattended searches this session,
+against `shared_nozzle_candidate_b.yaml`, `configs/robustness_candidate_b.yaml`
+mass calibration, all 11 `optimizer.py` design variables:
+
+- **Run 1** found and exposed a scoring-function bug: below Mach 1, every
+  score term was either boolean (reached-target/duration, identical whether
+  a scenario stalls at Mach 0.1 or Mach 0.9) or zero (time-above-Mach-one),
+  so the search had no gradient telling it that giving up on adverse-scenario
+  acceleration was bad -- only that doing so freed up mass margin, which
+  scores continuously. The adverse-scenario peak Mach collapsed from ~0.80 to
+  ~0.13 between generation 22 and 39 while the reported best score kept
+  improving. Fixed in `optimizer.py` by adding
+  `_PEAK_MACH_PROGRESS_REWARD_PER_MACH`, continuous credit for however far a
+  scenario actually got, sized to outweigh a plausible few-kg mass-margin
+  trade.
+- **Run 2** (corrected objective) converged cleanly and held: best candidate
+  reaches nominal peak Mach 1.102 and meets the nominal duration requirement,
+  but adverse peak Mach plateaus at **0.802** and does not meet duration --
+  **the design does not close under the adverse scenario** at this search's
+  current variable bounds. Six of eleven variables were pinned at a bound in
+  the winning vector: `body_diameter_m` (195 mm, the fixed-intake floor --
+  a real physical limit), `loaded_fuel_mass_kg` (6.00 kg, the old ceiling),
+  `ramjet_fuel_fraction` (0.80, the old ceiling), `climb_angle_deg` (15 deg,
+  the old ceiling), `sled_release_speed_m_per_s` (121.2 m/s, the placeholder
+  rail/acceleration ceiling), and `wing_area_scale_factor` (0.50, the floor).
+  A DE run pinned at a bound usually means the true optimum sits outside the
+  box, not that the bound is a real constraint -- so the three ceilings with
+  no physical basis (`loaded_fuel_mass_kg`, `ramjet_fuel_fraction`,
+  `climb_angle_deg`) were widened in `optimizer.py`'s `DEFAULT_BOUNDS` (see
+  its inline comments for the evidence and the physical constraint each new
+  ceiling actually ties to -- MTOM margin, the fraction's own 1.0 bound, and
+  headroom against no documented structural cap, respectively). A third,
+  corrected+widened search is running to see whether that closes the gap or
+  whether the adverse scenario's thrust/drag/mass derates (`trajectory.py`'s
+  `ADVERSE_SCENARIO`: 0.75x thrust, 1.20x drag, 0.82 ramjet recovery, +2.90
+  kg mass) are the actual binding constraint regardless of geometry.
+- **Independent confirmation the winning candidate is not yet buildable
+  regardless of the Mach question**: running `feasibility.py`'s
+  `evaluate_level0_feasibility` on Run 2's best candidate shows the selector
+  no longer fits within the shrunk 195 mm body diameter (`selector+allowance
+  205 mm vs body 195 mm`) and the pulsejet chamber packaging failure from
+  Gate 1 above persists (now 837 mm needed vs. 180 mm forebody, worse than
+  the original 722 mm because the search shrank body diameter to its floor).
+  `optimizer.py`'s `evaluate_design` does not currently call Level 0
+  packaging checks at all -- it only rejects a candidate if `apply_design_
+  variables`/`simulate_mission` raise. A design that scores well by this
+  search's objective can still fail Level 0 packaging silently; treat every
+  `design-optimize` result as requiring a `level0-bounds` check before
+  trusting it, per `docs/design_workflow.md`'s closing rule for every gate.
+
 ## Model correction that rejected Candidate A
 
 Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of
