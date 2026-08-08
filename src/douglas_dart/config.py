@@ -483,6 +483,82 @@ class SimulationConfig:
 
 
 @dataclass(frozen=True)
+class MissionSimulationConfig:
+    """Explicit provisional controls and numerical settings for mission closure."""
+
+    integration_time_step_s: float
+    maximum_duration_s: float
+    reference_release_speed_m_per_s: float
+    reference_top_of_climb_altitude_m: float
+    pulsejet_map_altitudes_m: tuple[float, ...]
+    pulsejet_map_mach_values: tuple[float, ...]
+    pulsejet_propulsion_derate_fraction: float
+    ramjet_propulsion_derate_fraction: float
+    climb_flight_path_angle_deg: float
+    dive_flight_path_angle_deg: float
+    zoom_flight_path_angle_deg: float
+    zoom_end_mach: float
+    ramjet_handoff_mach: float
+    allow_forced_ramjet_below_self_sustaining: bool
+    flight_path_control_gain_per_s: float
+    speed_control_gain_per_s: float
+    minimum_angle_of_attack_deg: float
+    maximum_angle_of_attack_deg: float
+    drag_rise_start_mach: float
+    drag_rise_end_mach: float
+    ramjet_spillage_drag_momentum_fraction: float
+
+    def __post_init__(self) -> None:
+        for name in (
+            "integration_time_step_s",
+            "maximum_duration_s",
+            "reference_release_speed_m_per_s",
+            "reference_top_of_climb_altitude_m",
+            "zoom_end_mach",
+            "ramjet_handoff_mach",
+            "flight_path_control_gain_per_s",
+            "speed_control_gain_per_s",
+        ):
+            _positive(name, getattr(self, name))
+        for name in (
+            "pulsejet_propulsion_derate_fraction",
+            "ramjet_propulsion_derate_fraction",
+            "ramjet_spillage_drag_momentum_fraction",
+        ):
+            value = getattr(self, name)
+            if not 0.0 <= value < 1.0:
+                raise ValueError(f"{name} must be in [0, 1)")
+        if len(self.pulsejet_map_altitudes_m) < 2:
+            raise ValueError("pulsejet map requires at least two altitudes")
+        if len(self.pulsejet_map_mach_values) < 2:
+            raise ValueError("pulsejet map requires at least two Mach values")
+        if any(value < 0.0 for value in self.pulsejet_map_altitudes_m):
+            raise ValueError("pulsejet map altitudes cannot be negative")
+        if any(value < 0.0 for value in self.pulsejet_map_mach_values):
+            raise ValueError("pulsejet map Mach values cannot be negative")
+        if tuple(sorted(set(self.pulsejet_map_altitudes_m))) != (
+            self.pulsejet_map_altitudes_m
+        ):
+            raise ValueError("pulsejet map altitudes must be strictly increasing")
+        if tuple(sorted(set(self.pulsejet_map_mach_values))) != (
+            self.pulsejet_map_mach_values
+        ):
+            raise ValueError("pulsejet map Mach values must be strictly increasing")
+        if not 0.0 < self.climb_flight_path_angle_deg < 90.0:
+            raise ValueError("climb flight-path angle must be in (0, 90) degrees")
+        if not -90.0 < self.dive_flight_path_angle_deg < 0.0:
+            raise ValueError("dive flight-path angle must be in (-90, 0) degrees")
+        if not 0.0 < self.zoom_flight_path_angle_deg < 90.0:
+            raise ValueError("zoom flight-path angle must be in (0, 90) degrees")
+        if self.minimum_angle_of_attack_deg >= self.maximum_angle_of_attack_deg:
+            raise ValueError("minimum angle of attack must be below maximum")
+        if self.drag_rise_start_mach < 0.0:
+            raise ValueError("drag-rise start Mach cannot be negative")
+        if self.drag_rise_end_mach <= self.drag_rise_start_mach:
+            raise ValueError("drag-rise end Mach must exceed drag-rise start Mach")
+
+
+@dataclass(frozen=True)
 class ReferenceCase:
     name: str
     altitude_m: float
@@ -498,6 +574,7 @@ class ReferenceCase:
     requirements: RequirementsConfig
     geometry: OpenVSPGeometryConfig
     simulation: SimulationConfig
+    mission_simulation: MissionSimulationConfig
 
     def __post_init__(self) -> None:
         if self.vehicle.body_diameter_m < self.selector.circular_intake_diameter_m:
@@ -553,6 +630,41 @@ class ReferenceCase:
                     "flight reference area must equal the exposed lifting-surface "
                     "area used by VSPAERO"
                 )
+        if (
+            self.mission_simulation.pulsejet_map_altitudes_m[0]
+            > self.mission.field_elevation_msl_m
+            or self.mission_simulation.pulsejet_map_altitudes_m[-1]
+            < self.mission.top_of_climb_altitude_max_msl_m
+        ):
+            raise ValueError("pulsejet map altitude range must cover the climb envelope")
+        if (
+            self.mission_simulation.pulsejet_map_mach_values[-1]
+            < self.ramjet.minimum_self_sustaining_mach
+        ):
+            raise ValueError("pulsejet map Mach range must reach the ramjet handoff")
+        if self.mission_simulation.drag_rise_end_mach > self.mission.peak_mach:
+            raise ValueError("drag-rise end Mach cannot exceed the mission peak Mach")
+        if not (
+            self.mission.top_of_climb_altitude_min_msl_m
+            <= self.mission_simulation.reference_top_of_climb_altitude_m
+            <= self.mission.top_of_climb_altitude_max_msl_m
+        ):
+            raise ValueError(
+                "reference top-of-climb altitude lies outside mission bounds"
+            )
+        if (
+            self.mission_simulation.ramjet_handoff_mach
+            < self.ramjet.minimum_lightoff_test_mach
+        ):
+            raise ValueError("ramjet handoff cannot precede the light-off test Mach")
+        if (
+            not self.mission_simulation.allow_forced_ramjet_below_self_sustaining
+            and self.mission_simulation.ramjet_handoff_mach
+            < self.ramjet.minimum_self_sustaining_mach
+        ):
+            raise ValueError(
+                "handoff below self-sustaining Mach requires forced-operation opt-in"
+            )
 
 
 def _mapping(data: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -610,6 +722,7 @@ def load_reference_case(
     ram_inlet = _mapping(geometry, "ram_inlet")
     analysis = _mapping(geometry, "analysis")
     simulation = _mapping(data, "simulation")
+    mission_simulation = _mapping(data, "mission_simulation")
 
     return ReferenceCase(
         name=str(case_header["name"]),
@@ -660,4 +773,67 @@ def load_reference_case(
             wake_iterations=int(analysis["wake_iterations"]),
         ),
         simulation=SimulationConfig(**simulation),
+        mission_simulation=MissionSimulationConfig(
+            integration_time_step_s=float(
+                mission_simulation["integration_time_step_s"]
+            ),
+            maximum_duration_s=float(mission_simulation["maximum_duration_s"]),
+            reference_release_speed_m_per_s=float(
+                mission_simulation["reference_release_speed_m_per_s"]
+            ),
+            reference_top_of_climb_altitude_m=float(
+                mission_simulation["reference_top_of_climb_altitude_m"]
+            ),
+            pulsejet_map_altitudes_m=tuple(
+                float(value)
+                for value in mission_simulation["pulsejet_map_altitudes_m"]
+            ),
+            pulsejet_map_mach_values=tuple(
+                float(value)
+                for value in mission_simulation["pulsejet_map_mach_values"]
+            ),
+            pulsejet_propulsion_derate_fraction=float(
+                mission_simulation["pulsejet_propulsion_derate_fraction"]
+            ),
+            ramjet_propulsion_derate_fraction=float(
+                mission_simulation["ramjet_propulsion_derate_fraction"]
+            ),
+            climb_flight_path_angle_deg=float(
+                mission_simulation["climb_flight_path_angle_deg"]
+            ),
+            dive_flight_path_angle_deg=float(
+                mission_simulation["dive_flight_path_angle_deg"]
+            ),
+            zoom_flight_path_angle_deg=float(
+                mission_simulation["zoom_flight_path_angle_deg"]
+            ),
+            zoom_end_mach=float(mission_simulation["zoom_end_mach"]),
+            ramjet_handoff_mach=float(
+                mission_simulation["ramjet_handoff_mach"]
+            ),
+            allow_forced_ramjet_below_self_sustaining=bool(
+                mission_simulation["allow_forced_ramjet_below_self_sustaining"]
+            ),
+            flight_path_control_gain_per_s=float(
+                mission_simulation["flight_path_control_gain_per_s"]
+            ),
+            speed_control_gain_per_s=float(
+                mission_simulation["speed_control_gain_per_s"]
+            ),
+            minimum_angle_of_attack_deg=float(
+                mission_simulation["minimum_angle_of_attack_deg"]
+            ),
+            maximum_angle_of_attack_deg=float(
+                mission_simulation["maximum_angle_of_attack_deg"]
+            ),
+            drag_rise_start_mach=float(
+                mission_simulation["drag_rise_start_mach"]
+            ),
+            drag_rise_end_mach=float(
+                mission_simulation["drag_rise_end_mach"]
+            ),
+            ramjet_spillage_drag_momentum_fraction=float(
+                mission_simulation["ramjet_spillage_drag_momentum_fraction"]
+            ),
+        ),
     )

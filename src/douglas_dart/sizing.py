@@ -82,6 +82,10 @@ class SharedNozzleTradePoint:
     ramjet_nominal_thrust_margin_n: float
     ramjet_derated_thrust_margin_n: float
     ramjet_inlet_spillage_fraction: float
+    ramjet_spilled_air_mass_flow_kg_per_s: float
+    ramjet_spillage_momentum_scale_n: float
+    maximum_nominal_spillage_momentum_fraction: float
+    maximum_derated_spillage_momentum_fraction: float
     ramjet_air_mass_flow_kg_per_s: float
     ramjet_fuel_mass_flow_kg_per_s: float
     ramjet_full_throttle_fuel_endurance_s: float | None
@@ -479,6 +483,22 @@ def evaluate_shared_nozzle_trade(
     derated_thrust_n = (1.0 - propulsion_derate_fraction) * ramjet.net_thrust_n
     nominal_margin_n = ramjet.net_thrust_n - drag_n
     derated_margin_n = derated_thrust_n - drag_n
+    spilled_air_mass_flow_kg_per_s = max(
+        ramjet.potential_captured_air_mass_flow_kg_per_s
+        - ramjet.air_mass_flow_kg_per_s,
+        0.0,
+    )
+    spillage_momentum_scale_n = spilled_air_mass_flow_kg_per_s * speed_m_per_s
+    maximum_nominal_spillage_momentum_fraction = (
+        nominal_margin_n / spillage_momentum_scale_n
+        if spillage_momentum_scale_n > 0.0
+        else float("inf")
+    )
+    maximum_derated_spillage_momentum_fraction = (
+        derated_margin_n / spillage_momentum_scale_n
+        if spillage_momentum_scale_n > 0.0
+        else float("inf")
+    )
 
     full_endurance_s = (
         case.mission.ramjet_speed_run_fuel_budget_kg / ramjet.fuel_mass_flow_kg_per_s
@@ -564,6 +584,8 @@ def evaluate_shared_nozzle_trade(
         status.append("configured_loaded_mass_exceeds_requirement")
     if pulsejet_summary.mean_net_thrust_n <= 0.0:
         status.append("pulsejet_mean_net_thrust_nonpositive")
+    if spillage_momentum_scale_n > 0.0:
+        status.append("spillage_drag_must_close_within_reported_momentum_fraction")
     status.append("pulsejet_statistics_exclude_configured_startup_transient")
 
     return SharedNozzleTradePoint(
@@ -584,6 +606,14 @@ def evaluate_shared_nozzle_trade(
         ramjet_nominal_thrust_margin_n=nominal_margin_n,
         ramjet_derated_thrust_margin_n=derated_margin_n,
         ramjet_inlet_spillage_fraction=ramjet.inlet_spillage_fraction,
+        ramjet_spilled_air_mass_flow_kg_per_s=spilled_air_mass_flow_kg_per_s,
+        ramjet_spillage_momentum_scale_n=spillage_momentum_scale_n,
+        maximum_nominal_spillage_momentum_fraction=(
+            maximum_nominal_spillage_momentum_fraction
+        ),
+        maximum_derated_spillage_momentum_fraction=(
+            maximum_derated_spillage_momentum_fraction
+        ),
         ramjet_air_mass_flow_kg_per_s=ramjet.air_mass_flow_kg_per_s,
         ramjet_fuel_mass_flow_kg_per_s=ramjet.fuel_mass_flow_kg_per_s,
         ramjet_full_throttle_fuel_endurance_s=full_endurance_s,

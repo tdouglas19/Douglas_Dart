@@ -49,6 +49,28 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(case.requirements.transonic_no_altitude_loss_required)
         self.assertAlmostEqual(case.requirements.transonic_regime_start_mach, 0.80)
 
+    def test_candidate_b_keeps_closure_inputs_distinct_from_sled_target(self):
+        case = load_reference_case(
+            ROOT / "configs" / "shared_nozzle_candidate_b.yaml"
+        )
+        self.assertEqual(case.vehicle.body_diameter_m, 0.210)
+        self.assertEqual(case.nozzle.throat_diameter_m, 0.170)
+        self.assertEqual(case.flight.initial_mass_kg, 24.6)
+        self.assertEqual(case.mission.loaded_fuel_mass_kg, 7.40)
+        self.assertEqual(case.mission.ramjet_speed_run_fuel_budget_kg, 1.20)
+        self.assertEqual(
+            case.mission_simulation.reference_release_speed_m_per_s,
+            100.0,
+        )
+        self.assertGreater(
+            case.mission_simulation.reference_release_speed_m_per_s,
+            case.mission.sled_release_speed_max_m_per_s,
+        )
+        self.assertEqual(case.mission_simulation.pulsejet_map_mach_values[0], 0.0)
+        self.assertTrue(
+            case.mission_simulation.allow_forced_ramjet_below_self_sustaining
+        )
+
     def test_flight_and_vspaero_reference_area_cannot_silently_diverge(self):
         case = load_reference_case(
             ROOT / "configs" / "shared_nozzle_candidate_a.yaml"
