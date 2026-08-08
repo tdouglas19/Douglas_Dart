@@ -37,6 +37,11 @@ class RobustnessTests(unittest.TestCase):
             selected.status,
         )
 
+    def test_static_screen_does_not_overwrite_coupled_mission_mass(self):
+        self.assertAlmostEqual(self.case.flight.initial_mass_kg, 24.6)
+        result = run_robustness_trade(self.case, self.robustness_path)
+        self.assertAlmostEqual(result.mass_budget.current_total_mass_kg, 21.0)
+
 
 if __name__ == "__main__":
     unittest.main()

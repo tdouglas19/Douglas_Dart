@@ -93,10 +93,27 @@ vehicle.
 5. **Aerodynamic drag** is still a diameter-scaled budget. The flight kernel's simple
    coefficient polar is not consistent enough to replace it at Mach 1.10.
 
+## Coupled Candidate B numerical reference
+
+The phase-based mission model uses a separate 170 mm-throat, 24.6 kg Candidate B
+reference with 7.4 kg loaded fuel. At the 0.05 s mission step it reaches Mach
+1.10068 and spends 9.20 s above Mach 1, with +47.2 N minimum ramjet acceleration
+margin and +70.8 N minimum Mach-target run margin. These are numerical outputs of the
+stated low-order equations, not validated vehicle performance.
+
+The result is conditional on a 100 m/s simulated release rather than the recovered
+39–42 m/s target, forced ramjet operation from Mach 0.80, and a 50% multiplier on
+uncaptured-flow momentum as a spillage-drag proxy. No live VSPAERO polar is used.
+Longitudinal ground contact does not demonstrate intact landing or reciprocal return.
+
+The 160 mm point above remains the selected static robustness-grid alternative; its
+score and mass budget must not be transferred to the 170 mm coupled-mission case.
+
 ## Do not freeze yet
 
-Keep body diameter, throat size, inlet recovery, drag area, fuel allocation, and
-transition schedule open. The next high-value gate is a coupled phase-based mission
-simulation using one documented drag-area model, followed by inlet/back-pressure and
-external-aerodynamic closure. Candidate B must not be promoted as mission-feasible
-until those gates, stability/control, and recovery are demonstrated.
+Keep body diameter, throat size, inlet recovery, drag area, fuel allocation, launch
+speed, and transition schedule open. The next high-value gate is resolving the
+surface-area/launch-speed/drag conflict, followed by live external-aerodynamic and
+inlet/back-pressure closure. Candidate B must not be promoted as mission-feasible
+until those gates, stability/control, landing, and reciprocal recovery are
+demonstrated.

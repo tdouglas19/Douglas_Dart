@@ -44,6 +44,39 @@ class PulsejetTests(unittest.TestCase):
             )
         )
 
+    def test_ignition_consumes_one_stoichiometric_air_charge(self):
+        simulator = PulsejetSimulator(
+            self.case.pulsejet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            self.case.altitude_m,
+            self.case.mach,
+        )
+        simulator.state.internal_energy_j *= (
+            0.99 * simulator.inlet_total_pressure_pa / simulator.pressure_pa
+        )
+        initial_fresh_air_kg = simulator.state.fresh_air_mass_kg
+        initial_unburned_fuel_kg = simulator.state.unburned_fuel_mass_kg
+
+        event = simulator._ignite_if_ready()
+
+        expected_burned_fuel_kg = min(
+            initial_unburned_fuel_kg,
+            initial_fresh_air_kg / self.case.fuel.stoichiometric_air_fuel_ratio,
+        )
+        self.assertEqual(event, "ignition")
+        self.assertAlmostEqual(
+            simulator.state.unburned_fuel_mass_kg,
+            initial_unburned_fuel_kg - expected_burned_fuel_kg,
+        )
+        self.assertAlmostEqual(
+            simulator.state.fresh_air_mass_kg,
+            initial_fresh_air_kg
+            - expected_burned_fuel_kg
+            * self.case.fuel.stoichiometric_air_fuel_ratio,
+        )
+
     def test_summary_marks_reference_only(self):
         simulator = PulsejetSimulator(
             self.case.pulsejet,

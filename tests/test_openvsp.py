@@ -167,6 +167,17 @@ class OpenVSPGeometryTests(unittest.TestCase):
         self.assertAlmostEqual(stations[-1].diameter_m, 0.130 * 1.05**0.5)
         self.assertEqual(stations[-1].x_location_m, 2.30)
 
+    def test_candidate_b_geometry_uses_fixed_intake_and_larger_body_and_exit(self):
+        case = load_reference_case(
+            ROOT / "configs" / "shared_nozzle_candidate_b.yaml"
+        )
+        stations = body_stations(case)
+        self.assertAlmostEqual(stations[0].diameter_m, 0.195)
+        self.assertAlmostEqual(stations[1].diameter_m, 0.210)
+        self.assertAlmostEqual(stations[-1].diameter_m, 0.170 * 1.05**0.5)
+        self.assertEqual(len(case.geometry.mach_values), 6)
+        self.assertIn(12.0, case.geometry.alpha_deg_values)
+
     def test_clocking_is_explicit_and_evenly_spaced(self):
         self.assertEqual(clocking_angles_deg(2, 0.0), (0.0, 180.0))
         self.assertEqual(clocking_angles_deg(4, 45.0), (45.0, 135.0, 225.0, 315.0))

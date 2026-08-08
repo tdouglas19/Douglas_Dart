@@ -19,6 +19,8 @@
   while keeping hardware, operability, and safety criteria open.
 - Parameter-driven OpenVSP geometry and explicit-point VSPAERO runner are implemented
   against the official 3.51.2 API contract.
+- A phase-based longitudinal mission reference, fuel ledger, dry-mass-preserving fuel
+  trade, and strict live-VSPAERO table adapter are implemented.
 
 ## Next: live external-aerodynamics closure
 
@@ -44,18 +46,21 @@
    atomization, safety, storage, energy density, and hardware mass.
 5. Model transition timing, leakage, trapped volume, and igniter/flameholder behavior.
 
-## Coupled mission model
+## Coupled mission model: remaining gates
 
-1. Build a phase manager for sled release → pulsejet climb → dive/acceleration →
-   light-off experiment → ramjet handoff → fuel-limited run → zoom/glide → landing.
-2. Interpolate cycle-averaged pulsejet maps, ramjet maps, and aerodynamic tables.
-3. Track fuel by phase, CG, dynamic pressure, heat proxies, stability/control margins,
+1. Replace the 100 m/s numerical release with a launch/surface/drag solution that can
+   meet the recovered 39–42 m/s target.
+2. Replace forced Mach 0.80 ramjet operation and the spillage proxy with validated
+   inlet/transition maps.
+3. Track CG, heat proxies, stability/control margins,
    and recovery reserve.
 4. Optimize speed-run altitude and mode-transition schedule rather than treating
    4,500 m as closed.
 5. Extend the current named static robustness cases through the full trajectory,
    including off-nominal atmosphere and failed light-off, before judging the
    five-second and reciprocal-flight requirements.
+6. Demonstrate intact landing and same-day reciprocal return rather than treating
+   longitudinal ground contact as recovery.
 
 ## Decisions still owned by the user
 

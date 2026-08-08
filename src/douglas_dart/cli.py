@@ -5,12 +5,21 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
+from .aero import BudgetAeroModel, SupplementedVSPAeroModel
+from .aero_tables import (
+    VSPAeroCoefficientTable,
+    load_vspaero_summary_json,
+    write_vspaero_summary_json,
+)
 from .config import load_fuels, load_reference_case
 from .fuel_trade import fuel_performance_trade
+from .mission import MissionPolicy, MissionSimulator
+from .mission_trade import mission_trade_sweep
 from .openvsp_geometry import build_openvsp_geometry
+from .performance_maps import build_pulsejet_performance_map
 from .pulsejet import PulsejetSimulator, summarize_pulsejet
 from .ramjet import evaluate_ramjet
 from .robustness import run_robustness_trade
@@ -237,6 +246,126 @@ def _key_variables(args: argparse.Namespace) -> int:
     return 0
 
 
+def _mission(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    if args.ramjet_fuel_allocation is not None:
+        case = replace(
+            case,
+            mission=replace(
+                case.mission,
+                ramjet_speed_run_fuel_budget_kg=args.ramjet_fuel_allocation,
+            ),
+        )
+    map_build = build_pulsejet_performance_map(
+        case,
+        time_step_s=args.pulsejet_map_dt,
+    )
+    policy = MissionPolicy.from_case(
+        case,
+        top_of_climb_altitude_m=args.top_of_climb_altitude,
+        climb_flight_path_angle_deg=args.climb_angle,
+        dive_flight_path_angle_deg=args.dive_angle,
+        ramjet_spillage_drag_momentum_fraction=(
+            args.spillage_momentum_fraction
+        ),
+        ramjet_handoff_mach=args.handoff_mach,
+        allow_forced_ramjet_below_self_sustaining=args.allow_forced_ramjet,
+    )
+    aero_model = None
+    if args.vspaero_json is not None:
+        table = VSPAeroCoefficientTable.from_summary(
+            load_vspaero_summary_json(args.vspaero_json),
+            beta_deg=0.0,
+        )
+        budget_model = BudgetAeroModel(case)
+        aero_model = SupplementedVSPAeroModel(
+            case,
+            table,
+            budget_model.parasitic_drag_area_m2,
+            supplementary_drag_status=(
+                "configured_parasitic_budget_added_to_vspaero_inviscid_drag"
+            ),
+        )
+    result = MissionSimulator(
+        case,
+        map_build.engine_map,
+        policy=policy,
+        aero_model=aero_model,
+    ).run(
+        release_speed_m_per_s=args.release_speed,
+        integration_time_step_s=args.mission_dt,
+    )
+    if args.csv:
+        _write_samples(Path(args.csv), list(result.samples))
+    if args.map_csv:
+        _write_samples(Path(args.map_csv), list(map_build.points))
+    output = {
+        "launch_screen": asdict(result.launch_screen),
+        "policy": asdict(result.policy),
+        "summary": asdict(result.summary),
+        "events": [asdict(event) for event in result.events],
+        "pulsejet_map": {
+            "altitudes_m": map_build.engine_map.altitudes_m,
+            "mach_values": map_build.engine_map.mach_values,
+            "point_count": len(map_build.points),
+            "numerical_reference_only": True,
+        },
+        "aerodynamics": {
+            "source": (
+                "vspaero_inviscid_plus_configured_parasitic_budget"
+                if aero_model is not None
+                else "provisional_budget_model"
+            ),
+            "vspaero_json": args.vspaero_json,
+        },
+    }
+    print(json.dumps(output, indent=2))
+    return 0
+
+
+def _mission_trade(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    map_build = build_pulsejet_performance_map(
+        case,
+        time_step_s=args.pulsejet_map_dt,
+    )
+    points = mission_trade_sweep(
+        case,
+        map_build.engine_map,
+        release_speeds_m_per_s=args.release_speeds,
+        top_of_climb_altitudes_m=args.top_of_climb_altitudes,
+        climb_flight_path_angles_deg=args.climb_angles,
+        dive_flight_path_angles_deg=args.dive_angles,
+        ramjet_fuel_allocations_kg=args.ramjet_fuel_allocations,
+        loaded_fuel_masses_kg=args.loaded_fuel_masses,
+        ramjet_handoff_mach=args.handoff_mach,
+        allow_forced_ramjet_below_self_sustaining=(
+            args.allow_forced_ramjet
+        ),
+        ramjet_spillage_drag_momentum_fractions=(
+            args.spillage_momentum_fractions
+        ),
+        integration_time_step_s=args.mission_dt,
+    )
+    if args.csv:
+        _write_samples(Path(args.csv), points)
+    if args.map_csv:
+        _write_samples(Path(args.map_csv), list(map_build.points))
+    closing_points = [point for point in points if point.full_mission_numerically_closes]
+    output = {
+        "selection": None,
+        "selection_note": (
+            "points are intentionally unranked because forced operability and "
+            "spillage-drag evidence are unresolved gates"
+        ),
+        "point_count": len(points),
+        "numerical_closure_count": len(closing_points),
+        "points": [asdict(point) for point in points],
+    }
+    print(json.dumps(output, indent=2))
+    return 0
+
+
 def _openvsp_build(args: argparse.Namespace) -> int:
     case = load_reference_case(args.config, args.fuels)
     summary = build_openvsp_geometry(case, args.output)
@@ -249,6 +378,8 @@ def _vspaero_sweep(args: argparse.Namespace) -> int:
     summary = run_vspaero_sweep(case, args.model)
     if args.csv:
         _write_samples(Path(args.csv), list(summary.points))
+    if args.json:
+        write_vspaero_summary_json(summary, args.json)
     print(json.dumps(asdict(summary), indent=2))
     return 0
 
@@ -435,6 +566,101 @@ def build_parser() -> argparse.ArgumentParser:
     key_variables.add_argument("--csv", default=None)
     key_variables.set_defaults(func=_key_variables)
 
+    mission = subparsers.add_parser(
+        "mission",
+        help="run the fuel-limited phase-based longitudinal mission model",
+    )
+    mission.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_a.yaml",
+    )
+    mission.add_argument("--fuels", default=None)
+    mission.add_argument("--release-speed", type=float, default=None)
+    mission.add_argument("--top-of-climb-altitude", type=float, default=None)
+    mission.add_argument("--climb-angle", type=float, default=None)
+    mission.add_argument("--dive-angle", type=float, default=None)
+    mission.add_argument("--ramjet-fuel-allocation", type=float, default=None)
+    mission.add_argument("--handoff-mach", type=float, default=None)
+    mission.add_argument(
+        "--allow-forced-ramjet",
+        action="store_true",
+        default=None,
+        help="override the config to permit forced operation below self-sustaining Mach",
+    )
+    mission.add_argument("--spillage-momentum-fraction", type=float, default=None)
+    mission.add_argument("--mission-dt", type=float, default=None)
+    mission.add_argument("--pulsejet-map-dt", type=float, default=None)
+    mission.add_argument("--csv", default=None)
+    mission.add_argument("--map-csv", default=None)
+    mission.add_argument(
+        "--vspaero-json",
+        default=None,
+        help=(
+            "load a validated beta=0 VSPAERO summary and add the configured "
+            "parasitic drag-area budget to its inviscid drag"
+        ),
+    )
+    mission.set_defaults(func=_mission)
+
+    mission_trade = subparsers.add_parser(
+        "mission-trade",
+        help=(
+            "sweep release, climb, dive, fuel split, handoff, and spillage inputs "
+            "without an unsupported aggregate score"
+        ),
+    )
+    mission_trade.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_a.yaml",
+    )
+    mission_trade.add_argument("--fuels", default=None)
+    mission_trade.add_argument(
+        "--release-speeds",
+        type=_float_list,
+        default=(90.0, 105.0, 120.0),
+    )
+    mission_trade.add_argument(
+        "--top-of-climb-altitudes",
+        type=_float_list,
+        default=(6000.0, 6250.0, 6500.0),
+    )
+    mission_trade.add_argument(
+        "--climb-angles",
+        type=_float_list,
+        default=(45.0, 55.0, 65.0),
+    )
+    mission_trade.add_argument(
+        "--dive-angles",
+        type=_float_list,
+        default=(-20.0, -30.0, -40.0),
+    )
+    mission_trade.add_argument(
+        "--ramjet-fuel-allocations",
+        type=_float_list,
+        default=(0.55, 0.65, 0.75),
+    )
+    mission_trade.add_argument(
+        "--loaded-fuel-masses",
+        type=_float_list,
+        default=None,
+        help=(
+            "comma-separated loaded fuel masses in kilograms; inferred dry mass "
+            "is held fixed and takeoff mass changes with fuel"
+        ),
+    )
+    mission_trade.add_argument("--handoff-mach", type=float, default=1.10)
+    mission_trade.add_argument("--allow-forced-ramjet", action="store_true")
+    mission_trade.add_argument(
+        "--spillage-momentum-fractions",
+        type=_float_list,
+        default=(0.0,),
+    )
+    mission_trade.add_argument("--mission-dt", type=float, default=None)
+    mission_trade.add_argument("--pulsejet-map-dt", type=float, default=None)
+    mission_trade.add_argument("--csv", default=None)
+    mission_trade.add_argument("--map-csv", default=None)
+    mission_trade.set_defaults(func=_mission_trade)
+
     openvsp_build = subparsers.add_parser(
         "openvsp-build",
         help="generate the configured flow-through body and radial surfaces",
@@ -464,6 +690,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="openvsp/generated/shared_nozzle_candidate_b.vsp3",
     )
     vspaero_sweep.add_argument("--csv", default=None)
+    vspaero_sweep.add_argument(
+        "--json",
+        default=None,
+        help="write the complete solver summary with reference metadata",
+    )
     vspaero_sweep.set_defaults(func=_vspaero_sweep)
     return parser
 

@@ -15,33 +15,36 @@ engine model into validated hardware performance.
 
 ## Current convergence point
 
-`configs/shared_nozzle_candidate_b.yaml` is the active static-screen candidate, not a
-frozen design and not a closed mission.
+`configs/shared_nozzle_candidate_b.yaml` is the active unvalidated numerical
+mission-closure reference. It is not a frozen design or evidence of physical mission
+closure.
 
 | Parameter or result | Candidate B numerical value |
 |---|---:|
-| Current / high-side loaded mass / maximum allowed | 21.0 / 23.9 / 25.0 kg |
+| Loaded mass / maximum allowed | 24.6 / 25.0 kg |
 | Body diameter / length | 210 mm / 2.30 m |
 | Circular intake / area available to one mode | 195 mm / 50% |
-| Shared throat / exit-to-throat area ratio | 160 mm / 1.05 |
+| Shared throat / exit-to-throat area ratio | 170 mm / 1.05 |
 | Mach 1.10 altitude | 4,500 m MSL |
 | Nominal ramjet net thrust / drag | 832 / 512 N |
 | Existing 15%-derated static margin | 195 N |
 | Conservative-screen excess thrust | 51.5 N against a 50 N budget |
 | Adverse-screen excess thrust | -153.7 N; fails |
 | Ramjet potential-capture spillage | 50.5% nominal |
-| Full-throttle ramjet fuel endurance | 19.0 s |
-| Pulsejet net thrust at sea level, Mach 0.20 | about 122 N |
+| Numerical peak / time above Mach 1 | Mach 1.10068 / 9.20 s |
+| Numerical release / recovered sled target | 100 / 39–42 m/s |
 
 The earlier 205/130 mm Candidate A is retained as a rejected regression case. Its
 ramjet result had treated 0.92 total-pressure recovery as recovery of only the ram
 pressure rise; after correcting recovery to the conventional total-pressure ratio,
 Candidate A misses the original 15% reserve by about 21 N.
 
-Candidate B passes the named nominal and conservative static screens and retains
-2.5 mm of radial selector packaging margin, but it fails the adverse screen. None of
-these static points demonstrates acceleration through Mach 1, inlet operability,
-drag closure, stability, control, or recovery. See
+The separate robustness grid selects a 160 mm static-screen throat and retains an
+explicit adverse-case failure. The coupled Candidate B reference uses a 170 mm
+throat, 7.4 kg fuel, forced Mach 0.80 ramjet operation, and a provisional 50%
+spillage-momentum drag multiplier. It reaches the scalar Mach/time gates only from a
+100 m/s simulated release. It does not demonstrate the 39–42 m/s launch target,
+inlet operability, live aerodynamic closure, intact landing, or reciprocal return. See
 [docs/design_convergence.md](docs/design_convergence.md) for the decision record.
 
 ## Current capability
@@ -63,8 +66,8 @@ drag closure, stability, control, or recovery. See
   canted fins;
 - an explicit-point VSPAERO panel/VLM runner for nonuniform Mach, angle-of-attack,
   and sideslip grids; and
-- a longitudinal point-mass flight-equation kernel awaiting aerodynamic tables and a
-  phase-based mission integrator.
+- a phase-based longitudinal mission integrator with explicit fuel events,
+  acceleration/run margins, and strict live-VSPAERO table ingestion.
 
 OpenVSP/VSPAERO is used only for external aerodynamics. Internal combustion and nozzle
 flow stay in the Python propulsion model.
@@ -98,6 +101,12 @@ douglas-dart altitude-trade \
 douglas-dart pulsejet \
   --config configs/shared_nozzle_candidate_b.yaml \
   --duration 0.50 --summary-start 0.25
+
+douglas-dart mission \
+  --config configs/shared_nozzle_candidate_b.yaml
+
+douglas-dart mission-trade \
+  --config configs/shared_nozzle_candidate_b.yaml
 ```
 
 CSV output is optional and generated files are ignored by Git:

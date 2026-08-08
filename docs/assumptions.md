@@ -1,7 +1,7 @@
 # Assumption register
 
-`shared_nozzle_candidate_b.yaml` is the active static trade point. Values in it are
-not automatically requirements or validated parameters.
+`shared_nozzle_candidate_b.yaml` is the active unvalidated numerical mission
+reference. Values in it are not automatically requirements or validated parameters.
 
 ## Requirements and owner direction
 
@@ -21,16 +21,15 @@ not automatically requirements or validated parameters.
 
 | Item | Value | Status and closure path |
 |---|---:|---|
-| Current loaded mass | 21.0 kg | Component allocations reconcile; weighing and hardware definition required |
-| High-side loaded mass | 23.9 kg | Sum of provisional positive uncertainties, not a statistical bound |
-| Loaded / ramjet-phase fuel | 3.80 / 1.40 kg | Replace with integrated trajectory fuel ledger |
+| Loaded mass | 24.6 kg | Numerical mission input; weighing and hardware definition required |
+| Loaded / ramjet-phase fuel | 7.40 / 1.20 kg | Explicit integrated trajectory fuel ledger |
 | Fuel | Representative Jet-A family | Close exact grade, atomization, light-off, safety, and properties |
 | Body diameter / length | 0.210 / 2.30 m | Candidate B; 2.5 mm radial selector margin |
 | Circular intake / open fraction | 0.195 m / 0.50 | Fixed current architecture |
-| Shared throat / `Ae/At` | 0.160 m / 1.05 | Candidate B shared-nozzle compromise |
+| Shared throat / `Ae/At` | 0.170 m / 1.05 | Candidate B mission-margin reference; 0.160 m remains the static robustness-grid selection |
 | Lifting surfaces | Two; 0.16 m exposed semispan, 0.42/0.14 m chords | OpenVSP starting geometry |
 | Fins | Four X-clocked; 0.10 m exposed span | OpenVSP starting geometry |
-| Field / sled release | 900 m MSL / 39–42 m/s TAS | Prior mission baseline |
+| Field / sled release | 900 m MSL / 39–42 m/s TAS | Prior mission baseline; current simulation instead starts at 100 m/s |
 | Top of climb | 6,000–6,500 m MSL | Optimize with trajectory and loads |
 | Speed-run static point | 4,500 m MSL, Mach 1.10 | Analysis point, not altitude closure |
 | Drag-area ceiling | 0.0095 m² at 0.200 m body | Prior conservative budget, not an aerodynamic prediction |
@@ -72,14 +71,14 @@ the informational adverse case by about 154 N.
 
 ## Interpretation of current outputs
 
-The nominal static Mach 1.10 calculation predicts 832 N ramjet net thrust and 50.5%
-potential-capture spillage. The existing 15% derate leaves about 195 N over the
-512 N drag budget. The separate conservative combined-penalty screen leaves only
-51.5 N.
+The static robustness grid's 160 mm point predicts 832 N ramjet net thrust and 50.5%
+potential-capture spillage. The coupled 170 mm Candidate B mission result is a
+different numerical reference and must not inherit that static score.
 
-The pulsejet model predicts about 122 N steady-window net thrust at sea level and
-Mach 0.20 for Candidate B. Neither static result demonstrates transonic acceleration,
-mode transition, stability/control, thermal acceptability, or recovery.
+The coupled trajectory numerically reaches Mach 1.10068 and spends 9.20 s above Mach
+1. These values depend on a 100 m/s release, forced Mach 0.80 ramjet operation, and a
+50% spillage-momentum proxy; they do not validate stability/control, thermal
+acceptability, landing, or reciprocal recovery.
 
 Every result remains `numerical_reference_only` until the gates in
 [validation.md](validation.md) are closed.
