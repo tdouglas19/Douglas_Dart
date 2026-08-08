@@ -436,6 +436,72 @@ under a more physically complete model -- but they are a reminder that
 `docs/design_convergence.md`'s numbers throughout this document are
 snapshots of a specific model state, not permanent facts.
 
+## Run 7 (13-variable search, corrected model): a more severe finding -- nominal no longer closes either
+
+Run 7 (250 generations, population 70, seed 0, all 13 search variables
+including the two added this session) finished with a winning candidate
+that is *worse* than every prior run in this document: nominal peak Mach
+0.519 (previously always ~1.10, closing easily), adverse peak Mach 0.360.
+`chamber_volume_m3` and `throat_diameter_m` both pinned at their search
+floors (0.003 m^3, 0.110 m).
+
+**Verified this is not a search failure.** Hand-constructed a materially
+"better-equipped" candidate (larger chamber, throat, fuel) and it scored
+*worse* than Run 7's winner (-7562 vs -5286) -- but that comparison was
+contaminated by a packaging failure (-2000 points) the larger chamber
+triggered. Re-run with a packaging-*feasible* larger-hardware candidate:
+still scores worse (-5746 vs -5286), by an amount fully explained by the
+mass-margin and body-diameter-tiebreak difference alone (no anomaly). Run
+7's winner is a faithful, rational optimum of the current objective, not a
+DE convergence bug.
+
+**Root cause, traced the same way as the earlier adverse-only finding:**
+the packaging-feasible "better-equipped" candidate's *nominal* scenario
+now also ends in `pulsejet_fuel_exhausted_during_climb` -- fuel allocated
+to the pulsejet phase (`ramjet_fuel_fraction` complement) burns out at
+Mach 0.49-0.65 before reaching `top_of_climb_altitude_min_msl_m` (6000 m),
+the same failure mode previously found only in the adverse scenario. This
+is a direct, expected consequence of this session's other corrections
+compounding: a packaging-consistent chamber (0.003-0.012 m^3, versus the
+previously-implicit, packaging-*infeasible* 0.025 m^3 baseline) carries
+less captured air/fuel per cycle and less mass-model-honest hardware mass
+headroom for fuel, at the same time the real low/high-Mach thrust
+transition (this file's previous section) makes the climb-out from release
+speed less certain. Individually, each correction this session made is
+right; together, they reveal the vehicle's fuel/mass budget was
+implicitly relying on physics (a free, oversized chamber; a flawed
+low-speed-either-zero-or-full thrust curve) that no longer exists in the
+model.
+
+**A release-speed lever exists but is capped by an already-flagged
+placeholder.** Sweeping `sled_release_speed_m_per_s` from 121 (this
+search's own upper bound) to 200 m/s on a fixed candidate takes adverse
+peak Mach from 0.359 to 0.594, while nominal stays flat around 0.65-0.66 --
+release speed matters more under adverse specifically because it starts
+the vehicle further past the pulsejet's slow-cycle/fast-cycle transition
+before drag has to be overcome. `_SLED_RELEASE_SPEED_UPPER_BOUND_M_PER_S`
+is derived from an explicitly unsourced 10 g launch-acceleration
+placeholder and a 75 m rail length (`docs/assumptions_registry.md`,
+`optimizer.py`'s own inline comment) -- worth deliberate review now that
+it is not just a stall-speed lever but also a pulsejet-thrust-regime
+lever, but not changed here for the same reason the adverse-scenario
+multipliers were not changed: it is a real-world hardware constraint
+assumption, not a free search-bound parameter.
+
+**Net assessment.** This session closes with the model materially more
+physically complete than it started (chamber mass, side inlet, corrected
+low-Mach thrust, packaging feasibility scored, 13 search variables) and a
+more severe, better-understood finding than the one it started with: not
+just "adverse doesn't close," but "neither scenario reliably closes within
+the current fuel/mass budget and fixed 195 mm intake," traced to a
+specific, fixable-in-principle cause (fuel budget) rather than a vague
+"the vehicle is underpowered." The next concrete lever, in the order this
+investigation surfaced them, is total fuel mass margin -- which is itself
+constrained by MTOM and by how much hardware mass (chamber, throat, body)
+the mission needs to carry to generate that fuel's worth of thrust
+efficiently; this is a genuine sizing trade this document's existing
+static screens (`sizing.py`) were built for, not a new gap.
+
 ## Model correction that rejected Candidate A
 
 Candidate A interpreted the configured 0.92 total-pressure recovery as recovery of
