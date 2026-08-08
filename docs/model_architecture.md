@@ -139,13 +139,15 @@ silently replacing the configured list with a linear start/end interpolation.
 
 ## Flight and total drag
 
-The current flight kernel is two-dimensional and point-mass. It preserves speed,
-flight-path angle, altitude, downrange, and mass. A phase-based mission manager and
-solver-backed aerodynamic tables are still pending.
+The flight kernel is two-dimensional and point-mass. It preserves speed, flight-path
+angle, altitude, downrange, and mass. The phase manager switches propulsion modes,
+tracks fuel allocations, and records trajectory gates. A strict table adapter can
+consume a complete live VSPAERO beta-zero table and rejects synthetic tables by
+default.
 
-The simple coefficient polar in `flight.py` is not currently consistent with the
-peak-Mach drag-area budget used for sizing. Until one Mach-indexed total-drag model
-replaces both, the flight kernel must not be used to claim transonic mission closure.
+Candidate B still uses the documented drag-area budget plus explicit spillage drag,
+not live solver-backed coefficients. Its scalar trajectory closure therefore remains
+an unvalidated numerical reference.
 
 The intended total drag composition is
 

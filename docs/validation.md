@@ -25,8 +25,15 @@ The current suite covers implementation and limiting behavior for:
 - component mass-budget reconciliation, high-side mass margin, and named robustness
   scenario selection without hiding the adverse-case failure;
 - OpenVSP geometry station, surface-count, clocking, flow-through, and reference-area
-  call contracts; and
-- one VSPAERO single-point execution per configured nonuniform Mach/alpha/beta entry.
+  call contracts;
+- one VSPAERO single-point execution per configured nonuniform Mach/alpha/beta entry;
+- complete VSPAERO longitudinal-table topology, bilinear interpolation, visible
+  boundary clamping, JSON round-trip, and case/reference-area rejection;
+- exact additive accounting between VSPAERO inviscid drag area and a separately
+  identified supplementary drag area, including a zero-drag limiting case;
+- fuel-mass trades that preserve dry mass and reject the 25 kg takeoff-mass limit;
+- mission phase/fuel events, full-throttle acceleration logic, and midpoint-step
+  consistency.
 
 These checks show that code paths behave consistently with their stated equations.
 They do not establish engine, aerodynamic, structural, or mission accuracy.
@@ -45,6 +52,28 @@ The prior Candidate A convergence values no longer apply because the inlet recov
 definition and shared throat changed. Candidate B's 20-to-10 µs mean-thrust change is
 about 0.30%. This is numerical convergence of a lumped model, not physical validation.
 
+## Candidate B mission numerical checks
+
+Candidate B uses a Mach-zero-to-1.10 pulsejet map, so the 25° climb no longer depends
+on low-Mach map clamping. The exact 20 µs map gives:
+
+| Mission step | Peak Mach | Time above Mach 1 | Fuel used | Minimum speed |
+|---:|---:|---:|---:|---:|
+| 0.100 s | 1.10066 | 9.30 s | 6.8065 kg | 94.15 m/s |
+| 0.050 s | 1.10068 | 9.20 s | 6.8025 kg | 94.18 m/s |
+| 0.025 s | 1.10009 | 9.20 s | 6.8025 kg | 94.18 m/s |
+
+At 0.05 s, the full-throttle margin is +47.2 N during ramjet acceleration and
++70.8 N during the Mach-target run. This separation proves that the reported run
+margin is not borrowed from the dive, while the trajectory itself still depends on
+the dive to reach the ramjet state.
+
+The scalar low-order mission gates pass, but the result is not physically validated:
+the simulated release is 100 m/s rather than the 39–42 m/s recovered sled target,
+forced Mach 0.80 operation is assumed, 50% of uncaptured momentum is assigned as
+spillage drag without a flowfield solution, and the trajectory reaches an
+angle-of-attack bound for about 14.2 s.
+
 ## OpenVSP/VSPAERO verification state
 
 The repository pins the intended API contract to OpenVSP 3.51.2 and rejects the empty
@@ -61,6 +90,13 @@ functional Python API and VSPAERO binaries shipped with OpenVSP. Consequently:
   and
 - panel results must be checked for wake convergence and compared with an independent
   method before entering the flight model.
+
+The solver-result ingestion path is implemented but does not relax this gate. It
+requires a complete beta-zero table with matching case name and reference area,
+labels VSPAERO drag as inviscid, and adds the configured parasitic budget as a
+separate conservative term. It rejects non-live/synthetic summaries unless a
+test-only override is explicitly selected. No live table is available in this
+workspace.
 
 ## Minimum gates before design conclusions
 
@@ -83,9 +119,10 @@ functional Python API and VSPAERO binaries shipped with OpenVSP. Consequently:
 8. **External aerodynamics:** run and visually inspect the pinned OpenVSP model;
    complete mesh/wake convergence; add parasite, wave, base, and inlet drag; and
    compare against another appropriate method or experiment.
-9. **Mission:** integrate sled release, pulsejet climb, dive, Mach-1 crossing, ramjet
-   operation, fuel depletion, zoom/glide, and landing while tracking mass, CG,
-   dynamic pressure, heat, stability, and control authority.
+9. **Mission:** replace the current longitudinal reference with validated aero and
+   propulsion maps; add CG, heat, stability/control, wind, six-degree-of-freedom
+   dynamics, reciprocal routing, and landing loads; and resolve the 100 m/s versus
+   39–42 m/s launch conflict.
 10. **Hardware:** complete independent structural, combustion, fuel-system, test-cell,
     fire, acoustics, range, and recovery safety reviews before physical testing.
 
@@ -102,3 +139,6 @@ functional Python API and VSPAERO binaries shipped with OpenVSP. Consequently:
 - A self-sustaining flag checks configured thresholds only; it is not a stability
   prediction.
 - VSPAERO drag is labeled inviscid and cannot replace total drag by itself.
+- Candidate B's scalar mission closure is conditional on a 100 m/s release, forced
+  Mach 0.80 ramjet operation, and a 50% spillage-momentum proxy.
+- Longitudinal ground contact does not establish intact landing or reciprocal flight.

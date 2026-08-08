@@ -70,7 +70,12 @@ def longitudinal_derivative(
     )
     lift_n = dynamic_pressure_pa * flight.reference_area_m2 * lift_coefficient
     if zero_lift_drag_area_m2 is None:
-        drag_n = drag_multiplier * dynamic_pressure_pa * flight.reference_area_m2 * drag_coefficient
+        drag_n = (
+            drag_multiplier
+            * dynamic_pressure_pa
+            * flight.reference_area_m2
+            * drag_coefficient
+        )
     else:
         induced_drag_n = (
             dynamic_pressure_pa
@@ -81,6 +86,33 @@ def longitudinal_derivative(
         drag_n = drag_multiplier * (
             dynamic_pressure_pa * zero_lift_drag_area_m2 + induced_drag_n
         )
+    return longitudinal_derivative_from_forces(
+        state,
+        thrust_n=thrust_n,
+        fuel_mass_flow_kg_per_s=fuel_mass_flow_kg_per_s,
+        angle_of_attack_rad=angle_of_attack_rad,
+        lift_n=lift_n,
+        drag_n=drag_n,
+    )
+
+
+def longitudinal_derivative_from_forces(
+    state: PointMassState,
+    *,
+    thrust_n: float,
+    fuel_mass_flow_kg_per_s: float,
+    angle_of_attack_rad: float,
+    lift_n: float,
+    drag_n: float,
+) -> PointMassDerivative:
+    """Evaluate the point-mass equations from independently audited forces."""
+
+    if state.mass_kg <= 0.0 or state.speed_m_per_s <= 0.0:
+        raise ValueError("mass and speed must be positive")
+    if fuel_mass_flow_kg_per_s < 0.0:
+        raise ValueError("fuel mass flow cannot be negative")
+    if drag_n < 0.0:
+        raise ValueError("drag input cannot be negative")
     gamma = state.flight_path_angle_rad
     acceleration_m_per_s2 = (
         thrust_n * cos(angle_of_attack_rad)
@@ -97,7 +129,7 @@ def longitudinal_derivative(
         climb_rate_m_per_s=state.speed_m_per_s * sin(gamma),
         acceleration_m_per_s2=acceleration_m_per_s2,
         flight_path_rate_rad_per_s=flight_path_rate_rad_per_s,
-        mass_rate_kg_per_s=-abs(fuel_mass_flow_kg_per_s),
+        mass_rate_kg_per_s=-fuel_mass_flow_kg_per_s,
         lift_n=lift_n,
         drag_n=drag_n,
     )

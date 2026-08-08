@@ -110,11 +110,46 @@ def _load_yaml(path: str | Path) -> Mapping[str, Any]:
     return value
 
 
+def _apply_reference_case_overrides(
+    case: ReferenceCase,
+    data: Mapping[str, Any],
+) -> ReferenceCase:
+    """Build the explicitly configured static-screen case.
+
+    The robustness grid predates the heavier coupled-mission reference. Keeping its
+    mass and fuel inputs in the robustness YAML prevents either case from silently
+    borrowing the other's mass accounting.
+    """
+
+    overrides = _mapping(data, "reference_case_overrides")
+    if overrides.get("purpose") != "static_robustness_grid_only":
+        raise ValueError(
+            "reference_case_overrides purpose must be 'static_robustness_grid_only'"
+        )
+    initial_mass_kg = float(overrides["initial_mass_kg"])
+    loaded_fuel_mass_kg = float(overrides["loaded_fuel_mass_kg"])
+    ramjet_fuel_kg = float(overrides["ramjet_speed_run_fuel_budget_kg"])
+    if initial_mass_kg <= 0.0 or loaded_fuel_mass_kg <= 0.0:
+        raise ValueError("static robustness mass and fuel overrides must be positive")
+    if not 0.0 < ramjet_fuel_kg <= loaded_fuel_mass_kg:
+        raise ValueError("static ramjet fuel must be in (0, loaded fuel]")
+    return replace(
+        case,
+        flight=replace(case.flight, initial_mass_kg=initial_mass_kg),
+        mission=replace(
+            case.mission,
+            loaded_fuel_mass_kg=loaded_fuel_mass_kg,
+            ramjet_speed_run_fuel_budget_kg=ramjet_fuel_kg,
+        ),
+    )
+
+
 def summarize_mass_budget(
     case: ReferenceCase,
     robustness_path: str | Path,
 ) -> MassBudgetSummary:
     data = _load_yaml(robustness_path)
+    case = _apply_reference_case_overrides(case, data)
     mass_data = _mapping(data, "mass_budget")
     component_data = _mapping(mass_data, "components")
     components = tuple(
@@ -240,6 +275,7 @@ def run_robustness_trade(
     robustness_path: str | Path,
 ) -> RobustnessTradeResult:
     data = _load_yaml(robustness_path)
+    case = _apply_reference_case_overrides(case, data)
     mass_budget = summarize_mass_budget(case, robustness_path)
     if not mass_budget.current_mass_matches_case:
         raise ValueError("mass budget current total does not match case initial mass")

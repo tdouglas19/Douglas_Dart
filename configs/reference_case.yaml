@@ -134,3 +134,26 @@ simulation:
   pulsejet_steady_warmup_s: 0.25
   pulsejet_steady_measurement_s: 0.25
   time_step_s: 0.00002
+
+mission_simulation:
+  integration_time_step_s: 0.05
+  maximum_duration_s: 600.0
+  reference_release_speed_m_per_s: 40.5
+  reference_top_of_climb_altitude_m: 6250.0
+  pulsejet_map_altitudes_m: [900.0, 3000.0, 4500.0, 6000.0, 6500.0, 7500.0]
+  pulsejet_map_mach_values: [0.00, 0.10, 0.30, 0.50, 0.80, 1.10]
+  pulsejet_propulsion_derate_fraction: 0.15
+  ramjet_propulsion_derate_fraction: 0.15
+  climb_flight_path_angle_deg: 8.0
+  dive_flight_path_angle_deg: -20.0
+  zoom_flight_path_angle_deg: 10.0
+  zoom_end_mach: 0.50
+  ramjet_handoff_mach: 1.10
+  allow_forced_ramjet_below_self_sustaining: false
+  flight_path_control_gain_per_s: 0.80
+  speed_control_gain_per_s: 0.50
+  minimum_angle_of_attack_deg: -4.0
+  maximum_angle_of_attack_deg: 12.0
+  drag_rise_start_mach: 0.75
+  drag_rise_end_mach: 1.00
+  ramjet_spillage_drag_momentum_fraction: 0.0
