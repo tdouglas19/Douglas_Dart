@@ -336,6 +336,29 @@ class PulsejetEngine:
             p_plen=self.p_plen, mdot_i=self.mdot_i,
         )
 
+    def snapshot(self) -> dict:
+        """Capture the full dynamic state for continuation runs (e.g. Mach
+        ladder: seed each flight point from the previous limit cycle)."""
+        return {
+            "U": self.U.copy(), "A_eff": self.A_eff.copy(),
+            "lift": self.valve.lift, "lift_rate": self.valve.lift_rate,
+            "k_c": self.k_c, "mdot_i": self.mdot_i, "p_plen": self.p_plen,
+        }
+
+    def restore(self, snap: dict) -> None:
+        """Restore a snapshot taken from an engine with the same grid.
+        Flight-condition fields (ram state) keep THIS engine's values, so a
+        restored state relaxes to the new condition -- continuation."""
+        if snap["U"].shape != self.U.shape:
+            raise ValueError("snapshot grid does not match this engine")
+        self.U = snap["U"].copy()
+        self.A_eff = snap["A_eff"].copy()
+        self.valve.lift = snap["lift"]
+        self.valve.lift_rate = snap["lift_rate"]
+        self.k_c = snap["k_c"]
+        self.mdot_i = snap["mdot_i"]
+        self.p_plen = snap["p_plen"]
+
     def run(self, t_end: float, progress_every: float = 0.0):
         next_report = progress_every
         while self.t < t_end and self.status == "running":

@@ -30,6 +30,7 @@ def main():
     ap.add_argument("--intake-l", type=float, default=None)
     ap.add_argument("--intake-d", type=float, default=None)
     ap.add_argument("--plenum-v", type=float, default=None)
+    ap.add_argument("--preload", type=float, default=None, help="seat preload m")
     args = ap.parse_args()
 
     from dataclasses import replace
@@ -42,6 +43,7 @@ def main():
     if args.petal_w is not None: vkw["petal_width"] = args.petal_w
     if args.petal_l is not None: vkw["petal_length"] = args.petal_l
     if args.port_area is not None: vkw["port_area"] = args.port_area
+    if args.preload is not None: vkw["seat_preload"] = args.preload
     if vkw:
         valve = replace(valve, **vkw)
     gas = reference_gas(phi=args.phi) if args.phi is not None else None

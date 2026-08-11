@@ -28,6 +28,16 @@ class PetalValveDesign:
     damping_ratio: float = 0.03     # A15
     restitution: float = 0.3        # A16
     max_lift: float = 3.5e-3        # m, mechanical stop
+    # Seat preload: petals are manufactured with residual curvature and sit
+    # pressed against the seat with deflection xi_0 already stored in the
+    # spring -- the standard reed-valve cracking-pressure mechanism (A25).
+    # The valve opens only when the pressure force exceeds k*xi_0.
+    seat_preload: float = 0.0       # m, equivalent preload deflection xi_0
+
+    @property
+    def cracking_pressure(self) -> float:
+        """dP needed to lift off the seat: k xi_0 / (3/8 A_petal)."""
+        return self.stiffness * self.seat_preload / (PSI_INT * self.petal_face_area)
 
     @property
     def second_moment(self) -> float:
@@ -104,7 +114,8 @@ class PetalValveState:
         dt is the fluid step, ~20x finer than needed for the petal ODE."""
         d = self.d
         q = self.generalized_force(p0_up, p_head, rho_jet, u_jet, rho_head)
-        acc = (q - d.stiffness * self.lift - d.damping_coefficient * self.lift_rate) / d.effective_mass
+        spring = d.stiffness * (self.lift + d.seat_preload)
+        acc = (q - spring - d.damping_coefficient * self.lift_rate) / d.effective_mass
         self.lift_rate += acc * dt
         self.lift += self.lift_rate * dt
         # Contact constraints (A16): momentum-conserving inelastic projection

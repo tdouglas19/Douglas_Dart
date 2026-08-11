@@ -86,20 +86,37 @@ def overview_plot(hist: dict, p_a: float, path: str, title: str = ""):
 
 
 def thrust_vs_mach_plot(machs, results, path, title="Thrust vs Mach"):
+    """Operating points as the thrust curve; quenched points (engine dead,
+    net force = ram drag of the blow-through state) drawn separately."""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 8), sharex=True,
                                    height_ratios=[2, 1])
-    F = [r.thrust_n for r in results]
-    ok = [r.status == "converged" for r in results]
-    ax1.plot(machs, F, "-o", color=COL_P, ms=4)
-    for m_, f_, o_ in zip(machs, F, ok):
-        if not o_ and np.isfinite(f_):
-            ax1.plot([m_], [f_], "o", color="#aaaaaa", ms=7, mfc="none")
+    run_m, run_f, run_conv = [], [], []
+    dead_m, dead_f = [], []
+    for m_, r in zip(machs, results):
+        if r.status == "quenched":
+            dead_m.append(m_); dead_f.append(r.thrust_n)
+        elif np.isfinite(r.thrust_n):
+            run_m.append(m_); run_f.append(r.thrust_n)
+            run_conv.append(r.status == "converged")
+    ax1.plot(run_m, run_f, "-o", color=COL_P, ms=5, label="operating")
+    for m_, f_, c_ in zip(run_m, run_f, run_conv):
+        if not c_:
+            ax1.plot([m_], [f_], "o", color="#aaaaaa", ms=9, mfc="none")
+    if dead_m:
+        ax1.plot(dead_m, dead_f, "x", color="#c0c0c0", ms=6,
+                 label="quenched (dead engine: ram drag)")
     ax1.axhline(0, color="gray", lw=0.6)
     ax1.set_ylabel("cycle-averaged thrust [N]")
     ax1.set_title(title)
-    fr = [r.frequency_hz for r in results]
-    ax2.plot(machs, fr, "-s", color=COL_T, ms=4)
-    ax2.set_ylabel("frequency [Hz]")
+    ax1.legend(fontsize=9)
+    fr_m = [m_ for m_, r in zip(machs, results)
+            if r.status in ("converged", "unconverged")
+            and np.isfinite(r.frequency_hz)]
+    fr = [r.frequency_hz for r in results
+          if r.status in ("converged", "unconverged")
+          and np.isfinite(r.frequency_hz)]
+    ax2.plot(fr_m, fr, "-s", color=COL_T, ms=4)
+    ax2.set_ylabel("cycle frequency [Hz]")
     ax2.set_xlabel("flight Mach number")
     for ax in (ax1, ax2):
         ax.grid(alpha=0.3)

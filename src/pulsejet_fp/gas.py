@@ -149,9 +149,15 @@ def propane_air(phi: float = 1.0,
     cv_P = 3.5 * R_P
 
     # Heat release per kg reactant mixture (eq. 4); phi > 1 burns only the
-    # oxygen-limited fraction.
+    # oxygen-limited fraction. The sensible-energy convention e = cv(Y) T is
+    # referenced to 0 K, so the constant must be the 0 K heat of reaction:
+    # q_0 = De(298) + (cv_P - cv_R) * 298.15  (the cv-swap correction; the
+    # Dh-vs-De p-v term is ~0.1% and neglected). With this, the effective
+    # heat released when converting at temperature T is q_0 - (cv_P-cv_R) T,
+    # exactly as energy conservation with per-species cv requires.
     burnable = min(1.0, 1.0 / phi) if phi > 0 else 0.0
-    q_R = (f * burnable) / (1.0 + f) * lhv
+    q_298 = (f * burnable) / (1.0 + f) * lhv
+    q_R = q_298 + (cv_P - cv_R) * 298.15
 
     return GasModel(
         W_R=W_R, cv_R=cv_R, W_P=W_P, cv_P=cv_P, q_R=q_R,

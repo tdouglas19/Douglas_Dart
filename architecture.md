@@ -155,3 +155,33 @@ charge-starved, not inefficient. Real engines of this class likely swallow
 far more air (and run rich, wasting fuel -- their TSFC ~3+ vs our 0.55).
 Next: combined hardware-plausible config (12 petals + 100 mm intake runner
 + phi=1.05) as run F.
+
+## 6. Corrected 0K heat referencing; the high-Mach quench mechanism (2026-08-11)
+
+**Thermo audit fix (solo audit, subagent quota exhausted for the session):**
+the sensible-energy convention e = cv(Y)*T is 0K-referenced, so the release
+constant must be the 0K heat of reaction q_0 = De(298) + (cv_P - cv_R)*298
+= 2.875 MJ/kg (was using the 298K value 2.780 -- 3.4% low). Verified the
+scheme's structure was already correct (the cv-swap makes effective release
+q_0 - (cv_P-cv_R)T automatically); only the constant moved. Eq. 4 updated.
+M=0 production (N=300, 32 cycles): **10.04 N, 169.4 Hz, p 0.832/1.300,
+cross-check 9.70 N (3.4%), TSFC 0.484.**
+
+**First full Mach sweep (19 pts, N=300) exposed a real failure mode:**
+thrust declines from M=0.05 (10.0 -> 5.2 N by M=0.15), goes chaotic around
+M=0.2-0.3, and above M~=0.35 the engine QUENCHES into a steady blow-through
+state (passive ~700 Hz acoustic ring, p_head pinned near the ram stagnation
+value, "thrust" = pure ram drag of a dead engine, -3 to -36 N). Mechanism
+(same physics as the Section 4 soft-valve death): ram pressure biases the
+plenum above the chamber's cycle-mean pressure, holding the zero-preload
+petals cracked open continuously -- the valve stops rectifying, leaks at
+the head antinode, kills the resonator Q, combustion dies. The low-M thrust
+decline is the onset of the same valve-dwell leak.
+
+**Fix (real hardware physics, not a tuning knob): seat preload** -- real reed
+petals are manufactured with residual curvature pressed flat on the seat,
+storing deflection xi_0 in the spring; the valve cracks open only above
+dP_crack = k*xi_0/((3/8)A_petal). Added to valve.py (spring term k(xi+xi_0),
+A25, eq. 19 updated); this is precisely what lets real valved engines hold
+seal under forward-flight ram bias. Probing xi_0=0.5mm (dP_crack=3.3kPa)
+at M=0/0.15/0.4.

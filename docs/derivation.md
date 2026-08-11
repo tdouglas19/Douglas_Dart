@@ -64,10 +64,18 @@ $e = c_{v,mix}(Y)\,T$ referenced to 0 K, and account for chemical energy
 explicitly: converting reactant to product at fixed $T$ releases heat $q_R$
 per kg of reactant converted, where
 
-$$ q_R = \frac{f}{1+f}\,\Delta h_c \tag{4} $$
+$$ q_R = \frac{f}{1+f}\,\Delta h_c + (c_{v,P} - c_{v,R})\,T_{ref} \tag{4} $$
 
 with $\Delta h_c$ the fuel's lower heating value (a thermophysical material
-property, input; propane $46.35\ \mathrm{MJ\,kg^{-1}}$). This sensible-energy
+property, input; propane $46.35\ \mathrm{MJ\,kg^{-1}}$, quoted at
+$T_{ref} = 298.15$ K). The second term is the 0 K-referencing correction:
+since the sensible energy convention is $e = c_{v,mix}(Y)T$ from 0 K, the
+release constant must be the 0 K heat of reaction, obtained from the 298 K
+value by accounting for the $c_v$ swap between species; the effective heat
+released when converting at temperature $T$ is then
+$q_R - (c_{v,P}-c_{v,R})T$, exactly as energy conservation with per-species
+$c_v$ requires (the $\Delta(pv)$ term between $\Delta h$ and $\Delta e$ is
+~0.1% and neglected). This sensible-energy
 + explicit-source formalism is algebraically identical to the
 formation-enthalpy formalism (shift of energy reference per species) (A3:
 dissociation of products neglected — overpredicts flame temperature by
@@ -205,17 +213,22 @@ chamber/cone zone, because the driving jets fill the chamber in a transit
 time short compared to the cycle). Its budget follows from the kinetic
 energy theorem:
 
-- **Production**: the valve jets enter at speed $u_j$ into near-stagnant gas;
-  a momentum balance on the sudden expansion (Borda–Carnot, derived in §7)
-  shows the jet's excess kinetic energy relative to the mixed-out state is
-  lost from the mean flow — it becomes turbulence:
+- **Jet production**: the valve jets enter at speed $u_j$ into near-stagnant
+  gas; a momentum balance on the sudden expansion (Borda–Carnot, derived in
+  §7) shows the jet's excess kinetic energy relative to the mixed-out state
+  is lost from the mean flow — it becomes turbulence:
   $\dot P_K = \tfrac12 \dot m_v (u_j - u_c)^2$ with $u_c$ the local mean.
+- **Shear production**: the standard k-equation production term — the work
+  of the Reynolds stress against the resolved mean shear,
+  $\rho\,\nu_t (\partial u/\partial x)^2$ per unit volume, integrated over
+  the chamber zone. This is what sustains mixing through the blowdown after
+  the valve closes.
 - **Dissipation**: the Richardson–Kolmogorov cascade argument (dimensional
   analysis: eddies of size $\ell_m$ and velocity $\sqrt{k_c}$ turn over and
   hand energy down in one eddy time) gives
   $\varepsilon = C_\varepsilon k_c^{3/2} / \ell_m$ per unit mass.
 
-$$ \frac{d(m_{cz} k_c)}{dt} = \tfrac12 \dot m_v (u_j - u_c)^2 - m_{cz}\, C_\varepsilon \frac{k_c^{3/2}}{\ell_m} - k_c\,\dot m_{out} \tag{13} $$
+$$ \frac{d(m_{cz} k_c)}{dt} = \tfrac12 \dot m_v (u_j - u_c)^2 + \int_{cz} \rho\, \nu_t \left(\frac{\partial u}{\partial x}\right)^{\!2} A\, dx - m_{cz}\, C_\varepsilon \frac{k_c^{3/2}}{\ell_m} - k_c\,\dot m_{out} \tag{13} $$
 
 ($m_{cz}$ = gas mass in the chamber zone; last term = turbulence advected out
 with outflow.) The eddy viscosity, from the mixing-length argument
@@ -224,7 +237,7 @@ with outflow.) The eddy viscosity, from the mixing-length argument
 $$ \nu_{t,cz} = C_\nu \sqrt{k_c}\, \ell_m, \qquad u' = \sqrt{2k_c/3} \tag{14} $$
 
 with $\ell_m = 0.35 D_c$ (the chamber's dominant toroidal recirculation eddy
-scales with chamber diameter), $C_\nu = 0.5$, $C_\varepsilon = 1.0$ (A11:
+scales with chamber diameter), $C_\nu = 0.5$, $C_\varepsilon = 0.5$ (A11:
 O(1) closure constants — dimensional analysis fixes the *form*; the constants
 are stated inputs, fixed once, not per-case tuning knobs). In the tailpipe
 zone the same mixing-length argument with wall-generated turbulence gives
@@ -340,6 +353,17 @@ $c = 2\zeta\sqrt{k\, m_{eff}}$.
 tip lift):
 
 $$ m_{eff} \ddot\xi = \tfrac38 A_{petal}\, \Delta P - k \xi - c \dot\xi + Q_d \tag{19} $$
+
+**Seat preload.** Petals are manufactured with residual curvature and sit
+pressed flat against the seat, storing deflection $\xi_0$ in the spring
+(standard reed-valve practice). The spring term in (19) is therefore
+$k(\xi + \xi_0)$, and the valve cracks open only when the pressure force
+exceeds $k\xi_0$ — a cracking pressure
+$\Delta P_{crack} = k\xi_0/(\tfrac38 A_{petal})$ that follows from the same
+beam mechanics as $k$ itself (A25: the preload deflection is a design
+input; its restoring force is exactly the derived cantilever stiffness).
+This is what lets a reed valve stay sealed under a steady ram-pressure bias
+in forward flight while still opening on the suction stroke.
 
 **Contact constraints.** The petal is confined to $0 \le \xi \le \xi_{max}$
 (seat and mechanical stop). Impacts conserve momentum and dissipate energy in
@@ -679,6 +703,7 @@ numerical settings, run in parallel worker processes.
 | A22 | Backflow from quiescent base region | Near-wake air convects with vehicle | Backflow enthalpy approximate |
 | A23 | Jet strain field $s = (u_j/\xi)e^{-x/L_{jet}}$, $L_{jet}=15\xi$ | Self-similar free-jet momentum-integral decay; extinction criterion from ZFK asymptotics (eq. 12b-c) | Ignition-onset timing ±30% |
 | A24 | Intake column: frictionless slug + adiabatic plenum (eq. 23b) | Newton's law on the duct column (inertance); isentropic plenum compliance; bellmouth ~loss-free | Duct acoustics unresolved (~0.2 ms) |
+| A25 | Seat preload $\xi_0$ (spring term $k(\xi+\xi_0)$) | Residual-curvature preload restored by the derived cantilever stiffness; standard reed-valve cracking mechanism | $\xi_0$ is a design input |
 
 Every other relation in this document — the field equations, valve beam
 mechanics, orifice/choking relations, HLLC construction, Rayleigh balance,
