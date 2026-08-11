@@ -185,3 +185,25 @@ dP_crack = k*xi_0/((3/8)A_petal). Added to valve.py (spring term k(xi+xi_0),
 A25, eq. 19 updated); this is precisely what lets real valved engines hold
 seal under forward-flight ram bias. Probing xi_0=0.5mm (dP_crack=3.3kPa)
 at M=0/0.15/0.4.
+
+## 7. Seat preload frozen at 0.5 mm; production campaign launched (2026-08-11)
+
+Preload probes (N=150, t=0.15): xi_0=0.5mm (dP_crack=3.3 kPa) at M=0 gives
+**18.08 N @ 150.2 Hz, p 0.792/1.491** -- nearly double the zero-preload
+10.04 N, and the frequency lands exactly in the real small-valved class
+(130-150 Hz). M=0.15: 14.46 N (the valve-dwell decline mostly cured at low
+M). M=0.4 cold-start still quenches (ram bias 11.8 kPa > crack 3.3), as
+expected. xi_0=1.0mm (6.7 kPa) FAILS TO SELF-START from the standard
+starting condition (air flow 0.00 g/s) -- the start window is sharp, which
+mirrors how finicky real pulsejet starting is. **Design freeze: FP-1 uses
+xi_0 = 0.5 mm** (now the reference_valve default; 31/31 tests pass with it).
+
+The high-M cold-start quench is reframed as REAL hysteresis physics: cold
+starts at speed die by ram blow-through, but a real vehicle accelerates
+with the engine running -- the chamber's elevated cycle-mean defends the
+valve seal. Production campaign = TWO branches: (a) operating branch by
+Mach CONTINUATION (each point seeded from the previous limit cycle via new
+engine.snapshot/restore; scripts/mach_continuation.py, N=200 sequential);
+(b) cold-start branch (scripts/thrust_vs_mach.py, N=300 parallel, every
+point from the static start condition). Their divergence IS the
+start/quench hysteresis diagram.

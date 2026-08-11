@@ -43,6 +43,11 @@ def reference_valve() -> PetalValveDesign:
         damping_ratio=0.03,
         restitution=0.3,
         max_lift=3.5e-3,
+        # 0.5 mm residual-curvature preload (A25): cracking dP ~3.3 kPa.
+        # Probed: doubles static thrust vs zero preload (valve rectification)
+        # and defends the seal against forward-flight ram bias; 1.0 mm fails
+        # to self-start from the standard starting condition.
+        seat_preload=0.5e-3,
     )
 
 
