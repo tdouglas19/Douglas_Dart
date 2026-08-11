@@ -5,8 +5,15 @@ State per cell (conserved, per unit length): U = [rho*A, rho*u*A, rho*E*A,
 rho*Y*A]. The first cell's effective area may differ from geometric (valve
 swept volume, eq. 29); callers pass the A_eff array used for primitive
 recovery.
+
+Implementation note: hot paths are written allocation-lean (single output
+buffers, no np.stack, mask algebra instead of nested np.where) -- the
+formulas are identical to derivation.md eqs. 31-32 and are pinned by the
+exact-Riemann/conservation/acoustic tests.
 """
 from __future__ import annotations
+
+import math
 
 import numpy as np
 
@@ -23,13 +30,15 @@ def conserved(rho, u, p, Y, gas, A):
 def primitives(U, A_eff, gas):
     """Return rho, u, p, Y, T, a (all ndarray) with positivity floors."""
     rho = np.maximum(U[0] / A_eff, RHO_FLOOR)
-    u = U[1] / (rho * A_eff)
-    Y = np.clip(U[2 + 1] / (rho * A_eff), 0.0, 1.0)
-    e = U[2] / (rho * A_eff) - 0.5 * u * u
-    cv = gas.cv_mix(Y)
+    inv_m = 1.0 / (rho * A_eff)
+    u = U[1] * inv_m
+    Y = np.clip(U[3] * inv_m, 0.0, 1.0)
+    e = U[2] * inv_m - 0.5 * u * u
+    cv = Y * gas.cv_R + (1.0 - Y) * gas.cv_P
+    R = Y * gas.R_R + (1.0 - Y) * gas.R_P
     T = np.maximum(e / cv, 150.0)
-    p = np.maximum(rho * gas.R_mix(Y) * T, P_FLOOR)
-    a = np.sqrt(gas.gamma_mix(Y) * p / rho)
+    p = np.maximum(rho * R * T, P_FLOOR)
+    a = np.sqrt((1.0 + R / cv) * p / rho)
     return rho, u, p, Y, T, a
 
 
@@ -38,21 +47,29 @@ def _minmod(a, b):
     return s * np.maximum(0.0, np.minimum(np.abs(a), s * b))
 
 
+def muscl_faces_block(W):
+    """Piecewise-linear minmod reconstruction of a (K, N) primitive block.
+    Returns (WL, WR) at the N-1 interior interfaces, each (K, N-1)."""
+    dW = np.diff(W, axis=1)
+    slope = np.zeros_like(W)
+    slope[:, 1:-1] = _minmod(dW[:, :-1], dW[:, 1:])
+    WL = W[:, :-1] + 0.5 * slope[:, :-1]
+    WR = W[:, 1:] - 0.5 * slope[:, 1:]
+    return WL, WR
+
+
 def muscl_faces(w):
-    """Piecewise-linear minmod reconstruction of one primitive array w (N,).
-    Returns (wL, wR) at the N-1 interior interfaces."""
-    dw = np.diff(w)
-    slope = np.zeros_like(w)
-    slope[1:-1] = _minmod(dw[:-1], dw[1:])
-    wL = w[:-1] + 0.5 * slope[:-1]
-    wR = w[1:] - 0.5 * slope[1:]
-    return wL, wR
+    """1D convenience wrapper (kept for tests/back-compat)."""
+    WL, WR = muscl_faces_block(w[None, :])
+    return WL[0], WR[0]
 
 
 def hllc(rhoL, uL, pL, YL, rhoR, uR, pR, YR, gas):
     """Vectorized HLLC flux per unit area (eqs. 31-32). Returns (4, M)."""
-    gL = gas.gamma_mix(YL)
-    gR = gas.gamma_mix(YR)
+    gL = 1.0 + (YL * gas.R_R + (1.0 - YL) * gas.R_P) \
+        / (YL * gas.cv_R + (1.0 - YL) * gas.cv_P)
+    gR = 1.0 + (YR * gas.R_R + (1.0 - YR) * gas.R_P) \
+        / (YR * gas.cv_R + (1.0 - YR) * gas.cv_P)
     aL = np.sqrt(gL * pL / rhoL)
     aR = np.sqrt(gR * pR / rhoR)
     EL = pL / ((gL - 1.0) * rhoL) + 0.5 * uL * uL
@@ -64,37 +81,66 @@ def hllc(rhoL, uL, pL, YL, rhoR, uR, pR, YR, gas):
     dR = rhoR * (SR - uR)
     Sstar = (pR - pL + uL * dL - uR * dR) / (dL - dR)
 
-    def flux(rho, u, p, E, Y):
-        return np.stack([rho * u,
-                         rho * u * u + p,
-                         u * (rho * E + p),
-                         rho * u * Y])
+    left = Sstar >= 0.0
+    rhoK = np.where(left, rhoL, rhoR)
+    uK = np.where(left, uL, uR)
+    pK = np.where(left, pL, pR)
+    EK = np.where(left, EL, ER)
+    YK = np.where(left, YL, YR)
+    SK = np.where(left, SL, SR)
 
-    FL = flux(rhoL, uL, pL, EL, YL)
-    FR = flux(rhoR, uR, pR, ER, YR)
+    FK0 = rhoK * uK
+    FK1 = FK0 * uK + pK
+    FK2 = uK * (rhoK * EK + pK)
+    FK3 = FK0 * YK
 
-    def star_U(rho, u, p, E, Y, S, Ss):
-        coef = rho * (S - u) / (S - Ss)
-        Estar = E + (Ss - u) * (Ss + p / (rho * (S - u)))
-        return np.stack([coef, coef * Ss, coef * Estar, coef * Y])
+    # star-region correction fires only when the K-side wave straddles x/t=0
+    need = np.where(left, SL < 0.0, SR > 0.0)
+    dK = rhoK * (SK - uK)
+    coef = dK / (SK - Sstar)
+    Estar = EK + (Sstar - uK) * (Sstar + pK / dK)
+    fac = need * SK
 
-    UL = np.stack([rhoL, rhoL * uL, rhoL * EL, rhoL * YL])
-    UR = np.stack([rhoR, rhoR * uR, rhoR * ER, rhoR * YR])
-    UsL = star_U(rhoL, uL, pL, EL, YL, SL, Sstar)
-    UsR = star_U(rhoR, uR, pR, ER, YR, SR, Sstar)
-
-    F = np.where(SL >= 0.0, FL,
-        np.where(Sstar >= 0.0, FL + SL * (UsL - UL),
-        np.where(SR >= 0.0, FR + SR * (UsR - UR), FR)))
+    F = np.empty((4, np.shape(rhoL)[0] if np.ndim(rhoL) else 1))
+    F[0] = FK0 + fac * (coef - rhoK)
+    F[1] = FK1 + fac * (coef * Sstar - rhoK * uK)
+    F[2] = FK2 + fac * (coef * Estar - rhoK * EK)
+    F[3] = FK3 + fac * (coef - rhoK) * YK
     return F
 
 
 def hllc_scalar(rhoL, uL, pL, YL, rhoR, uR, pR, YR, gas):
-    """Scalar-state convenience wrapper (boundary faces)."""
-    arr = lambda v: np.array([v], dtype=float)
-    F = hllc(arr(rhoL), arr(uL), arr(pL), arr(YL),
-             arr(rhoR), arr(uR), arr(pR), arr(YR), gas)
-    return F[:, 0]
+    """Pure-scalar HLLC (boundary faces) -- same algebra as hllc()."""
+    gL = 1.0 + (YL * gas.R_R + (1.0 - YL) * gas.R_P) \
+        / (YL * gas.cv_R + (1.0 - YL) * gas.cv_P)
+    gR = 1.0 + (YR * gas.R_R + (1.0 - YR) * gas.R_P) \
+        / (YR * gas.cv_R + (1.0 - YR) * gas.cv_P)
+    aL = math.sqrt(gL * pL / rhoL)
+    aR = math.sqrt(gR * pR / rhoR)
+    EL = pL / ((gL - 1.0) * rhoL) + 0.5 * uL * uL
+    ER = pR / ((gR - 1.0) * rhoR) + 0.5 * uR * uR
+    SL = min(uL - aL, uR - aR)
+    SR = max(uL + aL, uR + aR)
+    dL = rhoL * (SL - uL)
+    dR = rhoR * (SR - uR)
+    Sstar = (pR - pL + uL * dL - uR * dR) / (dL - dR)
+    if Sstar >= 0.0:
+        rhoK, uK, pK, EK, YK, SK, need = rhoL, uL, pL, EL, YL, SL, SL < 0.0
+    else:
+        rhoK, uK, pK, EK, YK, SK, need = rhoR, uR, pR, ER, YR, SR, SR > 0.0
+    F0 = rhoK * uK
+    F1 = F0 * uK + pK
+    F2 = uK * (rhoK * EK + pK)
+    F3 = F0 * YK
+    if need:
+        dK = rhoK * (SK - uK)
+        coef = dK / (SK - Sstar)
+        Estar = EK + (Sstar - uK) * (Sstar + pK / dK)
+        F0 += SK * (coef - rhoK)
+        F1 += SK * (coef * Sstar - rhoK * uK)
+        F2 += SK * (coef * Estar - rhoK * EK)
+        F3 += SK * (coef - rhoK) * YK
+    return np.array([F0, F1, F2, F3])
 
 
 def wall_pressure(rho1, u1, p1, Y1, gas, side: str = "left"):
@@ -104,7 +150,7 @@ def wall_pressure(rho1, u1, p1, Y1, gas, side: str = "left"):
     if side == "right":
         u1 = -u1
     g = float(gas.gamma_mix(Y1))
-    a1 = np.sqrt(g * p1 / rho1)
+    a1 = math.sqrt(g * p1 / rho1)
     # left-wall convention: ghost is the mirror (-u1); SL = min(-u1, u1) - a1
     SL = min(-u1, u1) - a1
     uLm = -u1
@@ -112,61 +158,68 @@ def wall_pressure(rho1, u1, p1, Y1, gas, side: str = "left"):
     return max(p_star, P_FLOOR)
 
 
-def hyperbolic_rhs(U, A_eff, A_f, dx, gas, F_head, F_exit, nu_t):
+def hyperbolic_rhs(U, A_eff, A_f, dx, gas, F_head, F_exit, nu_t, prims=None):
     """dU/dt from fluxes + area source + turbulent diffusion.
     F_head, F_exit: total boundary fluxes (already include face areas).
-    Returns (rhs, p) -- p returned for reuse."""
-    rho, u, p, Y, T, a = primitives(U, A_eff, gas)
+    `prims`: optionally pass primitives(U, A_eff, gas) to avoid recompute.
+    Returns (rhs, p)."""
+    if prims is None:
+        prims = primitives(U, A_eff, gas)
+    rho, u, p, Y, T, a = prims
 
     # -- interior interfaces: MUSCL + HLLC --
-    rL, rR = muscl_faces(rho)
-    uL, uR = muscl_faces(u)
-    pL, pR = muscl_faces(p)
-    YL, YR = muscl_faces(Y)
-    rL = np.maximum(rL, RHO_FLOOR); rR = np.maximum(rR, RHO_FLOOR)
-    pL = np.maximum(pL, P_FLOOR); pR = np.maximum(pR, P_FLOOR)
-    YL = np.clip(YL, 0.0, 1.0); YR = np.clip(YR, 0.0, 1.0)
-    F_int = hllc(rL, uL, pL, YL, rR, uR, pR, YR, gas) * A_f[1:-1]
+    W = np.empty((4, rho.shape[0]))
+    W[0] = rho; W[1] = u; W[2] = p; W[3] = Y
+    WL, WR = muscl_faces_block(W)
+    rL = np.maximum(WL[0], RHO_FLOOR); rR = np.maximum(WR[0], RHO_FLOOR)
+    pL = np.maximum(WL[2], P_FLOOR); pR = np.maximum(WR[2], P_FLOOR)
+    YL = np.clip(WL[3], 0.0, 1.0); YR = np.clip(WR[3], 0.0, 1.0)
+    F_int = hllc(rL, WL[1], pL, YL, rR, WR[1], pR, YR, gas) * A_f[1:-1]
 
     F = np.empty((4, U.shape[1] + 1))
     F[:, 1:-1] = F_int
     F[:, 0] = F_head
     F[:, -1] = F_exit
 
-    rhs = -(F[:, 1:] - F[:, :-1]) / dx
+    rhs = (F[:, :-1] - F[:, 1:]) * (1.0 / dx)
 
     # -- area-pressure source (momentum), exactly balancing rest states --
-    rhs[1] += p * (A_f[1:] - A_f[:-1]) / dx
+    rhs[1] += p * (A_f[1:] - A_f[:-1]) * (1.0 / dx)
 
     # -- turbulent diffusion of momentum, heat, species (A7) --
-    cp = gas.cp_mix(Y)
-    rhoA_face = 0.5 * (rho[:-1] * A_eff[:-1] + rho[1:] * A_eff[1:])
+    cp = Y * (gas.cv_R + gas.R_R) + (1.0 - Y) * (gas.cv_P + gas.R_P)
+    rhoA = rho * A_eff
+    rhoA_face = 0.5 * (rhoA[:-1] + rhoA[1:])
     nu_face = 0.5 * (nu_t[:-1] + nu_t[1:])
-    du = np.diff(u) / dx
-    dT = np.diff(T) / dx
-    dY = np.diff(Y) / dx
+    k_face = rhoA_face * nu_face * (1.0 / dx)
+    du = np.diff(u)
+    dT = np.diff(T)
+    dY = np.diff(Y)
     cp_face = 0.5 * (cp[:-1] + cp[1:])
     u_face = 0.5 * (u[:-1] + u[1:])
 
-    flux_mom = rhoA_face * nu_face * du                      # shear
-    flux_E = rhoA_face * nu_face * (cp_face * dT) + flux_mom * u_face
-    flux_Y = rhoA_face * nu_face * dY
+    flux_mom = k_face * du
+    flux_E = k_face * (cp_face * dT) + flux_mom * u_face
+    flux_Y = k_face * dY
 
-    rhs[1, :-1] += flux_mom / dx; rhs[1, 1:] -= flux_mom / dx
-    rhs[2, :-1] += flux_E / dx;   rhs[2, 1:] -= flux_E / dx
-    rhs[3, :-1] += flux_Y / dx;   rhs[3, 1:] -= flux_Y / dx
+    inv_dx = 1.0 / dx
+    rhs[1, :-1] += flux_mom * inv_dx; rhs[1, 1:] -= flux_mom * inv_dx
+    rhs[2, :-1] += flux_E * inv_dx;   rhs[2, 1:] -= flux_E * inv_dx
+    rhs[3, :-1] += flux_Y * inv_dx;   rhs[3, 1:] -= flux_Y * inv_dx
 
     return rhs, p
 
 
-def reaction_substep(U, A_eff, gas, dt, quench=None):
+def reaction_substep(U, A_eff, gas, dt, quench=None, prims=None):
     """Operator-split reaction update: exact exponential decay of Y at
     (piecewise) frozen T, sub-cycled for stiffness (derivation.md #12.3).
     `quench` (optional array in [0,1]) multiplies the kinetic rate -- the
     strain-extinction factor of derivation.md #5b (A23).
-    Returns total heat released [J] this step (for the Rayleigh record)
-    and the volumetric heat release rate array [W/m] (per unit length)."""
-    rho, u, p, Y, T, a = primitives(U, A_eff, gas)
+    Returns total heat released per unit length summed [J/m] and the
+    volumetric heat release rate array [W/m]."""
+    if prims is None:
+        prims = primitives(U, A_eff, gas)
+    rho, u, p, Y, T, a = prims
     mask = (Y > 1e-8) & (T > 500.0)
     if not mask.any():
         return 0.0, np.zeros_like(Y)
@@ -178,7 +231,7 @@ def reaction_substep(U, A_eff, gas, dt, quench=None):
     nsub = int(np.clip(np.ceil(kmax / 0.2), 1, 64))
     dtn = dt / nsub
 
-    e_sens = gas.cv_mix(Y) * T  # per unit mass
+    e_sens = (Y * gas.cv_R + (1.0 - Y) * gas.cv_P) * T  # per unit mass
     Yn = Y.copy()
     Tn = T.copy()
     burned_total = np.zeros_like(Y)
@@ -187,7 +240,7 @@ def reaction_substep(U, A_eff, gas, dt, quench=None):
         dYb = Yn * (1.0 - np.exp(-k * dtn))
         Yn = Yn - dYb
         e_sens = e_sens + gas.q_R * dYb
-        Tn = e_sens / gas.cv_mix(Yn)
+        Tn = e_sens / (Yn * gas.cv_R + (1.0 - Yn) * gas.cv_P)
         burned_total += dYb
 
     # write back: total energy per length gains rho*A*qR*dYb; species updates
@@ -195,5 +248,5 @@ def reaction_substep(U, A_eff, gas, dt, quench=None):
     U[2] += dE
     U[3] = rho * A_eff * Yn
     q_rate = dE / dt  # W per metre of duct
-    heat_j = float(np.sum(dE))  # per unit length * dx applied by caller
+    heat_j = float(np.sum(dE))
     return heat_j, q_rate

@@ -126,7 +126,8 @@ def analyze_cycles(hist: dict, p_a: float, gas: GasModel,
     mdot_fuel = mdot_air_mix * gas.f / (1.0 + gas.f)
     per_rel = float(np.std(per) / np.mean(per))
     if len(F_cyc) >= 3:
-        f_tol = max(0.05 * abs(np.mean(F_cyc)), 0.005 * p_a * 1e-3 * 140)
+        # absolute floor ~0.5% of p_a * A_e (exit-plane force scale, ~0.7 N)
+        f_tol = max(0.05 * abs(np.mean(F_cyc)), 0.75)
         conv = per_rel < 0.02 and float(np.std(F_cyc)) < f_tol
     else:
         conv = False

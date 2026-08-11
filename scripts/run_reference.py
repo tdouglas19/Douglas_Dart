@@ -19,13 +19,39 @@ def main():
     ap.add_argument("--t-end", type=float, default=0.30)
     ap.add_argument("--n-cells", type=int, default=300)
     ap.add_argument("--tag", type=str, default="")
+    # valve design overrides (engine design space, not model tuning)
+    ap.add_argument("--petal-h", type=float, default=None, help="thickness m")
+    ap.add_argument("--xi-max", type=float, default=None, help="stop lift m")
+    ap.add_argument("--n-petals", type=int, default=None)
+    ap.add_argument("--petal-w", type=float, default=None)
+    ap.add_argument("--petal-l", type=float, default=None)
+    ap.add_argument("--port-area", type=float, default=None)
+    ap.add_argument("--phi", type=float, default=None)
     args = ap.parse_args()
+
+    from dataclasses import replace
+    from pulsejet_fp import reference_valve, reference_gas
+    valve = reference_valve()
+    vkw = {}
+    if args.petal_h is not None: vkw["petal_thickness"] = args.petal_h
+    if args.xi_max is not None: vkw["max_lift"] = args.xi_max
+    if args.n_petals is not None: vkw["n_petals"] = args.n_petals
+    if args.petal_w is not None: vkw["petal_width"] = args.petal_w
+    if args.petal_l is not None: vkw["petal_length"] = args.petal_l
+    if args.port_area is not None: vkw["port_area"] = args.port_area
+    if vkw:
+        valve = replace(valve, **vkw)
+    gas = reference_gas(phi=args.phi) if args.phi is not None else None
 
     t0 = time.time()
     res = pulsejet_thrust(
         mach=args.mach, altitude_m=args.alt, t_end=args.t_end,
+        valve=valve, gas=gas,
         numerics=Numerics(n_cells=args.n_cells), keep_traces=True)
     wall = time.time() - t0
+    print(f"valve: k={valve.stiffness:.0f} N/m  f_n={valve.natural_frequency_hz:.0f} Hz "
+          f"curtain_max={valve.curtain_area(valve.max_lift)*1e4:.2f} cm^2 "
+          f"ports={valve.n_petals*valve.port_area*1e4:.2f} cm^2")
 
     print(f"status          : {res.status}")
     print(f"thrust (eq.24)  : {res.thrust_n:8.2f} N")

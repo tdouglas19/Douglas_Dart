@@ -80,3 +80,52 @@ physics restored.
 Next: full-resolution reference run at M=0 — does FP-1 sustain a limit
 cycle, and are thrust/frequency in the physical class (small-valved-engine
 sanity anchors: ~20-30 N, ~130-150 Hz)?
+
+## 3. First sustained limit cycle -- and the weak-attractor finding (2026-08-11)
+
+FP-1 at M=0 (N=200 probe): **genuine converged limit cycle** -- 183.7 Hz
+(right in the small-valved class), **positive Rayleigh index** (the emergent
+thermoacoustic driving pulsejet-km could never get), thrust +3.57 N, clean
+periodic valve action with realistic back-spit at closing, exhaust pulses
+with suction backflow. Two verification wins: the eq.24 vs eq.25 thrust
+cross-check discrepancy (3.57 vs 5.63 N) turned out to be a missing term in
+the *recording code* (the doc's own intake-jet reaction -mdot*u_j, ~2.1 N --
+almost exactly the gap); fixed to match the doc.
+
+But the attractor is WEAK: p/p0 swings only 0.90-1.16 (real class:
+~0.6-2.2), per-cycle swallow 0.075 g vs the ~1-3 g/cycle real engines
+ingest, and the overview shows heat release never switching off (10-25 kW
+floor between 60 kW pulses) -- a smeared burn whose tail overlaps the next
+intake. Notably the startup transient (t=35-55 ms) was STRONGER (2.5 mm
+lift, 27 N thrust peaks) and decayed INTO the weak attractor.
+
+## 4. Soft valves kill the oscillation; turbulence budget completed (2026-08-11)
+
+**Design probe (negative result, kept):** softer/taller petals (h=0.15 mm,
+k=295-337 N/m, xi_max=4.5 mm; two variants incl. wider ports) collapsed the
+cycle almost completely (air flow 13.7 -> 0.4 g/s, amplitude to +/-1%,
+frequency drifting up to the passive acoustic mode). Physics: a soft valve
+leaks at small dP, acting as an acoustic absorber AT the head pressure
+antinode -- it destroys the resonator Q. The stiff spring is the nonlinear
+gate (rectifier) the oscillation depends on: shut for small fluctuations,
+open only under real suction. Flow capacity must come from PORT AREA at
+constant spring dynamics, not from softening the spring. (Echoes
+pulsejet-km's Section 33 finding that smaller valve = more amplitude, now
+with a mechanism.)
+
+**Model completeness fix:** the k_c budget had only jet production, so
+chamber turbulence died ~0.5 ms after valve closing and the flame crawled
+through the slug (~4 m/s effective) -- the source of the smeared burn tail.
+Added the standard k-equation mean-shear production term
+nu_t*(du/dx)^2 (first-principles Reynolds-stress work against mean shear,
+weighted to the chamber zone) and set C_eps 1.0 -> 0.5 (decaying-turbulence
+integral-scale value; still the O(1) dimensional-analysis constant A11
+declares, revised once during initial calibration, never per-case).
+
+**Performance:** step cost 7.7 -> 2.79 ms (2.8x) via allocation-lean HLLC,
+threaded primitives (10 -> 4 computations/step), scalar boundary HLLC, and
+fused mixture-property arithmetic. Full suite still 31/31 (and 2x faster).
+One real bug caught during the rewrite before it ran: gamma_mix interpolated
+as sum-of-ratios instead of ratio-of-sums in the fast path -- would have
+introduced a small thermodynamic inconsistency between reconstruction and
+recovery.

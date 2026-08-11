@@ -27,7 +27,7 @@ class Numerics:
 class TurbulenceParams:
     """A10/A11 closure constants -- fixed once, never tuned per case."""
     c_nu: float = 0.5
-    c_eps: float = 1.0
+    c_eps: float = 0.5
     c_pipe: float = 0.02
     mixing_length_frac: float = 0.35  # l_m = frac * D_chamber
     nu_min: float = 2e-5
@@ -181,61 +181,66 @@ class PulsejetEngine:
         w = self.grid.chamber_weight
         return w * nu_cz + (1.0 - w) * nu_pipe + t.nu_min
 
-    def _rhs(self, U, nu_t):
-        rho, u, p, Y, T, a = solver.primitives(U, self.A_eff, self.gas)
+    def _rhs(self, U, nu_t, prims=None):
+        if prims is None:
+            prims = solver.primitives(U, self.A_eff, self.gas)
+        rho, u, p, Y, T, a = prims
         F_head, mdot_v, uj, rho_t = self._head_flux(
             float(rho[0]), float(u[0]), float(p[0]), float(Y[0]), float(T[0]))
         F_exit = self._exit_flux(
             float(rho[-1]), float(u[-1]), float(p[-1]), float(Y[-1]))
         rhs, _ = solver.hyperbolic_rhs(U, self.A_eff, self.grid.A_f,
                                        self.grid.dx, self.gas,
-                                       F_head, F_exit, nu_t)
+                                       F_head, F_exit, nu_t, prims=prims)
         return rhs, (mdot_v, uj, rho_t)
 
-    def compute_dt(self):
-        rho, u, p, Y, T, a = solver.primitives(self.U, self.A_eff, self.gas)
+    def _dt_from(self, prims, nu):
+        rho, u, p, Y, T, a = prims
         dx = self.grid.dx
         dt_conv = self.numerics.cfl * dx / float(np.max(np.abs(u) + a))
-        nu = self._nu_t_field(u)
         dt_diff = 0.4 * dx * dx / float(np.max(nu))
         dt_valve = 2.0 * math.pi / (20.0 * math.sqrt(
             self.valve_design.stiffness / self.valve_design.effective_mass))
         return min(dt_conv, dt_diff, dt_valve, self.numerics.dt_max)
 
+    def compute_dt(self):
+        prims = solver.primitives(self.U, self.A_eff, self.gas)
+        return self._dt_from(prims, self._nu_t_field(prims[1]))
+
     def step(self):
-        dt = self.compute_dt()
         gas = self.gas
         dx = self.grid.dx
 
-        rho0, u0, p0, Y0, T0, a0 = solver.primitives(self.U, self.A_eff, gas)
-        nu_t = self._nu_t_field(u0)
+        prims0 = solver.primitives(self.U, self.A_eff, gas)
+        nu_t = self._nu_t_field(prims0[1])
+        dt = self._dt_from(prims0, nu_t)
 
         # ---- SSP-RK2 transport ----
-        rhs1, bc1 = self._rhs(self.U, nu_t)
+        rhs1, bc1 = self._rhs(self.U, nu_t, prims0)
         U1 = self.U + dt * rhs1
         rhs2, _ = self._rhs(U1, nu_t)
         self.U = 0.5 * self.U + 0.5 * (U1 + dt * rhs2)
 
         # ---- jet-strain extinction field (derivation.md #5b, A23) ----
         mdot_v, uj, rho_t = bc1
-        rho, u, p, Y, T, a = solver.primitives(self.U, self.A_eff, gas)
+        prims2 = solver.primitives(self.U, self.A_eff, gas)
         quench = None
         if mdot_v > 0.0 and abs(uj) > 1.0 and self.valve.lift > 1e-5:
+            T2 = prims2[4]
             s_jet = abs(uj) / max(self.valve.lift, 3e-4)
             L_jet = float(np.clip(15.0 * self.valve.lift, 5e-3,
                                   0.6 * self.geom.chamber_zone_length))
             s = s_jet * np.exp(-self.grid.x / L_jet)
-            k_arr = gas.A_r * np.exp(-gas.T_a / T)
+            k_arr = gas.A_r * np.exp(-gas.T_a / T2)
             quench = 1.0 / (1.0 + (s * self.Ze2 / np.maximum(k_arr, 1e-30)) ** 2)
 
         # ---- reaction sub-step (operator split) ----
         heat_per_len, q_rate = solver.reaction_substep(
-            self.U, self.A_eff, gas, dt, quench)
+            self.U, self.A_eff, gas, dt, quench, prims=prims2)
         q_tot = float(np.sum(q_rate)) * dx  # W
 
         # ---- valve ODE + contact (eq. 19) ----
         rho, u, p, Y, T, a = solver.primitives(self.U, self.A_eff, gas)
-        mdot_v, uj, rho_t = bc1
         lift_old = self.valve.lift
         self.valve.step(dt, self.p0_up, float(p[0]), rho_t, abs(uj), float(rho[0]))
 
@@ -250,6 +255,12 @@ class PulsejetEngine:
         w = self.grid.chamber_weight
         m_cz = float(np.sum(rho * self.A_eff * w)) * dx
         prod = 0.5 * max(mdot_v, 0.0) * (abs(uj) - float(u[0])) ** 2
+        # mean-shear production (standard k-equation term): nu_t (du/dx)^2
+        dudx = np.diff(u) / dx
+        nu_face = 0.5 * (nu_t[:-1] + nu_t[1:])
+        rhoA_face = 0.5 * (rho[:-1] * self.A_eff[:-1] + rho[1:] * self.A_eff[1:])
+        w_face = 0.5 * (w[:-1] + w[1:])
+        prod += float(np.sum(w_face * rhoA_face * nu_face * dudx * dudx)) * dx
         iz = min(self._iz, len(u) - 1)
         mdot_out = float(rho[iz] * u[iz] * self.grid.A_c[iz])
         tp = self.turb
@@ -278,8 +289,10 @@ class PulsejetEngine:
         mdot_e = float(F_exit[0])
         F_mom = float(F_exit[1]) - self.p_a * g.A_f[-1] \
             - max(mdot_v, 0.0) * self.u_inf
+        # eq. 25: head push + cone pull + intake-jet reaction on the head
         F_surf = (float(p[0]) - self.p_a) * g.A_f[0] \
-            + float(np.sum((p - self.p_a) * (g.A_f[1:] - g.A_f[:-1])))
+            + float(np.sum((p - self.p_a) * (g.A_f[1:] - g.A_f[:-1]))) \
+            - max(mdot_v, 0.0) * abs(uj_signed)
         self.history.append(
             t=self.t, p_head=float(p[0]), T_head=float(T[0]),
             u_head=float(u[0]), Y_head=float(Y[0]),
