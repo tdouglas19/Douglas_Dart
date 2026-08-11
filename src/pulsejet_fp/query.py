@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .engine import Numerics, PulsejetEngine, StartCondition, TurbulenceParams
+from .engine import (IntakeDesign, Numerics, PulsejetEngine, StartCondition,
+                     TurbulenceParams)
 from .gas import GasModel, propane_air
 from .geometry import EngineGeometry
 from .valve import PetalValveDesign
@@ -157,6 +158,7 @@ def pulsejet_thrust(mach: float = 0.0, altitude_m: float = 0.0, *,
                     numerics: Numerics | None = None,
                     turb: TurbulenceParams | None = None,
                     start: StartCondition | None = None,
+                    intake: IntakeDesign | None = None,
                     t_end: float = 0.30,
                     keep_traces: bool = False) -> ThrustResult:
     """Primary query (derivation.md #13): cycle-averaged thrust at a flight
@@ -166,7 +168,8 @@ def pulsejet_thrust(mach: float = 0.0, altitude_m: float = 0.0, *,
     valve = valve or reference_valve()
 
     eng = PulsejetEngine(gas, geom, valve, mach=mach, altitude_m=altitude_m,
-                         numerics=numerics, turb=turb, start=start)
+                         numerics=numerics, turb=turb, start=start,
+                         intake=intake)
     hist = eng.run(t_end)
 
     if eng.status == "diverged":

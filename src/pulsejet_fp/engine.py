@@ -41,11 +41,23 @@ class StartCondition:
     p_ratio: float = 1.4
 
 
+@dataclass(frozen=True)
+class IntakeDesign:
+    """Intake duct + valve-face plenum (derivation.md #6b, eq. 23b, A24)."""
+    duct_length: float = 0.060    # m
+    duct_diameter: float = 0.050  # m
+    plenum_volume: float = 5e-5   # m^3 (valve-cap volume)
+
+    @property
+    def duct_area(self) -> float:
+        return 0.25 * math.pi * self.duct_diameter ** 2
+
+
 class History:
     FIELDS = ("t", "p_head", "T_head", "u_head", "Y_head", "u_jet_signed",
               "mdot_v", "lift", "lift_rate", "p_exit", "u_exit", "mdot_exit",
               "F_mom", "F_surf", "q_tot", "k_c", "T_max", "mass_total",
-              "energy_total", "reactant_mass")
+              "energy_total", "reactant_mass", "p_plen", "mdot_i")
 
     def __init__(self):
         for f in self.FIELDS:
@@ -65,18 +77,23 @@ class PulsejetEngine:
                  altitude_m: float = 0.0,
                  numerics: Numerics | None = None,
                  turb: TurbulenceParams | None = None,
-                 start: StartCondition | None = None):
+                 start: StartCondition | None = None,
+                 intake: IntakeDesign | None = None):
         self.gas = gas
         self.geom = geom
         self.valve_design = valve
         self.numerics = numerics or Numerics()
         self.turb = turb or TurbulenceParams()
         self.start = start or StartCondition()
+        self.intake = intake or IntakeDesign()
 
         self.p_a, self.T_a = atmosphere.ambient(altitude_m)
         self.p0_up, self.T0_up, self.u_inf = atmosphere.ram_state(
             self.p_a, self.T_a, mach)
         self.mach = mach
+        # intake column + plenum state (eq. 23b)
+        self.mdot_i = 0.0
+        self.p_plen = self.p0_up
 
         self.grid: Grid = build_grid(geom, self.numerics.n_cells)
         self.valve = PetalValveState(valve)
@@ -123,9 +140,9 @@ class PulsejetEngine:
         if A_v <= 0.0:
             return np.array([0.0, p_w * A0, 0.0, 0.0]), 0.0, 0.0, rho1
 
-        if self.p0_up > p1:
+        if self.p_plen > p1:
             G, u_j, rho_t = orifice.mass_flux(
-                self.p0_up, self.T0_up, gas.gamma_R, gas.R_R, p1)
+                self.p_plen, self.T0_up, gas.gamma_R, gas.R_R, p1)
             mdot = G * A_v
             h0 = gas.cp_R * self.T0_up
             F = np.array([mdot, mdot * u_j + p_w * A0, mdot * h0, mdot * 1.0])
@@ -138,7 +155,7 @@ class PulsejetEngine:
         p01 = p1 * fac ** (g1 / (g1 - 1.0))
         T01 = T1 * fac
         G, u_j, rho_t = orifice.mass_flux(
-            p01, T01, g1, float(gas.R_mix(Y1)), self.p0_up)
+            p01, T01, g1, float(gas.R_mix(Y1)), self.p_plen)
         mdot = -G * A_v
         h01 = float(gas.cp_mix(Y1)) * T01
         F = np.array([mdot, abs(mdot) * u_j + p_w * A0, mdot * h01, mdot * Y1])
@@ -239,10 +256,22 @@ class PulsejetEngine:
             self.U, self.A_eff, gas, dt, quench, prims=prims2)
         q_tot = float(np.sum(q_rate)) * dx  # W
 
+        # ---- intake column + plenum ODEs (eq. 23b, symplectic order) ----
+        ik = self.intake
+        rho0_i = self.p0_up / (gas.R_R * self.T0_up)
+        u_i = self.mdot_i / (rho0_i * ik.duct_area)
+        # Borda-Carnot dump loss where the duct expands into the plenum
+        dp_loss = 0.5 * rho0_i * u_i * abs(u_i)
+        self.mdot_i += dt * ik.duct_area / ik.duct_length \
+            * (self.p0_up - self.p_plen - dp_loss)
+        self.p_plen += dt * (gas.gamma_R * gas.R_R * self.T0_up
+                             / ik.plenum_volume) * (self.mdot_i - mdot_v)
+        self.p_plen = min(max(self.p_plen, 0.2 * self.p_a), 5.0 * self.p_a)
+
         # ---- valve ODE + contact (eq. 19) ----
         rho, u, p, Y, T, a = solver.primitives(self.U, self.A_eff, gas)
         lift_old = self.valve.lift
-        self.valve.step(dt, self.p0_up, float(p[0]), rho_t, abs(uj), float(rho[0]))
+        self.valve.step(dt, self.p_plen, float(p[0]), rho_t, abs(uj), float(rho[0]))
 
         # ---- variable-volume chamber-cell work (eq. 29) ----
         S_old = self.valve_design.swept_volume(lift_old)
@@ -304,6 +333,7 @@ class PulsejetEngine:
             mass_total=float(np.sum(self.U[0])) * dx,
             energy_total=float(np.sum(self.U[2])) * dx,
             reactant_mass=float(np.sum(self.U[3])) * dx,
+            p_plen=self.p_plen, mdot_i=self.mdot_i,
         )
 
     def run(self, t_end: float, progress_every: float = 0.0):

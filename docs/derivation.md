@@ -431,6 +431,27 @@ compression; the *internal* dump loss is captured by §7's Borda–Carnot
 mixing; consequence: mild optimism in $p_{0,up}$ at high subsonic M):
 $p_{0,up} = p_a (1 + \frac{\gamma-1}{2} M^2)^{\gamma/(\gamma-1)}$.
 
+**Intake column inertia (§6b).** The valve does not draw from an infinite
+reservoir: it sits behind an intake duct (length $L_i$, area $A_i$) ending
+in a small plenum (volume $V_{pl}$) at the valve face. Newton's second law
+applied to the duct's air column (the classic inertance element — unsteady
+Bernoulli integrated along the duct) and mass conservation + the isentropic
+EOS applied to the plenum give two ODEs:
+
+$$ \frac{d\dot m_i}{dt} = \frac{A_i}{L_i}\left(p_{0,up} - p_{pl}\right), \qquad \frac{dp_{pl}}{dt} = \frac{\gamma_R R_R T_{0,up}}{V_{pl}}\left(\dot m_i - \dot m_v\right) \tag{23b} $$
+
+The valve's upstream state is then $(p_{pl}, T_{0,up})$ rather than the ram
+stagnation state. This carries the two real intake effects a reservoir
+cannot: **ram-through** (the accelerated column keeps feeding after chamber
+pressure recovers, extending the effective intake) and the **closing-hammer
+spike** ($p_{pl}$ overshoots $p_{0,up}$ when the valve shuts against a
+moving column, supercharging the next opening). (A24: the column is treated
+as a frictionless incompressible slug with a loss-free bellmouth entry, the
+plenum as adiabatic at $T_{0,up}$, and back-spit contamination of the plenum
+is neglected; justification: the duct is short — its own acoustic timescale
+$L_i/a \sim 0.2$ ms is marginal but below the cycle scale — and bellmouth
+entries are near-loss-free by design.)
+
 **Exit plane ($x=L$).** Characteristics of the 1D Euler system (eigenvalues
 $u-a$, $u$, $u+a$; Riemann invariants $J_\pm = u \pm \frac{2a}{\gamma-1}$
 along $dx/dt = u \pm a$, entropy along $dx/dt = u$ — derived by diagonalizing
@@ -657,6 +678,7 @@ numerical settings, run in parallel worker processes.
 | A21 | Base pressure = $p_a$ | Exit discharges to near-wake at ambient static | ±few % on pressure thrust |
 | A22 | Backflow from quiescent base region | Near-wake air convects with vehicle | Backflow enthalpy approximate |
 | A23 | Jet strain field $s = (u_j/\xi)e^{-x/L_{jet}}$, $L_{jet}=15\xi$ | Self-similar free-jet momentum-integral decay; extinction criterion from ZFK asymptotics (eq. 12b-c) | Ignition-onset timing ±30% |
+| A24 | Intake column: frictionless slug + adiabatic plenum (eq. 23b) | Newton's law on the duct column (inertance); isentropic plenum compliance; bellmouth ~loss-free | Duct acoustics unresolved (~0.2 ms) |
 
 Every other relation in this document — the field equations, valve beam
 mechanics, orifice/choking relations, HLLC construction, Rayleigh balance,

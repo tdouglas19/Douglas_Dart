@@ -129,3 +129,29 @@ One real bug caught during the rewrite before it ran: gamma_mix interpolated
 as sum-of-ratios instead of ratio-of-sums in the fast path -- would have
 introduced a small thermodynamic inconsistency between reconstruction and
 recovery.
+
+## 5. Intake-column inertia: the biggest single physics gain (2026-08-11)
+
+Run C (turbulence completeness, baseline valve): 5.24 N converged, and the
+eq.24/eq.25 thrust cross-check now agrees to 2.3% (5.24 vs 5.36) -- the
+recording fix verified. Run D (12 petals): more air (19.8 g/s) but similar
+thrust, unconverged wobble -- port area alone is not the binding constraint.
+
+**Run E: added the missing intake subsystem** (derivation.md #6b, eq. 23b,
+A24): the valve now draws from a duct-column + plenum with real momentum
+(inertance ODE pair, symplectic update, Borda-Carnot dump loss damping the
+44 kHz plenum mode) instead of an infinite reservoir. Result: **7.85 N**
+(+50% over C; progression 3.57 -> 5.24 -> 7.85 across the three physics
+completions), p/p0 0.843-1.273, 168.3 Hz, Rayleigh +1.55e6, and the two
+independent thrust formulations agree to **0.4%** (7.85 vs 7.82 N) -- the
+strongest internal-consistency verification the model has produced. The
+cycle zoom shows the signature the reservoir model could never make: a
+TWO-LOBED intake pulse (suction pull, then the column's ram-through second
+push), plus the asymmetric relaxation-oscillator pressure shape emerging.
+
+Interpretation of the remaining gap to the 20-30 N class: specific thrust
+per unit air is HIGH (~420 m/s effective) -- the model engine is
+charge-starved, not inefficient. Real engines of this class likely swallow
+far more air (and run rich, wasting fuel -- their TSFC ~3+ vs our 0.55).
+Next: combined hardware-plausible config (12 petals + 100 mm intake runner
++ phi=1.05) as run F.

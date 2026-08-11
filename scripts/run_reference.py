@@ -27,6 +27,9 @@ def main():
     ap.add_argument("--petal-l", type=float, default=None)
     ap.add_argument("--port-area", type=float, default=None)
     ap.add_argument("--phi", type=float, default=None)
+    ap.add_argument("--intake-l", type=float, default=None)
+    ap.add_argument("--intake-d", type=float, default=None)
+    ap.add_argument("--plenum-v", type=float, default=None)
     args = ap.parse_args()
 
     from dataclasses import replace
@@ -43,10 +46,19 @@ def main():
         valve = replace(valve, **vkw)
     gas = reference_gas(phi=args.phi) if args.phi is not None else None
 
+    from pulsejet_fp import IntakeDesign
+    intake = None
+    ikw = {}
+    if args.intake_l is not None: ikw["duct_length"] = args.intake_l
+    if args.intake_d is not None: ikw["duct_diameter"] = args.intake_d
+    if args.plenum_v is not None: ikw["plenum_volume"] = args.plenum_v
+    if ikw:
+        intake = IntakeDesign(**ikw)
+
     t0 = time.time()
     res = pulsejet_thrust(
         mach=args.mach, altitude_m=args.alt, t_end=args.t_end,
-        valve=valve, gas=gas,
+        valve=valve, gas=gas, intake=intake,
         numerics=Numerics(n_cells=args.n_cells), keep_traces=True)
     wall = time.time() - t0
     print(f"valve: k={valve.stiffness:.0f} N/m  f_n={valve.natural_frequency_hz:.0f} Hz "

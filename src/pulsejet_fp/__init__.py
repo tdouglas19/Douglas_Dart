@@ -6,13 +6,14 @@ Derivation: docs/derivation.md.
 from .gas import GasModel, propane_air
 from .geometry import EngineGeometry
 from .valve import PetalValveDesign
-from .engine import Numerics, PulsejetEngine, StartCondition, TurbulenceParams
+from .engine import (IntakeDesign, Numerics, PulsejetEngine, StartCondition,
+                     TurbulenceParams)
 from .query import (ThrustResult, pulsejet_thrust, reference_gas,
                     reference_geometry, reference_valve)
 
 __all__ = [
     "GasModel", "propane_air", "EngineGeometry", "PetalValveDesign",
-    "Numerics", "PulsejetEngine", "StartCondition", "TurbulenceParams",
-    "ThrustResult", "pulsejet_thrust", "reference_gas",
+    "IntakeDesign", "Numerics", "PulsejetEngine", "StartCondition",
+    "TurbulenceParams", "ThrustResult", "pulsejet_thrust", "reference_gas",
     "reference_geometry", "reference_valve",
 ]
