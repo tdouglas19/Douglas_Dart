@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import cached_property
 from math import isclose, pi
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 import yaml
+
+if TYPE_CHECKING:
+    # pulsejet-km (sibling repo) is an OPTIONAL dependency -- only needed for
+    # PULSEJET_KM_MODE (propulsion_map.py). `from __future__ import
+    # annotations` above makes every annotation in this file a deferred
+    # string, so this import-for-type-checking-only costs nothing at
+    # runtime and does not require pulsejet-km to be installed just to
+    # import this module. The real, runtime import is lazy, inside
+    # _load_pulsejet_km_engine_config below -- only reached when a
+    # `pulsejet_km:` YAML section is actually present.
+    from pulsejet_km.config import EngineConfig as PulsejetKmEngineConfig
 
 
 def _positive(name: str, value: float) -> float:
@@ -41,6 +53,9 @@ class Fuel:
         _positive("density_kg_per_m3", self.density_kg_per_m3)
 
 
+_VALID_INLET_TYPES = ("straight", "side")
+
+
 @dataclass(frozen=True)
 class SelectorConfig:
     """``ramjet_total_pressure_recovery`` is an *installed-efficiency* factor.
@@ -51,19 +66,37 @@ class SelectorConfig:
     model does not capture -- duct friction, bends, boundary-layer bleed, and this
     vehicle's own pulsejet/ramjet selector losses -- and stays roughly constant
     with Mach, unlike the idealized shock term.
+
+    ``inlet_type`` selects which pulsejet-mode thermodynamic-cycle regime applies
+    (docs/pulsejet_ramjet_governing_equations.md, sec. 2.2, 2.4): a ``"straight"`` inlet
+    genuinely pre-compresses the charge as flight speed increases (Lenoir cycle at
+    zero/low speed, shifting toward the Humphrey cycle as ram pressure rises), while
+    a ``"side"`` inlet shows little pre-compression at any speed and stays close to
+    the Lenoir cycle throughout. ``pulsejet.py`` uses this to cap how much of the
+    Mach-dependent stagnation-pressure rise is credited as real pre-compression.
     """
 
     circular_intake_diameter_m: float
     open_fraction: float
+    """Pulsejet-only capture-area fraction (``pulsejet.py``'s
+    ``available_area_m2`` reads). ``ramjet.py`` no longer scales by this --
+    it reads the full ``circular_area_m2`` instead, since the switchable
+    selector fully closes the pulsejet path when ramjet is active, so
+    nothing requires halving the ramjet's captured area. Still capped at
+    (0, 0.5] because pulsejet's own share of the shared duct is still an
+    open, user-set assumption (docs/assumptions.md), not because both modes
+    are still assumed to split the intake."""
     discharge_coefficient: float
     pulsejet_total_pressure_recovery: float
     ramjet_total_pressure_recovery: float
+    inlet_type: str = "straight"
 
     def __post_init__(self) -> None:
         _positive("circular_intake_diameter_m", self.circular_intake_diameter_m)
         if not 0.0 < self.open_fraction <= 0.5:
             raise ValueError(
-                "open_fraction must be in (0, 0.5] for mutually exclusive half-intakes"
+                "open_fraction must be in (0, 0.5] -- pulsejet's own share of "
+                "the shared duct"
         )
         _fraction("discharge_coefficient", self.discharge_coefficient)
         _fraction(
@@ -74,12 +107,22 @@ class SelectorConfig:
             "ramjet_total_pressure_recovery",
             self.ramjet_total_pressure_recovery,
         )
+        if self.inlet_type not in _VALID_INLET_TYPES:
+            raise ValueError(f"inlet_type must be one of {_VALID_INLET_TYPES}")
 
-    @property
+    # cached_property, not property: read every pulsejet/ramjet time step
+    # (circular_area_m2: ramjet.py, propulsion.py; available_area_m2:
+    # pulsejet.py, propulsion.py) but fixed for the lifetime of
+    # this frozen, immutable instance -- caching cannot change the value,
+    # only skip recomputing it. Safe on a frozen dataclass because
+    # cached_property writes directly to instance.__dict__, bypassing the
+    # dataclass-generated __setattr__ that blocks normal attribute sets
+    # (the same bypass __post_init__ uses via object.__setattr__ elsewhere).
+    @cached_property
     def circular_area_m2(self) -> float:
         return pi * self.circular_intake_diameter_m**2 / 4.0
 
-    @property
+    @cached_property
     def available_area_m2(self) -> float:
         return self.open_fraction * self.circular_area_m2
 
@@ -96,11 +139,14 @@ class NozzleConfig:
             raise ValueError("exit_to_throat_area_ratio must be at least one")
         _fraction("discharge_coefficient", self.discharge_coefficient)
 
-    @property
+    # See SelectorConfig.circular_area_m2 above for why cached_property is
+    # safe here (frozen dataclass, no __slots__, value fixed for instance
+    # lifetime, read every pulsejet/ramjet nozzle time step).
+    @cached_property
     def throat_area_m2(self) -> float:
         return pi * self.throat_diameter_m**2 / 4.0
 
-    @property
+    @cached_property
     def exit_area_m2(self) -> float:
         return self.throat_area_m2 * self.exit_to_throat_area_ratio
 
@@ -146,14 +192,62 @@ class PulsejetConfig:
 
 @dataclass(frozen=True)
 class RamjetConfig:
+    """``minimum_lightoff_test_mach``/``minimum_self_sustaining_mach`` are the
+    pulsejet-to-ramjet mode-transition thresholds this vehicle's own selector
+    switches on.
+
+    docs/pulsejet_ramjet_governing_equations.md sec. 1.1/1.3: no patent in the
+    switchable-engine lineage (Collins, Winter/McDonnell, Ghougasian) gives a
+    quantitative transition Mach-number control law or valve-loss coefficient --
+    the transition in those designs is geometric/mechanical (a valve or
+    centerbody physically reconfigures), not aerodynamically automatic from a
+    formula. ``minimum_self_sustaining_mach`` is therefore still an engineering
+    assumption tuned for this vehicle, not a sourced value; treat it as an open
+    trade variable (see ``docs/design_convergence.md``), the same way this
+    codebase already treats it as an ordinary tunable config field rather than
+    a hardcoded constant.
+
+    ``minimum_lightoff_test_mach`` is NOT hand-picked the same way anymore
+    (2026-08-10 session): ``load_reference_case`` computes it via
+    ``ramjet.py``'s ``derive_lightoff_mach`` -- the Mach at which this specific
+    engine's own net thrust first turns positive and stays positive, scanned
+    up to ``minimum_self_sustaining_mach``. Whatever value is set on a
+    constructed ``RamjetConfig`` here is that computed result (or, only during
+    ``load_reference_case``'s own construction, a transient placeholder before
+    the real derivation runs) -- it is never read from YAML.
+
+    ``target_equivalence_ratio`` mirrors ``PulsejetConfig.target_equivalence_ratio``
+    (2026-08-10 session): the combustor's fuel-air ratio is now driven by this
+    input, the same way pulsejet's is (``fuel_air_ratio = target_equivalence_ratio
+    / fuel.stoichiometric_air_fuel_ratio``, matching ``pulsejet.py``'s own
+    metering), rather than backing fuel-air ratio out of a fixed target exit
+    temperature. Combustor exit temperature is computed from this, not the other
+    way around -- see ``ramjet.py``'s ``_solve_ramjet_cycle``. This is a genuinely
+    different value from pulsejet's (0.60 lean vs. pulsejet's stoichiometric
+    1.00), not a shared constant: it's the equivalence ratio backed out of this
+    vehicle's previous fixed-1900 K target, confirmed by direct computation to
+    reproduce that same ~1900 K result across this vehicle's operating Mach range.
+    """
+
     gamma: float
     gas_constant_j_per_kg_k: float
     mass_capture_coefficient: float
     combustor_total_pressure_loss_fraction: float
     combustor_efficiency: float
-    target_combustor_exit_temperature_k: float
+    target_equivalence_ratio: float
     minimum_lightoff_test_mach: float
     minimum_self_sustaining_mach: float
+    # pulsejet_ramjet_governing_equations.md sec. 2.5: when the nozzle's
+    # mass-flow capacity exceeds the engine's ingested mass flow, "the inlet
+    # must go supercritical, reducing delivered stagnation pressure" -- an
+    # iterative inlet/combustor/nozzle mass-flow-and-pressure balance, not a
+    # one-pass calculation. This coefficient sets how much additional
+    # total-pressure recovery is lost as a function of how under-filled the
+    # nozzle is (0 = no penalty, i.e. the old one-pass behavior). It is NOT a
+    # sourced value -- the reference confirms this physical coupling exists but
+    # gives no correlation for its magnitude; treat as a tunable placeholder
+    # until validated against test data.
+    supercritical_recovery_penalty_coefficient: float = 0.10
 
     def __post_init__(self) -> None:
         if self.gamma <= 1.0:
@@ -163,11 +257,11 @@ class RamjetConfig:
         _fraction("combustor_efficiency", self.combustor_efficiency)
         if not 0.0 <= self.combustor_total_pressure_loss_fraction < 1.0:
             raise ValueError("combustor pressure loss must be in [0, 1)")
-        _positive(
-            "target_combustor_exit_temperature_k", self.target_combustor_exit_temperature_k
-        )
+        _positive("target_equivalence_ratio", self.target_equivalence_ratio)
         _positive("minimum_lightoff_test_mach", self.minimum_lightoff_test_mach)
         _positive("minimum_self_sustaining_mach", self.minimum_self_sustaining_mach)
+        if not 0.0 <= self.supercritical_recovery_penalty_coefficient < 1.0:
+            raise ValueError("supercritical recovery penalty coefficient must be in [0, 1)")
         if self.minimum_self_sustaining_mach < self.minimum_lightoff_test_mach:
             raise ValueError("self-sustaining Mach cannot be below the light-off test Mach")
 
@@ -218,7 +312,29 @@ class VehicleConfig:
 
 @dataclass(frozen=True)
 class MissionConfig:
-    """User mission requirements and recovered prior sizing allocations."""
+    """User mission requirements and recovered prior sizing allocations.
+
+    ``sled_release_speed_min/max_m_per_s`` were previously filed as a fixed
+    user requirement (see ``docs/assumptions_registry.md``). They are not one:
+    release speed is bounded by real sled hardware
+    (``v_max = sqrt(2 * a_sled * sled_rail_length_m)``), and a higher release
+    speed directly reduces the required lift area found infeasible by
+    ``feasibility.py``'s Gate 1 stall-speed check
+    (``docs/level0_feasibility_bounds.md``). Reclassified here as a
+    rail-length-bounded Level 2 design/search variable.
+
+    ``sled_rail_length_m`` (75 m) is the midpoint of a stated 50-100 m range,
+    not a measured spec -- flag as representative pending the real sled
+    design. The user has explicitly not set a real launch-acceleration (g)
+    ceiling for the sled/airframe. ``sled_launch_acceleration_g`` (10 g) is
+    therefore NOT a validated structural or physiological limit -- it exists
+    only so a release-speed search has *some* bound tied to the real 75 m
+    rail (v_max = sqrt(2 * a * L)) instead of an arbitrary speed literal. The
+    only real, user-stated requirement is "reach release speed within the
+    rail length" -- see ``feasibility.py``'s ``sled_launch_feasibility``,
+    which reports required acceleration for whatever speed is chosen without
+    hard-failing on it, since no real ceiling exists yet.
+    """
 
     field_elevation_msl_m: float
     sled_release_speed_min_m_per_s: float
@@ -229,6 +345,8 @@ class MissionConfig:
     peak_mach: float
     loaded_fuel_mass_kg: float
     ramjet_speed_run_fuel_budget_kg: float
+    sled_rail_length_m: float = 75.0
+    sled_launch_acceleration_g: float = 10.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -237,6 +355,8 @@ class MissionConfig:
             "peak_mach",
             "loaded_fuel_mass_kg",
             "ramjet_speed_run_fuel_budget_kg",
+            "sled_rail_length_m",
+            "sled_launch_acceleration_g",
         ):
             _positive(name, getattr(self, name))
         for name in (
@@ -498,6 +618,18 @@ class ReferenceCase:
     requirements: RequirementsConfig
     geometry: OpenVSPGeometryConfig
     simulation: SimulationConfig
+    # Optional: a genuine pulsejet-km (Khrulev & Muntyan) EngineConfig, used
+    # only by PULSEJET_KM_MODE (propulsion_map.py). Deliberately pulsejet-km's
+    # own dataclass, not a Douglas_Dart-shaped re-derivation of it -- the two
+    # pulsejet models (this repo's `pulsejet.py` and the sibling `pulsejet-km`
+    # repo) use structurally different parameterizations (inertance-duct vs.
+    # valve-petal-cantilever, see docs/pulsejet_external_model_audit.md), so
+    # there is no lossless field-by-field mapping between
+    # PulsejetConfig/SelectorConfig/NozzleConfig/Fuel above and this. None
+    # when a case has no pulsejet-km geometry authored -- PULSEJET_KM_MODE
+    # then raises a clear error rather than silently falling back to a
+    # different engine's data.
+    pulsejet_km_engine_config: PulsejetKmEngineConfig | None = None
 
     def __post_init__(self) -> None:
         if self.vehicle.body_diameter_m < self.selector.circular_intake_diameter_m:
@@ -580,6 +712,48 @@ def load_fuels(fuels_path: str | Path) -> dict[str, Fuel]:
     }
 
 
+def _load_pulsejet_km_engine_config(section: Mapping[str, Any]) -> "PulsejetKmEngineConfig | None":
+    """Build a real pulsejet-km ``EngineConfig`` from an optional YAML
+    ``pulsejet_km:`` section -- see ``ReferenceCase.pulsejet_km_engine_config``
+    for why this is pulsejet-km's own dataclass shape, not a translation from
+    this file's other config classes.
+
+    Only reached when a case's YAML actually has a `pulsejet_km:` section --
+    the real import lives here, not at module level, so pulsejet-km stays a
+    genuinely optional dependency (see the TYPE_CHECKING import above)."""
+
+    try:
+        from pulsejet_km.config import EngineConfig, EngineGeometry, FuelProperties, ModelConstants, ValvePetalGeometry
+    except ImportError:
+        # Degrade loudly-but-nonfatally: pulsejet-km is a sibling-checkout
+        # dependency that CI (and fresh clones) legitimately lack. The case
+        # still loads with pulsejet_km_engine_config=None -- PULSEJET_MODE's
+        # dispatch already handles that (falls back with a visible validity
+        # flag), and the km-mode tests skip themselves when the package is
+        # absent. A hard raise here took down every test that merely loads
+        # reference_case.yaml (2026-08-12 CI run on PR #4).
+        import warnings
+
+        warnings.warn(
+            "This reference case has a 'pulsejet_km:' section but the pulsejet-km "
+            "package is not installed -- run `pip install -e ../pulsejet-km` to "
+            "enable the pulsejet-km comparison path; continuing without it.",
+            stacklevel=2,
+        )
+        return None
+
+    geometry = _mapping(section, "geometry")
+    valve_petal = _mapping(section, "valve_petal")
+    fuel = _mapping(section, "fuel")
+    constants = _mapping(section, "constants")
+    return EngineConfig(
+        geometry=EngineGeometry(**geometry),
+        valve_petal=ValvePetalGeometry(**valve_petal),
+        fuel=FuelProperties(**fuel),
+        constants=ModelConstants(**constants),
+    )
+
+
 def load_reference_case(
     case_path: str | Path,
     fuels_path: str | Path | None = None,
@@ -598,10 +772,21 @@ def load_reference_case(
     nozzle = _mapping(data, "nozzle")
     pulsejet = _mapping(data, "pulsejet")
     ramjet = _mapping(data, "ramjet")
+    # minimum_lightoff_test_mach is derived (ramjet.py's derive_lightoff_mach,
+    # called below), not YAML-authored -- see RamjetConfig's docstring. YAML no
+    # longer sets it. Seed a placeholder here that trivially satisfies
+    # RamjetConfig.__post_init__'s cross-field check (lightoff <= self-sustaining)
+    # so the dataclass can be constructed before the real value is known; it's
+    # replaced with the derived value before this function returns.
+    ramjet.setdefault("minimum_lightoff_test_mach", ramjet["minimum_self_sustaining_mach"])
     flight = _mapping(data, "flight")
     vehicle = _mapping(data, "vehicle")
     mission = _mapping(data, "mission")
     requirements = _mapping(data, "requirements")
+    pulsejet_km_section = data.get("pulsejet_km")
+    pulsejet_km_engine_config = (
+        _load_pulsejet_km_engine_config(pulsejet_km_section) if pulsejet_km_section is not None else None
+    )
     geometry = _mapping(data, "openvsp")
     body_geometry = _mapping(geometry, "body")
     lifting_surface = _mapping(geometry, "lifting_surface")
@@ -611,7 +796,7 @@ def load_reference_case(
     analysis = _mapping(geometry, "analysis")
     simulation = _mapping(data, "simulation")
 
-    return ReferenceCase(
+    case = ReferenceCase(
         name=str(case_header["name"]),
         altitude_m=float(environment["altitude_m"]),
         mach=float(environment["mach"]),
@@ -660,4 +845,21 @@ def load_reference_case(
             wake_iterations=int(analysis["wake_iterations"]),
         ),
         simulation=SimulationConfig(**simulation),
+        pulsejet_km_engine_config=pulsejet_km_engine_config,
+    )
+
+    # Imported here rather than at module level: ramjet.py imports RamjetConfig
+    # etc. from this module, so an unconditional top-level import here would
+    # be circular.
+    from .ramjet import derive_lightoff_mach
+
+    derived_lightoff_mach = derive_lightoff_mach(
+        case.ramjet,
+        case.selector,
+        case.nozzle,
+        case.fuel,
+        case.mission.speed_run_altitude_msl_m,
+    )
+    return replace(
+        case, ramjet=replace(case.ramjet, minimum_lightoff_test_mach=derived_lightoff_mach)
     )

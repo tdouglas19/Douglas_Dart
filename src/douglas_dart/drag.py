@@ -124,10 +124,13 @@ def evaluate_total_drag(
     dynamic_pressure_pa = 0.5 * atmosphere.density_kg_per_m3 * speed_m_per_s**2
 
     ratio = drag_rise_ratio(mach)
-    zero_lift_drag_area_m2 = (
-        mach_indexed_zero_lift_drag_area_m2(case, mach, body_diameter_m=body_diameter_m)
-        * drag_multiplier
-    )
+    # Reuses `ratio` above instead of calling mach_indexed_zero_lift_drag_area_m2
+    # (which would call drag_rise_ratio(mach) a second time with the same
+    # argument) -- same formula as that function, same result, called on
+    # every trajectory time step.
+    diameter_m = case.vehicle.body_diameter_m if body_diameter_m is None else body_diameter_m
+    anchor_drag_area_m2 = geometrically_scaled_drag_area_target_m2(case, diameter_m) / _CALIBRATION_RATIO
+    zero_lift_drag_area_m2 = anchor_drag_area_m2 * ratio * drag_multiplier
     zero_lift_drag_n = dynamic_pressure_pa * zero_lift_drag_area_m2
     induced_drag_n = (
         dynamic_pressure_pa

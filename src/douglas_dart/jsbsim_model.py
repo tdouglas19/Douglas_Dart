@@ -44,20 +44,20 @@ from .openvsp_geometry import (
     trapezoid_mean_aerodynamic_chord_m,
     vspaero_reference_quantities,
 )
-from .ramjet import evaluate_ramjet
+from .propulsion_map import RAMJET_MODE, PropulsionScenario, evaluate_propulsion_map_point
 from .trajectory import (
     ADVERSE_SCENARIO,
     CONSERVATIVE_SCENARIO,
     MissionScenario,
     NOMINAL_SCENARIO,
     _installed_pulsejet_thrust_n,
+    _PULSEJET_TABLE_MACH_VALUES,
     _pulsejet_static_thrust_table,
 )
 
 N_TO_LBF = 1.0 / 4.4482216152605
 G0_M_PER_S2 = 9.80665
 
-_PULSEJET_TABLE_MACH_VALUES = (0.0, 0.10, 0.20, 0.30, 0.40, 0.50)
 _PULSEJET_TABLE_ALTITUDES_M = (0.0, 1500.0, 3000.0, 4500.0, 6000.0)
 _RAMJET_TABLE_MACH_VALUES = (0.80, 0.90, 1.00, 1.10, 1.20, 1.30)
 _RAMJET_TABLE_ALTITUDES_M = (2000.0, 3500.0, 4500.0, 5500.0, 7000.0)
@@ -217,22 +217,19 @@ def _ramjet_thrust_table_n(
 ) -> list[list[float]]:
     """Return a [mach][altitude] grid of net ramjet thrust in Newtons."""
 
-    from dataclasses import replace
-
-    recovery = (
-        case.selector.ramjet_total_pressure_recovery
-        if scenario.ramjet_total_pressure_recovery is None
-        else scenario.ramjet_total_pressure_recovery
+    propulsion_scenario = PropulsionScenario(
+        scenario.name,
+        thrust_multiplier=scenario.thrust_multiplier,
+        ramjet_total_pressure_recovery_override=scenario.ramjet_total_pressure_recovery,
     )
-    selector = replace(case.selector, ramjet_total_pressure_recovery=recovery)
     grid: list[list[float]] = []
     for mach in _RAMJET_TABLE_MACH_VALUES:
         row = []
         for altitude_m in _RAMJET_TABLE_ALTITUDES_M:
-            result = evaluate_ramjet(
-                case.ramjet, selector, case.nozzle, case.fuel, altitude_m, mach
+            point = evaluate_propulsion_map_point(
+                case, mach, altitude_m, RAMJET_MODE, scenario=propulsion_scenario
             )
-            row.append(max(result.net_thrust_n, 0.0) * scenario.thrust_multiplier)
+            row.append(max(point.net_thrust_n, 0.0))
         grid.append(row)
     return grid
 

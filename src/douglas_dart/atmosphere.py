@@ -13,6 +13,17 @@ SEA_LEVEL_PRESSURE_PA = 101_325.0
 TROPOPAUSE_M = 11_000.0
 TROPOSPHERE_LAPSE_K_PER_M = -0.0065
 
+# Pure constant folding of the formulas below (same inputs, computed once at
+# import time instead of on every call) -- standard_atmosphere is the single
+# most frequently called function in the whole simulation, so this is a real
+# saving despite being algebraically a no-op. Bit-identical to computing
+# these inline every call.
+_TROPOSPHERE_EXPONENT = -G0_M_PER_S2 / (TROPOSPHERE_LAPSE_K_PER_M * R_AIR_J_PER_KG_K)
+_TROPOPAUSE_TEMPERATURE_K = SEA_LEVEL_TEMPERATURE_K + TROPOSPHERE_LAPSE_K_PER_M * TROPOPAUSE_M
+_TROPOPAUSE_PRESSURE_PA = SEA_LEVEL_PRESSURE_PA * (
+    _TROPOPAUSE_TEMPERATURE_K / SEA_LEVEL_TEMPERATURE_K
+) ** _TROPOSPHERE_EXPONENT
+
 
 @dataclass(frozen=True)
 class Atmosphere:
@@ -35,20 +46,12 @@ def standard_atmosphere(altitude_m: float) -> Atmosphere:
 
     if altitude_m <= TROPOPAUSE_M:
         temperature_k = SEA_LEVEL_TEMPERATURE_K + TROPOSPHERE_LAPSE_K_PER_M * altitude_m
-        exponent = -G0_M_PER_S2 / (TROPOSPHERE_LAPSE_K_PER_M * R_AIR_J_PER_KG_K)
         pressure_pa = SEA_LEVEL_PRESSURE_PA * (
             temperature_k / SEA_LEVEL_TEMPERATURE_K
-        ) ** exponent
+        ) ** _TROPOSPHERE_EXPONENT
     else:
-        tropopause_temperature_k = (
-            SEA_LEVEL_TEMPERATURE_K + TROPOSPHERE_LAPSE_K_PER_M * TROPOPAUSE_M
-        )
-        exponent = -G0_M_PER_S2 / (TROPOSPHERE_LAPSE_K_PER_M * R_AIR_J_PER_KG_K)
-        tropopause_pressure_pa = SEA_LEVEL_PRESSURE_PA * (
-            tropopause_temperature_k / SEA_LEVEL_TEMPERATURE_K
-        ) ** exponent
-        temperature_k = tropopause_temperature_k
-        pressure_pa = tropopause_pressure_pa * exp(
+        temperature_k = _TROPOPAUSE_TEMPERATURE_K
+        pressure_pa = _TROPOPAUSE_PRESSURE_PA * exp(
             -G0_M_PER_S2
             * (altitude_m - TROPOPAUSE_M)
             / (R_AIR_J_PER_KG_K * temperature_k)

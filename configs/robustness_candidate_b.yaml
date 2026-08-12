@@ -91,6 +91,11 @@ sweep:
   body_diameters_m: [0.205, 0.210]
   throat_diameters_m: [0.130, 0.140, 0.150, 0.160, 0.170]
   exit_to_throat_area_ratios: [1.05, 1.10]
-  pulsejet_warmup_s: 0.05
-  pulsejet_measurement_s: 0.05
-  pulsejet_time_step_s: 0.00004
+  # pulsejet_warmup_s/pulsejet_measurement_s retired (cycle_based_averaging_fix.md,
+  # 2026-08-08) -- the pulsejet path now runs to a converged real-cycle-boundary
+  # average (pulsejet.py's run_pulsejet_to_converged_cycle_average) instead of a
+  # fixed wall-clock window, so there is no window left to configure.
+  # pulsejet_time_step_s retired too (dt_convergence_solver_spec.md, 2026-08-08)
+  # -- evaluate_shared_nozzle_trade now picks between two fixed, named dt tiers
+  # (propulsion_map.py's PULSEJET_FIDELITY_FAST/FULL) instead of a raw caller
+  # float; this sweep uses the default (full).

@@ -4,7 +4,12 @@ case:
 
 environment:
   altitude_m: 0.0
-  mach: 0.20
+  # See reference_case.yaml's comment: raised from 0.20 because sizing.py's
+  # direct PulsejetSimulator calls use a short fixed measurement window,
+  # which reads as near-zero thrust below roughly Mach 0.3-0.35 (real cycle
+  # period lengthens sharply there with inlet_type: side below) even though
+  # the engine is still genuinely firing, just more slowly.
+  mach: 0.40
 
 selector:
   circular_intake_diameter_m: 0.195
@@ -12,6 +17,7 @@ selector:
   discharge_coefficient: 0.78
   pulsejet_total_pressure_recovery: 0.99
   ramjet_total_pressure_recovery: 0.92
+  inlet_type: side
 
 nozzle:
   throat_diameter_m: 0.130
@@ -39,8 +45,17 @@ ramjet:
   mass_capture_coefficient: 0.90
   combustor_total_pressure_loss_fraction: 0.06
   combustor_efficiency: 0.96
-  target_combustor_exit_temperature_k: 1900.0
-  minimum_lightoff_test_mach: 0.80
+  # target_equivalence_ratio, not a target exit temperature (2026-08-10 session):
+  # mirrors PulsejetConfig.target_equivalence_ratio's input mechanism, but this is
+  # a genuinely different value (0.60 lean vs. pulsejet's stoichiometric 1.00),
+  # backed out of this vehicle's previous fixed-1900 K target -- confirmed by
+  # direct computation to reproduce ~1900 K combustor exit temperature (now a
+  # computed output, see ramjet.py's _solve_ramjet_cycle) across this vehicle's
+  # operating Mach range.
+  target_equivalence_ratio: 0.60
+  # minimum_lightoff_test_mach is no longer set here -- derived by
+  # ramjet.py's derive_lightoff_mach (config.py's load_reference_case),
+  # not hand-picked. See RamjetConfig's docstring.
   minimum_self_sustaining_mach: 1.10
 
 flight:
@@ -67,6 +82,8 @@ mission:
   peak_mach: 1.10
   loaded_fuel_mass_kg: 3.80
   ramjet_speed_run_fuel_budget_kg: 1.40
+  sled_rail_length_m: 75.0  # midpoint of stated 50-100 m range, representative pending real sled spec
+  sled_launch_acceleration_g: 10.0  # UNSOURCED placeholder, no real accel ceiling set -- only bounds the search vs. the 75 m rail
 
 requirements:
   maximum_takeoff_mass_kg: 25.0

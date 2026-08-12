@@ -15,14 +15,56 @@ and the ``ValueError``s raised by an infeasible `ReferenceCase` combination all
 produce discontinuities that would break a gradient-based method. No SciPy
 dependency; the algorithm is small enough to keep in-repo and inspectable.
 
-## What is NOT optimized here
+## Mass model
 
-Body diameter growth's structural-mass penalty is not modeled (there is no
-parametric mass-vs-geometry relationship yet — see `robustness.py`'s fixed component
-list). Growing the body or throat only changes drag area and nozzle flow capacity in
-this search; the resulting "empty" (non-fuel) mass is held at the configured value.
-Any candidate the search prefers with a substantially different body diameter should
-be re-checked against a real mass budget before it is taken seriously.
+`mass_model.py` now supplies a real, geometry-linked empty-mass calculation
+(body skin, lifting surfaces, propulsion hardware, and selector each scale
+with their own geometry; everything else is a fixed lump sum) instead of
+holding empty mass at the configured value regardless of body diameter,
+length, or throat size. Its density coefficients are calibrated to reproduce
+today's configured mass budget at today's configured geometry -- a
+consistency anchor, not independent structural validation (see
+`mass_model.py`'s module docstring and `docs/assumptions_registry.md`). Body
+length is now an active search variable for the same reason it is in
+`docs/design_workflow.md`'s Level 3: it changes wetted area and therefore
+structural mass, not just packaging.
+
+Lifting-surface area is now a search variable too (`wing_area_scale_factor`):
+root chord, tip chord, and exposed semispan all scale by
+``sqrt(wing_area_scale_factor)``, so planform area scales by exactly
+``wing_area_scale_factor`` while aspect ratio and taper ratio stay fixed at
+the baseline config's shape (geometric similarity, not independent shape
+optimization). `flight.reference_area_m2` is recomputed to exactly match
+(`ReferenceCase`'s own validated invariant), so `mass_model.py`'s
+lifting-surface mass and every drag/lift calculation that reads
+`reference_area_m2` see the same, consistent number. Fin geometry and
+lifting-surface x-location/sweep/thickness are still read from the baseline
+config, not independently searched.
+
+## Ramjet lightoff Mach
+
+`minimum_lightoff_test_mach` (`RamjetConfig`) was a 13th search variable
+through 2026-08-10, bounded `(0.50, 1.00)`. `docs/design_convergence.md`
+records a direct root-cause investigation that found it mattered a lot:
+under the adverse scenario, pulsejet's own level-flight thrust margin (no
+climb-gravity penalty) stays positive to about Mach 0.87, while ramjet's net
+thrust is *negative* relative to drag at every Mach from 0.5-1.1 with
+typically-searched nozzle sizing -- so *delaying* the pulsejet-to-ramjet
+handoff, not advancing it, was usually the improvement available by tuning
+it. That same investigation also documents a self-referential-gaming bug
+this free-variable status caused (the search converging on its own lower
+search bound purely to trivially clear a threshold it was also choosing --
+see the comment above `_REACHED_RAMJET_IGNITION_REWARD` below).
+
+As of 2026-08-10 it is no longer a search variable at all: `ramjet.py`'s
+`derive_lightoff_mach` computes it directly from each candidate's own
+propulsion physics (the Mach at which that candidate's net thrust first
+turns positive and stays positive), so `apply_design_variables` derives it
+from the candidate's other search variables (throat diameter, exit/throat
+ratio, etc.) rather than sampling it independently. This removes the whole
+class of self-referential-gaming risk at the root, not just the specific
+instance the reward-comparison patch below worked around -- there is no
+longer a free choice here for a candidate to game.
 """
 
 from __future__ import annotations
@@ -34,7 +76,12 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from .atmosphere import G0_M_PER_S2
 from .config import ReferenceCase
+from .feasibility import packaging_bounds
+from .mass_model import MassModelCalibration, calibrate_mass_model, evaluate_parametric_mass
+from .propulsion_map import PULSEJET_FIDELITY_FAST
+from .ramjet import derive_lightoff_mach
 from .trajectory import (
     ADVERSE_SCENARIO,
     CONSERVATIVE_SCENARIO,
@@ -49,6 +96,7 @@ class DesignVariableBounds:
     """Search bounds for each coupled design variable, in SI units."""
 
     body_diameter_m: tuple[float, float]
+    body_length_m: tuple[float, float]
     throat_diameter_m: tuple[float, float]
     exit_to_throat_area_ratio: tuple[float, float]
     loaded_fuel_mass_kg: tuple[float, float]
@@ -56,10 +104,14 @@ class DesignVariableBounds:
     climb_angle_deg: tuple[float, float]
     dive_angle_deg: tuple[float, float]
     dive_entry_mach: tuple[float, float]
+    sled_release_speed_m_per_s: tuple[float, float]
+    wing_area_scale_factor: tuple[float, float]
+    chamber_volume_m3: tuple[float, float]
 
     def names(self) -> tuple[str, ...]:
         return (
             "body_diameter_m",
+            "body_length_m",
             "throat_diameter_m",
             "exit_to_throat_area_ratio",
             "loaded_fuel_mass_kg",
@@ -67,27 +119,107 @@ class DesignVariableBounds:
             "climb_angle_deg",
             "dive_angle_deg",
             "dive_entry_mach",
+            "sled_release_speed_m_per_s",
+            "wing_area_scale_factor",
+            "chamber_volume_m3",
         )
 
     def as_pairs(self) -> tuple[tuple[float, float], ...]:
         return tuple(getattr(self, name) for name in self.names())
 
 
+# sled_release_speed_m_per_s: reclassified from a fixed mission requirement to
+# a Level 2 search variable (see MissionConfig's docstring and
+# docs/level0_feasibility_bounds.md -- release speed directly sets the
+# Gate 1 stall-speed margin). The lower bound (35 m/s) sits just under the
+# previously configured 39-42 m/s range. The upper bound is v_max =
+# sqrt(2 * a * L) at MissionConfig's own default rail length (75 m) and
+# launch-acceleration placeholder (10 g) -- i.e. it is tied to the one real,
+# user-stated requirement ("reach release speed within the rail"), not an
+# arbitrary speed literal. `a` is still an UNSOURCED placeholder (see
+# MissionConfig's docstring and feasibility.py's `sled_launch_feasibility`,
+# which reports the required acceleration for whatever speed a search picks
+# so a human can judge it, rather than hard-failing on this placeholder).
+# If a case's own sled_rail_length_m/sled_launch_acceleration_g differ from
+# these defaults, recompute this bound to match.
+_SLED_RAIL_LENGTH_DEFAULT_M = 75.0
+_SLED_LAUNCH_ACCELERATION_DEFAULT_G = 10.0
+_SLED_RELEASE_SPEED_UPPER_BOUND_M_PER_S = (
+    2.0 * _SLED_LAUNCH_ACCELERATION_DEFAULT_G * G0_M_PER_S2 * _SLED_RAIL_LENGTH_DEFAULT_M
+) ** 0.5
+
 DEFAULT_BOUNDS = DesignVariableBounds(
     body_diameter_m=(0.195, 0.260),
+    # Wide enough to matter for wetted area/structural mass (mass_model.py)
+    # and tail moment arm, narrow enough to stay near the configured 2.20-
+    # 2.30 m baseline this search's other bounds were tuned against.
+    body_length_m=(1.80, 2.80),
     throat_diameter_m=(0.110, 0.190),
     exit_to_throat_area_ratio=(1.02, 1.30),
-    loaded_fuel_mass_kg=(2.50, 6.00),
-    ramjet_fuel_fraction=(0.20, 0.80),
-    climb_angle_deg=(3.0, 15.0),
+    # A 200-generation search (docs/design_convergence.md, post scoring-fix)
+    # pinned the best candidate at the old 6.00 kg ceiling with 4.26 kg of
+    # mass margin still unused against the 25.0 kg MTOM requirement -- the
+    # old bound was an arbitrary round number, not a packaging or mass limit
+    # (feasibility.py's fuel-volume-vs-annulus check passes with room to
+    # spare at 6.00 kg). Raised to leave headroom before MTOM actually binds.
+    # A follow-up search pinned the widened bound too, at 9.00 kg, but with
+    # mass margin now down to 1.49 kg -- i.e. this bound is now close to
+    # where MTOM will actually start pushing back; do not widen it again
+    # without first checking mass margin at the new ceiling.
+    loaded_fuel_mass_kg=(2.50, 9.00),
+    # Same search pinned ramjet_fuel_fraction at the old 0.80 ceiling, which
+    # was an arbitrary round number short of the fraction's own hard upper
+    # bound of 1.0 (100% of loaded fuel to the ramjet speed-run budget).
+    ramjet_fuel_fraction=(0.20, 1.00),
+    # Same search pinned climb_angle_deg at the old 15 deg ceiling; no
+    # documented structural or aerodynamic cap motivated that number (see
+    # trajectory.py's flight-path-angle climb, which has no small-angle
+    # assumption). Raised to 20, which the next search pinned again (19.98) --
+    # a steeper climb reaches trajectory.py's top_of_climb_m gate in less
+    # time, spending less of the climb phase fighting the mass*g*sin(gamma)
+    # term before leveling off into the more efficient pulsejet_accel phase,
+    # a real mechanism, not a search artifact. Raised again; still no
+    # documented structural/stall cap on how steep a climb this energy-state
+    # model can represent.
+    climb_angle_deg=(3.0, 30.0),
     dive_angle_deg=(-20.0, -3.0),
     dive_entry_mach=(0.30, 0.78),
+    sled_release_speed_m_per_s=(35.0, _SLED_RELEASE_SPEED_UPPER_BOUND_M_PER_S),
+    # docs/level0_feasibility_bounds.md found the configured reference area is
+    # roughly 3.6x too small for the configured release speed at max mass;
+    # the upper bound here is set generously above that so the search can
+    # actually reach and cross that threshold rather than stopping just short
+    # of it.
+    wing_area_scale_factor=(0.5, 6.0),
+    # minimum_lightoff_test_mach was a search variable here through
+    # 2026-08-10 -- removed. It's now derived per-candidate from the
+    # candidate's own propulsion physics (ramjet.py's derive_lightoff_mach,
+    # called from apply_design_variables below), not independently searched.
+    # See this module's "## Ramjet lightoff Mach" docstring section.
+    # mass_model.py's docstring "Pulsejet chamber-wall mass" section: at the
+    # configured baseline (0.025 m^3, ~0.21 m body), the thin-shell mass
+    # estimate for this volume alone (~5.7 kg) exceeds the entire $4.20 kg
+    # shared_engine_body_combustor_nozzle budget line, and separately
+    # (docs/design_convergence.md Gate 1) needs 722 mm of forebody length
+    # against a configured 180 mm -- both point the same way: 0.025 m^3 is
+    # too large for this vehicle's scale, not a search-bound artifact.
+    # Upper bound (0.012 m^3) is set from feasibility.py's own packaging
+    # geometry (chamber_volume_m3 <= forebody_transition_length_m * body
+    # cross-section area), evaluated across this search's own
+    # body_diameter_m range (0.195-0.260 m) -- packaging-feasible volumes
+    # there top out around 0.0054-0.0096 m^3, so 0.012 m^3 sits just above
+    # that band rather than exactly on it, since packaging_bounds scoring
+    # (evaluate_design) already penalizes combinations that don't fit
+    # without needing this bound to enforce it exactly. Lower bound
+    # (0.003 m^3) keeps the chamber a physically non-trivial size.
+    chamber_volume_m3=(0.003, 0.012),
 )
 
 
 @dataclass(frozen=True)
 class DesignVariables:
     body_diameter_m: float
+    body_length_m: float
     throat_diameter_m: float
     exit_to_throat_area_ratio: float
     loaded_fuel_mass_kg: float
@@ -95,6 +227,9 @@ class DesignVariables:
     climb_angle_deg: float
     dive_angle_deg: float
     dive_entry_mach: float
+    sled_release_speed_m_per_s: float
+    wing_area_scale_factor: float
+    chamber_volume_m3: float
 
     def as_vector(self, bounds: DesignVariableBounds) -> list[float]:
         return [getattr(self, name) for name in bounds.names()]
@@ -104,31 +239,112 @@ class DesignVariables:
         return cls(**dict(zip(bounds.names(), vector)))
 
 
-def apply_design_variables(case: ReferenceCase, variables: DesignVariables) -> ReferenceCase:
+def apply_design_variables(
+    case: ReferenceCase,
+    variables: DesignVariables,
+    mass_calibration: MassModelCalibration,
+) -> ReferenceCase:
     """Build a candidate `ReferenceCase` from a baseline case and one design vector.
 
-    Non-fuel ("empty") mass is held fixed at the baseline's configured value; only
-    the fuel-mass contribution changes with `loaded_fuel_mass_kg`. This keeps the
-    mass model honest about what it actually represents (see module docstring).
+    Non-fuel ("empty") mass now comes from `mass_model.py`'s geometry-linked
+    calculation (body diameter/length, throat diameter, lifting-surface area)
+    instead of being held fixed at the baseline's configured value regardless
+    of geometry -- see this module's docstring and `mass_model.py`'s for what
+    is and is not scaled. `mass_calibration` is required, not defaulted, so a
+    caller cannot silently fall back to the old fixed-mass behavior by
+    omitting it.
     """
 
-    baseline_empty_mass_kg = case.flight.initial_mass_kg - case.mission.loaded_fuel_mass_kg
-    new_initial_mass_kg = baseline_empty_mass_kg + variables.loaded_fuel_mass_kg
+    # Geometric-similarity wing scaling: root/tip chord and semispan all scale
+    # by sqrt(factor) so planform area scales by exactly `factor` while aspect
+    # and taper ratio stay fixed at the baseline shape (see module docstring).
+    linear_scale = variables.wing_area_scale_factor**0.5
+    lifting_surface = replace(
+        case.geometry.lifting_surface,
+        root_chord_m=case.geometry.lifting_surface.root_chord_m * linear_scale,
+        tip_chord_m=case.geometry.lifting_surface.tip_chord_m * linear_scale,
+        exposed_semispan_m=case.geometry.lifting_surface.exposed_semispan_m * linear_scale,
+    )
+    geometry = replace(case.geometry, lifting_surface=lifting_surface)
+    new_reference_area_m2 = (
+        geometry.lifting_surface_count * lifting_surface.exposed_area_per_surface_m2
+        if geometry.lifting_surface_count
+        else case.flight.reference_area_m2
+    )
+
+    vehicle = replace(
+        case.vehicle,
+        body_diameter_m=variables.body_diameter_m,
+        body_length_m=variables.body_length_m,
+    )
+    # A case reflecting the new body + wing geometry (and the reference area
+    # that must match it, per ReferenceCase's own validated invariant), built
+    # before the mass calculation so evaluate_parametric_mass's own geometry
+    # reads (wetted area, lifting/fin area) see the scaled values
+    # automatically instead of needing every scaled quantity threaded through
+    # as a separate override.
+    geometry_case = replace(
+        case,
+        vehicle=vehicle,
+        geometry=geometry,
+        flight=replace(case.flight, reference_area_m2=new_reference_area_m2),
+    )
+    empty_mass_kg = evaluate_parametric_mass(
+        geometry_case,
+        mass_calibration,
+        throat_diameter_m=variables.throat_diameter_m,
+        chamber_volume_m3=variables.chamber_volume_m3,
+    ).empty_mass_kg
+    new_initial_mass_kg = empty_mass_kg + variables.loaded_fuel_mass_kg
     ramjet_fuel_kg = variables.ramjet_fuel_fraction * variables.loaded_fuel_mass_kg
 
-    vehicle = replace(case.vehicle, body_diameter_m=variables.body_diameter_m)
     nozzle = replace(
         case.nozzle,
         throat_diameter_m=variables.throat_diameter_m,
         exit_to_throat_area_ratio=variables.exit_to_throat_area_ratio,
     )
-    flight = replace(case.flight, initial_mass_kg=new_initial_mass_kg)
+    flight = replace(
+        case.flight,
+        initial_mass_kg=new_initial_mass_kg,
+        reference_area_m2=new_reference_area_m2,
+    )
+    # trajectory.py's mission solver reads sled_release_speed_max_m_per_s as the
+    # initial condition; both min and max are set to the searched value here
+    # rather than kept as an independent range, since the range previously
+    # represented sled-performance uncertainty, not a design choice.
     mission = replace(
         case.mission,
         loaded_fuel_mass_kg=variables.loaded_fuel_mass_kg,
         ramjet_speed_run_fuel_budget_kg=ramjet_fuel_kg,
+        sled_release_speed_min_m_per_s=variables.sled_release_speed_m_per_s,
+        sled_release_speed_max_m_per_s=variables.sled_release_speed_m_per_s,
     )
-    return replace(case, vehicle=vehicle, nozzle=nozzle, flight=flight, mission=mission)
+    # Derived from this candidate's own nozzle (throat diameter and
+    # exit/throat ratio are search variables and shape the thrust curve),
+    # not sampled independently -- see this module's "## Ramjet lightoff
+    # Mach" docstring section. selector/fuel/altitude aren't search
+    # variables, so the baseline case's values are the candidate's too.
+    ramjet = replace(
+        case.ramjet,
+        minimum_lightoff_test_mach=derive_lightoff_mach(
+            case.ramjet,
+            case.selector,
+            nozzle,
+            case.fuel,
+            case.mission.speed_run_altitude_msl_m,
+        ),
+    )
+    pulsejet = replace(case.pulsejet, chamber_volume_m3=variables.chamber_volume_m3)
+    return replace(
+        case,
+        vehicle=vehicle,
+        nozzle=nozzle,
+        flight=flight,
+        mission=mission,
+        geometry=geometry,
+        ramjet=ramjet,
+        pulsejet=pulsejet,
+    )
 
 
 @dataclass(frozen=True)
@@ -144,6 +360,15 @@ class CandidateEvaluation:
     nominal_rule_satisfied: bool | None
     adverse_rule_satisfied: bool | None
     mass_margin_kg: float | None
+    packaging_failures: int | None
+    """Count of feasibility.py's Level 0 packaging_bounds checks this
+    candidate fails (None if the candidate never reached that check -- see
+    infeasibility_reason). Not previously scored at all: a candidate could
+    win this search's objective while being physically impossible to build
+    (docs/design_convergence.md's Run 2 finding -- the selector no longer
+    fit within the shrunk body). packaging_bounds is pure geometry, no
+    simulation, so this adds negligible per-candidate cost."""
+    packaging_failure_names: tuple[str, ...] | None
 
 
 # Every weight below is visible here, not hidden inside the score, per the same
@@ -159,16 +384,91 @@ _RULE_VIOLATION_PENALTY = 2000.0
 _TIME_ABOVE_MACH_ONE_REWARD_PER_S = 5.0
 _MASS_MARGIN_REWARD_PER_KG = 50.0
 _BODY_DIAMETER_TIEBREAK_PENALTY_PER_M = 1000.0
+# Below Mach 1, `_TIME_ABOVE_MACH_ONE_REWARD_PER_S` is zero and the boolean
+# reached/duration terms above are identical for a candidate stuck at Mach
+# 0.1 and one stuck at Mach 0.9 -- there is no gradient telling the search
+# which is closer to closing. Observed in practice: a 150-generation search
+# let the adverse-scenario peak Mach collapse from ~0.8 to ~0.13 between
+# generation 22 and 39 with the score *improving*, because giving up on
+# adverse acceleration freed up mass/drag budget that scored via
+# `_MASS_MARGIN_REWARD_PER_KG` with nothing counteracting it. This term adds
+# continuous partial credit for however far a scenario actually got, sized
+# to outweigh a plausible few-kg mass-margin trade so the search is pulled
+# toward closing distance instead of being indifferent to it.
+_PEAK_MACH_PROGRESS_REWARD_PER_MACH = 150.0
+# Same order of magnitude as _RULE_VIOLATION_PENALTY, applied once per
+# candidate (not per scenario, since packaging is a property of the
+# geometry, not the mission) per feasibility.py Level 0 packaging check
+# failed. Added because Run 2 (docs/design_convergence.md) found the
+# highest-scoring candidate under this search's prior objective was not
+# buildable -- the search had no term telling it that shrinking body
+# diameter to save the tiebreak penalty could break packaging elsewhere.
+_PACKAGING_VIOLATION_PENALTY = 2000.0
+# Same class of problem as _PEAK_MACH_PROGRESS_REWARD_PER_MACH's own
+# comment above -- `_MASS_MARGIN_REWARD_PER_KG` pulling toward less fuel
+# with nothing structurally counteracting it -- but a different, more severe
+# symptom. Confirmed directly (design-optimize v10, docs/design_convergence.md):
+# the search pushed `loaded_fuel_mass_kg` down to 2.540 kg, just above its
+# own 2.50 kg lower search bound, and the winning candidate ran out of
+# pulsejet fuel *before finishing the climb phase* -- never reaching dive,
+# let alone ramjet transition. A candidate stuck at a low peak Mach because
+# of a real physics limit (e.g. the ramjet-transition-thrust trough) and one
+# that structurally cannot carry enough fuel to fly the profile at all both
+# previously scored identically through `_MISSED_PEAK_MACH_PENALTY` alone --
+# no term distinguished "genuinely tried and fell short" from "aborted
+# early because the search starved it of fuel to save mass-margin points."
+# This penalty targets specifically the three `trajectory.py` status flags
+# that mean the mission was aborted mid-phase for running out of fuel, not
+# merely that a phase's own goal Mach wasn't reached.
+_PREMATURE_FUEL_EXHAUSTION_STATUS_FLAGS = frozenset(
+    {
+        "pulsejet_fuel_exhausted_before_top_of_climb",
+        "pulsejet_fuel_exhausted_during_acceleration",
+        "ramjet_fuel_exhausted_before_reaching_peak_mach",
+    }
+)
+_PREMATURE_FUEL_EXHAUSTION_PENALTY = 800.0
+# Discrete reward for a scenario's peak Mach crossing a genuine, structurally
+# meaningful ramjet threshold, distinct from _PEAK_MACH_PROGRESS_REWARD_PER_
+# MACH's smooth per-Mach credit. Added because a direct measurement
+# (docs/design_convergence.md) found the search rationally avoiding this
+# crossing: giving pulsejet-phase fuel a bigger share (via a lower
+# ramjet_fuel_fraction) let one candidate's adverse scenario cross exactly
+# into ramjet range (Mach 0.595 -> 0.802) at zero cost to nominal's own
+# closure, yet the search's *score* went down -- nominal's
+# `_TIME_ABOVE_MACH_ONE_REWARD_PER_S` term lost ~312 points (less ramjet fuel
+# shortened its Mach-1.10 hold by ~62s) against only ~93 points gained from
+# adverse's smooth peak-Mach credit (weight already applied). 300 (weighted
+# by _SCENARIO_WEIGHTS to 900 for adverse) is sized to comfortably outweigh
+# that measured trade, so crossing this threshold is no longer scored worse
+# than staying short of it.
+#
+# Compared against `minimum_self_sustaining_mach` (fixed, not a search
+# variable), NOT `minimum_lightoff_test_mach` (originally used here, but
+# `minimum_lightoff_test_mach` became a 12th search variable in a later
+# session, which turned this comparison into a self-referential loophole:
+# `peak_mach_reached >= candidate_case.ramjet.minimum_lightoff_test_mach`
+# rewards a candidate for picking a *low* threshold almost independent of
+# real mission performance, since a lower self-chosen threshold is trivially
+# easier to clear. Confirmed directly (2026-08-08, this design-optimize v9
+# run): the search converged on minimum_lightoff_test_mach=0.50 -- its own
+# lower search bound -- for a candidate whose actual mission run enters
+# ramjet_accel and then immediately fails with
+# `ramjet_net_thrust_nonpositive_during_acceleration` at that exact Mach, so
+# the reward was being collected for reaching a threshold the candidate
+# picked specifically because it was already there, not for genuinely
+# reaching ramjet-useful flight. `minimum_self_sustaining_mach` cannot be
+# gamed this way -- it is fixed per `ReferenceCase`, so crossing it is a real
+# achievement regardless of what the search does elsewhere.
+_REACHED_RAMJET_IGNITION_REWARD = 300.0
 
 
 def evaluate_design(
     baseline_case: ReferenceCase,
     variables: DesignVariables,
+    mass_calibration: MassModelCalibration,
     *,
     fast_time_step_s: float = 0.08,
-    fast_pulsejet_warmup_s: float = 0.10,
-    fast_pulsejet_measurement_s: float = 0.10,
-    fast_pulsejet_time_step_s: float = 0.0001,
     max_time_s: float = 200.0,
 ) -> CandidateEvaluation:
     """Score one design-variable vector against the nominal and adverse scenarios.
@@ -178,7 +478,7 @@ def evaluate_design(
     """
 
     try:
-        candidate_case = apply_design_variables(baseline_case, variables)
+        candidate_case = apply_design_variables(baseline_case, variables, mass_calibration)
     except Exception as exc:  # noqa: BLE001 - a long unattended search must not die on one bad candidate
         return CandidateEvaluation(
             variables=variables,
@@ -192,6 +492,8 @@ def evaluate_design(
             nominal_rule_satisfied=None,
             adverse_rule_satisfied=None,
             mass_margin_kg=None,
+            packaging_failures=None,
+            packaging_failure_names=None,
         )
 
     results: dict[str, TrajectoryResult] = {}
@@ -205,9 +507,7 @@ def evaluate_design(
                 climb_angle_deg=variables.climb_angle_deg,
                 dive_angle_deg=variables.dive_angle_deg,
                 dive_entry_mach=variables.dive_entry_mach,
-                pulsejet_table_warmup_s=fast_pulsejet_warmup_s,
-                pulsejet_table_measurement_s=fast_pulsejet_measurement_s,
-                pulsejet_table_time_step_s=fast_pulsejet_time_step_s,
+                pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST,
             )
         except Exception as exc:  # noqa: BLE001 - a long unattended search must not die on one bad candidate
             return CandidateEvaluation(
@@ -222,6 +522,8 @@ def evaluate_design(
                 nominal_rule_satisfied=None,
                 adverse_rule_satisfied=None,
                 mass_margin_kg=None,
+                packaging_failures=None,
+                packaging_failure_names=None,
             )
 
     score = 0.0
@@ -238,6 +540,11 @@ def evaluate_design(
         if not result.transonic_no_altitude_loss_rule_satisfied:
             score -= weight * _RULE_VIOLATION_PENALTY
         score += weight * result.time_above_mach_one_s * _TIME_ABOVE_MACH_ONE_REWARD_PER_S
+        score += weight * result.peak_mach_reached * _PEAK_MACH_PROGRESS_REWARD_PER_MACH
+        if result.peak_mach_reached >= candidate_case.ramjet.minimum_self_sustaining_mach:
+            score += weight * _REACHED_RAMJET_IGNITION_REWARD
+        if any(flag in result.final_status for flag in _PREMATURE_FUEL_EXHAUSTION_STATUS_FLAGS):
+            score -= weight * _PREMATURE_FUEL_EXHAUSTION_PENALTY
 
     mass_margin_kg = (
         candidate_case.requirements.maximum_takeoff_mass_kg
@@ -245,6 +552,12 @@ def evaluate_design(
     )
     score += mass_margin_kg * _MASS_MARGIN_REWARD_PER_KG
     score -= candidate_case.vehicle.body_diameter_m * _BODY_DIAMETER_TIEBREAK_PENALTY_PER_M
+
+    packaging_checks = packaging_bounds(candidate_case)
+    failing_packaging_checks = tuple(
+        check.name for check in packaging_checks if not check.passes
+    )
+    score -= len(failing_packaging_checks) * _PACKAGING_VIOLATION_PENALTY
 
     return CandidateEvaluation(
         variables=variables,
@@ -258,6 +571,8 @@ def evaluate_design(
         nominal_rule_satisfied=results["nominal"].transonic_no_altitude_loss_rule_satisfied,
         adverse_rule_satisfied=results["adverse"].transonic_no_altitude_loss_rule_satisfied,
         mass_margin_kg=mass_margin_kg,
+        packaging_failures=len(failing_packaging_checks),
+        packaging_failure_names=failing_packaging_checks,
     )
 
 
@@ -279,6 +594,7 @@ def _clip(value: float, lower: float, upper: float) -> float:
 def run_differential_evolution(
     baseline_case: ReferenceCase,
     *,
+    mass_budget_path: str | Path = "configs/robustness_candidate_b.yaml",
     bounds: DesignVariableBounds = DEFAULT_BOUNDS,
     population_size: int = 20,
     generations: int = 30,
@@ -294,8 +610,14 @@ def run_differential_evolution(
     generation if given, so a long unattended run can be inspected or killed and
     resumed from the CSV log without losing progress. This function itself never
     calls out to any AI model; it is meant to be started once and left running.
+
+    `mass_budget_path` calibrates `mass_model.py` once, from `baseline_case`'s
+    own configured geometry, before the search starts (see
+    `apply_design_variables`'s docstring for what that calibration means and
+    does not mean).
     """
 
+    mass_calibration = calibrate_mass_model(baseline_case, mass_budget_path)
     rng = random.Random(seed)
     pairs = bounds.as_pairs()
     dimension = len(pairs)
@@ -308,7 +630,7 @@ def run_differential_evolution(
 
     population = [random_vector() for _ in range(population_size)]
     evaluations = [
-        evaluate_design(baseline_case, DesignVariables.from_vector(vector, bounds))
+        evaluate_design(baseline_case, DesignVariables.from_vector(vector, bounds), mass_calibration)
         for vector in population
     ]
 
@@ -329,7 +651,7 @@ def run_differential_evolution(
                 if d == forced_dimension or rng.random() < crossover_probability:
                     trial[d] = mutant[d]
             trial_evaluation = evaluate_design(
-                baseline_case, DesignVariables.from_vector(trial, bounds)
+                baseline_case, DesignVariables.from_vector(trial, bounds), mass_calibration
             )
             if trial_evaluation.score >= evaluations[index].score:
                 population[index] = trial
@@ -391,6 +713,7 @@ def write_generation_log_csv(path: str | Path, records: list[GenerationRecord]) 
         "nominal_meets_duration",
         "adverse_meets_duration",
         "mass_margin_kg",
+        "packaging_failures",
         *DEFAULT_BOUNDS.names(),
     ]
     with path.open("w", newline="", encoding="utf-8") as stream:
@@ -408,6 +731,7 @@ def write_generation_log_csv(path: str | Path, records: list[GenerationRecord]) 
                 "nominal_meets_duration": record.best_evaluation.nominal_meets_duration,
                 "adverse_meets_duration": record.best_evaluation.adverse_meets_duration,
                 "mass_margin_kg": record.best_evaluation.mass_margin_kg,
+                "packaging_failures": record.best_evaluation.packaging_failures,
             }
             row.update(asdict(record.best_variables))
             writer.writerow(row)

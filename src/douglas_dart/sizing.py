@@ -7,7 +7,14 @@ from math import floor, sqrt
 
 from .atmosphere import G0_M_PER_S2, standard_atmosphere
 from .config import ReferenceCase
-from .pulsejet import PulsejetSimulator, summarize_pulsejet
+from .propulsion_map import (
+    PULSEJET_FIDELITY_FULL,
+    RAMJET_MODE,
+    evaluate_propulsion_map_point,
+    pulsejet_cycle_bounds_for_fidelity,
+    pulsejet_time_step_s_for_fidelity,
+)
+from .pulsejet import run_pulsejet_to_converged_cycle_average
 from .ramjet import evaluate_ramjet
 
 
@@ -95,8 +102,12 @@ class SharedNozzleTradePoint:
     pulsejet_peak_chamber_pressure_pa: float
     pulsejet_peak_chamber_temperature_k: float
     pulsejet_completed_cycles: int
-    pulsejet_warmup_duration_s: float
-    pulsejet_measurement_duration_s: float
+    pulsejet_cycle_average_converged: bool
+    """False if the convergence-driven cycle average (pulsejet.py's
+    run_pulsejet_to_converged_cycle_average, cycle_based_averaging_fix.md)
+    hit its cycle cap without settling inside tolerance -- see
+    pulsejet_completed_cycles for how many post-transient cycles were
+    actually averaged."""
     pulsejet_mean_net_thrust_to_weight: float
     loaded_mass_margin_to_requirement_kg: float
     propulsion_derate_fraction: float
@@ -163,6 +174,12 @@ def evaluate_ramjet_handoff_sizing(
     proportional to throat area. The resulting diameter is therefore an exact
     low-order flow-match for this model, not a claim that the geometry is physically
     packageable or that the inlet/combustor will remain stable.
+
+    Intentionally NOT migrated to propulsion_map.py: this nozzle-matching
+    calculation needs fuel_air_ratio and nozzle_capacity_kg_per_s, which are
+    RamjetResult solver internals PropulsionMapPoint deliberately does not
+    expose (see propulsion_map.py's module docstring -- it is an operating-
+    point query interface, not a substitute for the physics layer).
     """
 
     current = evaluate_ramjet(
@@ -286,13 +303,8 @@ def evaluate_peak_mach_diameter_trade(
         case.nozzle,
         throat_diameter_m=handoff.required_matched_throat_diameter_m,
     )
-    ramjet = evaluate_ramjet(
-        case.ramjet,
-        case.selector,
-        matched_nozzle,
-        case.fuel,
-        altitude_m,
-        peak_mach,
+    ramjet = evaluate_propulsion_map_point(
+        replace(case, nozzle=matched_nozzle), peak_mach, altitude_m, RAMJET_MODE
     )
 
     atmosphere = standard_atmosphere(altitude_m)
@@ -319,7 +331,7 @@ def evaluate_peak_mach_diameter_trade(
     )
     can_hold = (
         packageable
-        and ramjet.self_sustaining_candidate
+        and ramjet.self_sustaining_status
         and thrust_margin_n >= 0.0
         and ramjet.fuel_mass_flow_kg_per_s > 0.0
     )
@@ -340,7 +352,7 @@ def evaluate_peak_mach_diameter_trade(
         )
         hold_distance_m = speed_m_per_s * hold_duration_s
 
-    status = list(ramjet.status)
+    status = list(ramjet.validity_flags)
     if not packageable:
         status.append("flow_matched_throat_exceeds_outer_body_zero_clearance")
     if thrust_margin_n < 0.0:
@@ -414,9 +426,7 @@ def evaluate_shared_nozzle_trade(
     exit_to_throat_area_ratio: float,
     *,
     propulsion_derate_fraction: float = 0.15,
-    pulsejet_warmup_s: float | None = None,
-    pulsejet_measurement_s: float | None = None,
-    pulsejet_time_step_s: float | None = None,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> SharedNozzleTradePoint:
     """Evaluate one fixed throat/exit geometry in both propulsion modes.
 
@@ -442,13 +452,8 @@ def evaluate_shared_nozzle_trade(
     )
     altitude_m = case.mission.speed_run_altitude_msl_m
     peak_mach = case.mission.peak_mach
-    ramjet = evaluate_ramjet(
-        case.ramjet,
-        case.selector,
-        nozzle,
-        case.fuel,
-        altitude_m,
-        peak_mach,
+    ramjet = evaluate_propulsion_map_point(
+        replace(case, nozzle=nozzle), peak_mach, altitude_m, RAMJET_MODE
     )
 
     exit_diameter_m = throat_diameter_m * sqrt(exit_to_throat_area_ratio)
@@ -487,7 +492,7 @@ def evaluate_shared_nozzle_trade(
     )
     can_hold_nominal = (
         packageable
-        and ramjet.self_sustaining_candidate
+        and ramjet.self_sustaining_status
         and nominal_margin_n >= 0.0
         and ramjet.fuel_mass_flow_kg_per_s > 0.0
     )
@@ -506,34 +511,26 @@ def evaluate_shared_nozzle_trade(
         )
         hold_distance_m = speed_m_per_s * hold_duration_s
 
-    warmup_s = (
-        case.simulation.pulsejet_steady_warmup_s
-        if pulsejet_warmup_s is None
-        else pulsejet_warmup_s
-    )
-    measurement_s = (
-        case.simulation.pulsejet_steady_measurement_s
-        if pulsejet_measurement_s is None
-        else pulsejet_measurement_s
-    )
-    if warmup_s <= 0.0 or measurement_s <= 0.0:
-        raise ValueError("pulsejet warmup and measurement durations must be positive")
-    time_step_s = (
-        case.simulation.time_step_s
-        if pulsejet_time_step_s is None
-        else pulsejet_time_step_s
-    )
-    pulsejet = PulsejetSimulator(
+    # Intentionally NOT migrated to propulsion_map.py: this report needs
+    # peak_net_thrust_n and completed_cycles, which PropulsionMapPoint
+    # deliberately omits (peaks/cycle-counts are pulsejet-specific report
+    # detail, not part of the common cross-mode schema -- see
+    # propulsion_map.py's module docstring). Still uses the shared
+    # convergence-driven cycle average (pulsejet.py, cycle_based_averaging_
+    # fix.md) directly, not a fixed warmup_s/measurement_s window, and the
+    # same fixed fidelity tiers (dt_convergence_solver_spec.md) rather than a
+    # raw dt float.
+    _cycle_cap, _simulated_time_cap_s = pulsejet_cycle_bounds_for_fidelity(pulsejet_fidelity)
+    pulsejet_summary = run_pulsejet_to_converged_cycle_average(
         case.pulsejet,
         case.selector,
         nozzle,
         case.fuel,
         case.altitude_m,
         case.mach,
-    )
-    pulsejet_summary = summarize_pulsejet(
-        pulsejet.run(warmup_s + measurement_s, time_step_s),
-        minimum_time_s=warmup_s,
+        pulsejet_time_step_s_for_fidelity(pulsejet_fidelity),
+        _maximum_cycles_override=_cycle_cap,
+        _maximum_simulated_time_s_override=_simulated_time_cap_s,
     )
     pulsejet_thrust_to_weight = pulsejet_summary.mean_net_thrust_n / (
         case.flight.initial_mass_kg * G0_M_PER_S2
@@ -547,7 +544,7 @@ def evaluate_shared_nozzle_trade(
         hold_duration_s is not None
         and hold_duration_s >= case.requirements.minimum_time_above_mach_one_s
     )
-    status = list(ramjet.status)
+    status = list(ramjet.validity_flags)
     if not packageable:
         status.append("configured_radial_hardware_allowances_do_not_package")
     if nominal_margin_n < 0.0:
@@ -564,7 +561,11 @@ def evaluate_shared_nozzle_trade(
         status.append("configured_loaded_mass_exceeds_requirement")
     if pulsejet_summary.mean_net_thrust_n <= 0.0:
         status.append("pulsejet_mean_net_thrust_nonpositive")
-    status.append("pulsejet_statistics_exclude_configured_startup_transient")
+    if pulsejet_summary.averaged_cycles == 0:
+        status.append("pulsejet_no_completed_cycles_within_simulation_cap")
+    elif not pulsejet_summary.converged:
+        status.append("pulsejet_cycle_average_did_not_converge")
+    status.append("pulsejet_statistics_exclude_startup_transient")
 
     return SharedNozzleTradePoint(
         altitude_m=altitude_m,
@@ -583,8 +584,8 @@ def evaluate_shared_nozzle_trade(
         ramjet_derated_net_thrust_n=derated_thrust_n,
         ramjet_nominal_thrust_margin_n=nominal_margin_n,
         ramjet_derated_thrust_margin_n=derated_margin_n,
-        ramjet_inlet_spillage_fraction=ramjet.inlet_spillage_fraction,
-        ramjet_air_mass_flow_kg_per_s=ramjet.air_mass_flow_kg_per_s,
+        ramjet_inlet_spillage_fraction=ramjet.spilled_mass_flow_fraction,
+        ramjet_air_mass_flow_kg_per_s=ramjet.captured_air_mass_flow_kg_per_s,
         ramjet_fuel_mass_flow_kg_per_s=ramjet.fuel_mass_flow_kg_per_s,
         ramjet_full_throttle_fuel_endurance_s=full_endurance_s,
         ramjet_hold_throttle_fraction_with_derate=hold_throttle_fraction,
@@ -602,9 +603,8 @@ def evaluate_shared_nozzle_trade(
         pulsejet_peak_chamber_temperature_k=(
             pulsejet_summary.peak_chamber_temperature_k
         ),
-        pulsejet_completed_cycles=pulsejet_summary.completed_cycles,
-        pulsejet_warmup_duration_s=warmup_s,
-        pulsejet_measurement_duration_s=measurement_s,
+        pulsejet_completed_cycles=pulsejet_summary.averaged_cycles,
+        pulsejet_cycle_average_converged=pulsejet_summary.converged,
         pulsejet_mean_net_thrust_to_weight=pulsejet_thrust_to_weight,
         loaded_mass_margin_to_requirement_kg=mass_margin_kg,
         propulsion_derate_fraction=propulsion_derate_fraction,
@@ -623,9 +623,7 @@ def shared_nozzle_trade_sweep(
     exit_to_throat_area_ratios: list[float] | tuple[float, ...],
     *,
     propulsion_derate_fraction: float = 0.15,
-    pulsejet_warmup_s: float | None = None,
-    pulsejet_measurement_s: float | None = None,
-    pulsejet_time_step_s: float | None = None,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> list[SharedNozzleTradePoint]:
     if not body_diameters_m or not throat_diameters_m or not exit_to_throat_area_ratios:
         raise ValueError("shared-nozzle sweep arrays cannot be empty")
@@ -636,9 +634,7 @@ def shared_nozzle_trade_sweep(
             throat_diameter_m,
             area_ratio,
             propulsion_derate_fraction=propulsion_derate_fraction,
-            pulsejet_warmup_s=pulsejet_warmup_s,
-            pulsejet_measurement_s=pulsejet_measurement_s,
-            pulsejet_time_step_s=pulsejet_time_step_s,
+            pulsejet_fidelity=pulsejet_fidelity,
         )
         for body_diameter_m in body_diameters_m
         for throat_diameter_m in throat_diameters_m
@@ -702,14 +698,7 @@ def shared_nozzle_feasibility_bounds(
     speed_m_per_s = peak_mach * atmosphere.speed_of_sound_m_per_s
     dynamic_pressure_pa = 0.5 * atmosphere.density_kg_per_m3 * speed_m_per_s**2
 
-    configured_ramjet = evaluate_ramjet(
-        case.ramjet,
-        case.selector,
-        case.nozzle,
-        case.fuel,
-        altitude_m,
-        peak_mach,
-    )
+    configured_ramjet = evaluate_propulsion_map_point(case, peak_mach, altitude_m, RAMJET_MODE)
     derated_configured_thrust_n = (
         1.0 - propulsion_derate_fraction
     ) * configured_ramjet.net_thrust_n
@@ -741,13 +730,8 @@ def shared_nozzle_feasibility_bounds(
 
     def derated_margin_n(throat_diameter_m: float) -> float:
         nozzle = replace(case.nozzle, throat_diameter_m=throat_diameter_m)
-        ramjet = evaluate_ramjet(
-            case.ramjet,
-            case.selector,
-            nozzle,
-            case.fuel,
-            altitude_m,
-            peak_mach,
+        ramjet = evaluate_propulsion_map_point(
+            replace(case, nozzle=nozzle), peak_mach, altitude_m, RAMJET_MODE
         )
         return (
             (1.0 - propulsion_derate_fraction) * ramjet.net_thrust_n
@@ -767,7 +751,7 @@ def shared_nozzle_feasibility_bounds(
                     lower_throat_m = midpoint_m
             minimum_throat_m = upper_throat_m
 
-    status = list(configured_ramjet.status)
+    status = list(configured_ramjet.validity_flags)
     body_interval_exists = minimum_body_diameter_m <= maximum_body_diameter_m
     body_packaging_margin_m = (
         case.vehicle.body_diameter_m - minimum_body_diameter_m
@@ -829,18 +813,11 @@ def evaluate_peak_mach_altitude_trade(
         case.vehicle.body_diameter_m,
     )
     drag_n = dynamic_pressure_pa * drag_area_m2
-    ramjet = evaluate_ramjet(
-        case.ramjet,
-        case.selector,
-        case.nozzle,
-        case.fuel,
-        altitude_m,
-        peak_mach,
-    )
+    ramjet = evaluate_propulsion_map_point(case, peak_mach, altitude_m, RAMJET_MODE)
     derated_thrust_n = (1.0 - propulsion_derate_fraction) * ramjet.net_thrust_n
     derated_margin_n = derated_thrust_n - drag_n
     can_hold = (
-        ramjet.self_sustaining_candidate
+        ramjet.self_sustaining_status
         and ramjet.fuel_mass_flow_kg_per_s > 0.0
         and derated_margin_n >= 0.0
     )
@@ -858,7 +835,7 @@ def evaluate_peak_mach_altitude_trade(
         )
         hold_distance_m = true_airspeed_m_per_s * hold_duration_s
 
-    status = list(ramjet.status)
+    status = list(ramjet.validity_flags)
     status.append("static_altitude_trade_excludes_climb_and_acceleration_energy")
     if hold_duration_s is not None:
         status.append("fuel_hold_uses_linear_thrust_fuel_scaling")
@@ -875,7 +852,7 @@ def evaluate_peak_mach_altitude_trade(
         ramjet_net_thrust_n=ramjet.net_thrust_n,
         ramjet_derated_net_thrust_n=derated_thrust_n,
         ramjet_derated_thrust_margin_n=derated_margin_n,
-        ramjet_inlet_spillage_fraction=ramjet.inlet_spillage_fraction,
+        ramjet_inlet_spillage_fraction=ramjet.spilled_mass_flow_fraction,
         ramjet_fuel_mass_flow_kg_per_s=ramjet.fuel_mass_flow_kg_per_s,
         ramjet_hold_throttle_fraction_with_derate=throttle_fraction,
         ramjet_fuel_limited_hold_duration_s=hold_duration_s,

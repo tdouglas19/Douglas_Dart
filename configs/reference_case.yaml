@@ -1,10 +1,84 @@
+# pulsejet_km: geometry for PULSEJET_KM_MODE (propulsion_map.py Gate 2),
+# the sibling pulsejet-km (Khrulev & Muntyan) model. This is the real,
+# externally-validated Argus As-014/V-1 geometry from pulsejet-km's own
+# reference_cases.ARGUS_AS014_V1 -- NOT Douglas Dart's own vehicle-specific
+# design point. There is no Douglas-Dart-shaped pulsejet-km geometry yet
+# (see docs/pulsejet_external_model_audit.md); this section exists so
+# PULSEJET_KM_MODE has real, validated data to run against and prove the
+# integration pipeline works end-to-end, pending a real project-specific
+# geometry being authored. constants.ignition_delay_cycle_fraction/
+# ignition_delay_temperature_coefficient use this session's empirically-
+# verified recalibration (m=73.7/theta=0.90, pulsejet-km architecture.md
+# Section 49) rather than the paper's own stale "preliminary" 0.30/0.10
+# (which gives near-zero thrust, INSUFFICIENT_CYCLES) -- NOT YET the
+# permanent default in pulsejet-km's own reference_cases.py, pending
+# separate user review there; used here as the best currently-available
+# value for this integration to produce a real, non-degenerate result.
+pulsejet_km:
+  geometry:
+    chamber_length_m: 0.590
+    chamber_cross_section_area_m2: 0.255176
+    chamber_volume_m3: 0.150554
+    resonance_tube_length_m: 3.0450
+    nozzle_throat_area_m2: 0.119459
+    valve_flow_area_m2: 0.05
+    exhaust_pipe_friction_coefficient: 0.02
+    nozzle_local_resistance_coefficient: 0.3
+    relative_chamber_center_to_nozzle_distance: 0.25
+    inlet_model: DIRECT_STRAIGHT
+    inlet_channel_diameter_m: 0.32
+    inlet_channel_length_m: 0.28
+    inlet_channel_friction_coefficient: 0.02
+    inlet_channel_local_resistance_coefficient: 0.3
+  valve_petal:
+    petal_length_m: 0.035
+    petal_thickness_m: 0.00025
+    petal_base_width_m: 0.038
+    petal_tip_width_m: 0.038
+    elastic_modulus_pa: 195.0e+9
+    petal_count: 270
+    opening_characteristic_diameter_m: 0.038
+    valve_overlap_m: 0.002
+    maximum_petal_lift_m: 0.008
+    grate_type: wedge
+    valve_model: DYNAMIC
+    petal_material_density_kg_per_m3: 7850.0
+  fuel:
+    lower_heating_value_j_per_kg: 43.0e+6
+    stoichiometric_air_fuel_ratio: 14.7
+    fuel_characteristic_number: 1.219
+  constants:
+    ignition_delay_cycle_fraction: 73.7
+    ignition_delay_temperature_coefficient: 0.90
+    maximum_combustion_completeness: 0.725
+    excess_air_ratio: 0.95
+    net_thrust_drag_coefficient: 0.045
+    rebound_coefficient: 0.4
+    valve_closed_stability_lift_threshold: 0.002
+    nozzle_flow_coefficient: 0.85
+    reverse_flow_nozzle_discharge_coefficient: 1.0
+    startup_combustion_duration: 1.0
+    startup_fuel_mass_in_chamber: 0.01115
+
 case:
   name: numerical_reference_not_a_design
   fuel_key: jet_a_reference
 
 environment:
   altitude_m: 0.0
-  mach: 0.20
+  # Raised from 0.20: sizing.py's static trade screens construct
+  # PulsejetSimulator directly with a short fixed measurement window
+  # (propulsion_map.py's module docstring explains why those call sites
+  # bypass the common interface). With inlet_type: side below, real cycle
+  # period lengthens sharply below roughly Mach 0.3-0.35 (refill is driven
+  # by a weak pressure differential instead of ram pressure -- see
+  # propulsion_map.py's _run_pulsejet_simulation, which adaptively extends
+  # its own window so trajectory.py-routed callers see this correctly), so
+  # a short fixed window at 0.20 reads as near-zero thrust even though the
+  # engine is still firing, just more slowly. 0.40 keeps the original
+  # intent (a representative subsonic pulsejet reference point) while
+  # staying comfortably above where that fixed-window measurement is valid.
+  mach: 0.40
 
 selector:
   circular_intake_diameter_m: 0.195
@@ -12,6 +86,7 @@ selector:
   discharge_coefficient: 0.78
   pulsejet_total_pressure_recovery: 0.99
   ramjet_total_pressure_recovery: 0.92
+  inlet_type: side
 
 nozzle:
   throat_diameter_m: 0.100
@@ -39,8 +114,17 @@ ramjet:
   mass_capture_coefficient: 0.90
   combustor_total_pressure_loss_fraction: 0.06
   combustor_efficiency: 0.96
-  target_combustor_exit_temperature_k: 1900.0
-  minimum_lightoff_test_mach: 0.80
+  # target_equivalence_ratio, not a target exit temperature (2026-08-10 session):
+  # mirrors PulsejetConfig.target_equivalence_ratio's input mechanism, but this is
+  # a genuinely different value (0.60 lean vs. pulsejet's stoichiometric 1.00),
+  # backed out of this vehicle's previous fixed-1900 K target -- confirmed by
+  # direct computation to reproduce ~1900 K combustor exit temperature (now a
+  # computed output, see ramjet.py's _solve_ramjet_cycle) across this vehicle's
+  # operating Mach range.
+  target_equivalence_ratio: 0.60
+  # minimum_lightoff_test_mach is no longer set here -- derived by
+  # ramjet.py's derive_lightoff_mach (config.py's load_reference_case),
+  # not hand-picked. See RamjetConfig's docstring.
   minimum_self_sustaining_mach: 1.10
 
 flight:
@@ -67,6 +151,8 @@ mission:
   peak_mach: 1.10
   loaded_fuel_mass_kg: 3.80
   ramjet_speed_run_fuel_budget_kg: 1.40
+  sled_rail_length_m: 75.0  # midpoint of stated 50-100 m range, representative pending real sled spec
+  sled_launch_acceleration_g: 10.0  # UNSOURCED placeholder, no real accel ceiling set -- only bounds the search vs. the 75 m rail
 
 requirements:
   maximum_takeoff_mass_kg: 25.0

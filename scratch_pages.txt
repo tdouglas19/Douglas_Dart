@@ -1,0 +1,650 @@
+===== PAGE 5 =====
+Canadian Science Publishing
+Drone Syst. Appl. 14: 1–32 (2026) | dx.doi.org/10.1139/dsa-2025-0027
+5
+surface is a pipe of constant cross-section)
+
+CpT
+n
+
+i=1
+dmi
+dt −
+n
+
+i=1
+CpiTi
+dmi
+dt
+
+FaL
+V + ρ dq
+dt
+−UL
+F qw = ρ d
+
+CpT
+
+dt
+−
+¯R0
+¯Cp0
+dp
+dt ,
+(3)
+The value of
+¯R0
+¯Cp0 can be written in terms of gas parameters
+¯R0
+¯Cp0
+=
+¯R0
+¯Cp0
+R
+¯R
+¯Cp
+Cp
+= Cp
+R
+γ −1
+γ
+,
+where γ is the gas heat capacity ratio.
+Thus, ﬁnally
+
+CpT
+n
+
+i=1
+dmi
+dt −
+n
+
+i=1
+CpiTi
+dmi
+dt
+
+FaL
+V + ρ dq
+dt
+−UL
+F qw = ρ d
+
+CpT
+
+dt
+−γ −1
+γ
+Cp
+R
+dp
+dt
+(4)
+Let us now consider the equation of state of an ideal gas:
+¯p = ¯m
+V
+¯R ¯T
+Differentiating this equation with respect to time, we ob-
+tain
+d ¯p
+d¯t =
+¯R ¯T
+V
+n
+
+i=1
+d ¯mi
+d¯t + ¯m ¯R
+V
+d ¯T
+d¯t −¯m ¯R ¯T
+V 2
+dV
+d¯t ,
+or in dimensionless form
+dp
+dt = FaLRT
+V
+n
+
+i=1
+dmi
+dt + ρRdT
+dt −p
+V
+dV
+dt .
+Whence:
+1
+p
+dp
+dt = FaL
+V
+1
+ρ
+n
+
+i=1
+dmi
+dt + 1
+T
+dT
+dt −1
+V
+dV
+dt ,
+(5)
+where dV/dt is the rate of change of volume (within the con-
+sidered model it is equal to 0).
+Now, having the basic equations, we can proceed to compil-
+ing equations describing the working process in the combus-
+tion chamber of a pulse jet engine. To do this, we will divide
+the pulse jet engine cycle into several sections, depending
+on the pressure difference between the combustion chamber
+and the environment, the direction of gas ﬂow in the exhaust
+pipe, and the presence or absence of combustion of the fuel–
+air mixture.
+Let us consider the pulsejet workﬂow from the moment of
+ignition of the mixture in the combustion chamber with the
+initial values of pressure, temperature, and velocity: p = 1,
+T = 1, v = 0. When heat is supplied to a combustion cham-
+ber with a volume of V, in general, the pressure and temper-
+ature increase, and the combustion products ﬂow into the
+exhaust pipe. However, at the initial pressure in the cham-
+ber below the total pressure at the engine inlet, i.e., at p
+< π (M), wheregas dynamic function of pressure is π (M) =
+
+1 + 0, 5 (γ −1) M2	
+γ
+γ −1 , M is the ﬂight Mach number, there is a
+positive pressure drop between the inlet device and the com-
+bustion chamber, the inlet valves are open, and air ﬂows into
+the combustion chamber at a ﬂow rate of dme/dt. Then, from
+eqs. 4 and 5, we obtain (approximately assuming that d(CpT)
+= CpdT, i.e., the heat capacity remains constant in a certain
+temperature range)
+⎧
+⎪⎪⎨
+⎪⎪⎩
+
+Cp0T0τ (M) dme
+dt + CpT dmc
+dt −CpT dme
+dt −CpT dmc
+dt
+ FaL
+V + ρ dq
+dt −UL
+F qw == ρCp
+dT
+dt −γ −1
+γ
+Cp
+R
+dp
+dt ,
+1
+p
+dp
+dt = FaL
+V
+1
+ρ
+dme
+dt + dmc
+dt
+
++ 1
+T
+dT
+dt ,
+(6)
+where τ (M) = 1 + 0, 5 (γ −1) M2 is gas dynamic function of
+temperature.
+Whence:
+⎧
+⎪⎪⎨
+⎪⎪⎩
+τ (M)
+Cp
+−T
+ dme
+dt
+FaL
+V + ρ
+Cp
+dq
+dt −UL
+F
+qw
+Cp
+= ρ dT
+dt −γ −1
+γ R
+dp
+dt ,
+dp
+dt = FaL
+V RT
+dme
+dt
++ dmc
+dt
+
++ p
+T
+dT
+dt ,
+(7)
+where dmc/dt is gas ﬂow from the combustion chamber
+through the nozzle.
+Solving these equations for the derivatives dT/dt and dp/dt,
+we obtain the following system of ﬁrst-order differential
+equations, resolved with respect to the derivative:
+⎧
+⎪⎪⎨
+⎪⎪⎩
+dT
+dt = γ
+Cp
+dq
+dt + (γ −1) FaL
+V
+dmc
+dt + FaL
+V
+RT
+p
+dme
+dt
+
+γ τ (M)
+Cp
+−T
+
+−γ RT
+Cpp
+UL
+F qw
+dp
+dt = γ
+Cp
+p
+T
+dq
+dt + γ RT FaL
+V
+dmc
+dt + γ τ (M)
+Cp
+FaL
+V
+dme
+dt −γ R
+Cp
+UL
+F qw
+(8)
+Drone Syst. Appl. Downloaded from cdnsciencepub.com by 75.87.134.13 on 08/09/26
+
+===== PAGE 6 =====
+Canadian Science Publishing
+6
+Drone Syst. Appl. 14: 1–32 (2026) | dx.doi.org/10.1139/dsa-2025-0027
+Let us now consider the individual quantities included in
+these equations. The dimensionless value (FaL)/V, obtained as
+a result of reducing the equations to a dimensionless form,
+can be called the “complex pulsejet parameter,” since, accord-
+ing to the system of eq. 8, the change in gas parameters in
+the combustion chamber depends on it. Let us denote it by
+the letter :
+ = FaL
+V
+The value of the heat supply rate can be found using the
+method from Schetinkov (1965). According to this method,
+which is used, among other things, in the mathematical de-
+scription of the non-stationary combustion mode in liquid
+rocket engines, the instantaneous rate of heat supply at time
+t is taken to be proportional to the instantaneous mass ﬂow
+rate of the combustible mixture at time t −τ, where τ is the
+ignition delay time, depending on the pressure and tempera-
+ture of the gas, i.e.,
+d ¯q
+d¯t t
+d ¯me
+d¯t t−τ
+On the other hand, the condition of balance of the energy
+released during combustion must be met
+¯m
+	tH
+
+0
+d ¯q
+d¯t d¯t = ¯Huη ¯m f ,
+(9)
+where 	tH is the time of ﬁlling the combustion chamber with
+the mixture; ¯m is the mass of gas in the chamber; ¯m f is the
+mass of fuel injected into the chamber during the time 	tH;
+η is the completeness of combustion.
+Therefore:
+d ¯q
+d¯t =
+¯Huη
+¯m
+d ¯m f
+d¯t
+t−τ =
+¯Huη
+λcL0 ¯m
+d ¯me
+d¯t t−τ,
+where λc is air–fuel ratio; L0 is the stoichiometric coefficient.
+In dimensionless form, it will be
+dq
+dt =  Huη
+λcL0ρ
+dme
+dt t−τ = RT
+p
+Huη
+λcL0
+dme
+dt t−τ
+(10)
+Equation 10 corresponds to the case when, during the start-
+ing process, the combustion chamber is gradually ﬁlled with
+a fuel–air mixture due to the starting boost at the engine inlet
+or the vacuum in the chamber. When the pressure increases
+p ≥π (M), the eq. 10 should be written as
+dq
+dt =  Huη
+λcL0ρM
+dme
+dt t−τ,
+where ρM is the gas density corresponding to the moment in
+time when p = π (M).
+If, during startup, it is assumed that a mixture already pre-
+pared in some way is ignited in the combustion chamber, and
+there is no boost at the inlet, then, obviously,
+ρM = ρ0 = 1
+The method of calculating the rate of heat release depend-
+ing on the mixture ﬂow rate taking into account the ignition
+delay time, allows us to take into account the dependence of
+the ignition delay time on pressure and temperature, e.g., in
+Fig. 3. Qualitative dependence of air ﬂow during intake and
+heat release rate on time.
+the form of the Arrhenius law for the rate of chemical reac-
+tions (Glassman and Yetter 2008):
+¯τ = ¯τ0
+exp
+
+a
+ ¯T −¯T0
+	
+¯pb
+At ¯τ = const the heat release curve repeats the curve of the
+instantaneous air ﬂow rate entering the chamber at the inlet
+(Fig. 3). If ¯τ changes during the combustion process, which
+corresponds to the real nature of this process, then heat re-
+lease will occur over a period of time shorter than the time it
+takes to ﬁll the combustion chamber.
+Although such a representation of the heat release process
+is qualitatively close to the real one, it cannot be calculated
+quantitatively with high accuracy within the framework of
+a volumetric model. Accordingly, some basic values for the
+ignition delay were adopted in the model with subsequent
+correction for temperature and pressure using a formula cor-
+responding to known data on fuel combustion (Schetinkov
+1965) in the form
+τ = 0, 01m L
+a0pθ1,16(1−1/T),
+(11)
+where θ is a coefficient showing the effect of temperature on
+the ignition delay time, i.e., how many times the delay time
+at the current temperature decreases from time at the am-
+bient temperature (preliminary, θ = 0.10 was adopted in the
+model); m is the fraction of the cycle occupied by the ignition
+delay at the ambient temperature (m = 0.30 was adopted as a
+ﬁrst approximation).
+The described calculation method is not suitable for the
+starting cycle, since it is impossible to calculate the air ﬂow
+rate without a special starting cycle model. Based on this,
+the process of mixture combustion and heat release during
+startup can be calculated approximately by another way. For
+this purpose, the heat release rate in the ﬁrst cycle is approx-
+imated by a sinusoid, which is zero at the beginning and at
+the end of the combustion process, and has a maximum in
+the middle, and condition (9) is also satisﬁed
+d ¯q
+d¯t =
+¯Huη ¯mT
+¯m0	¯tc
+
+1 + sin
+π
+2
+
+4
+¯t
+	¯tc
+−1
+
+,
+Drone Syst. Appl. Downloaded from cdnsciencepub.com by 75.87.134.13 on 08/09/26
+
+===== PAGE 7 =====
+Canadian Science Publishing
+Drone Syst. Appl. 14: 1–32 (2026) | dx.doi.org/10.1139/dsa-2025-0027
+7
+where 	¯tc is the combustion time; ¯mT is the mass of fuel in
+the combustion chamber.
+The value of the combustion efficiency η, according to
+Schetinkov (1965), strongly depends on the air–fuel ratio.
+This dependence was previously expressed by an approxi-
+mate representation of the experimental curve η = f (λ), con-
+structed based on the data of experiments on ignition of the
+fuel–air mixture in a calorimetric bomb
+η = η0
+
+1 −1, 73 (2 −λ) (λ −1, 12)2	
+,
+(12)
+where η0 is the maximum value of the combustion efficiency
+coefficient at λ = 1.1.
+It is quite possible that in a pulse jet engine, especially
+with a lean mixture, the limits of fuel regulation and ignition
+may be wider than the dependence (12) allows, correspond-
+ing to other conditions. However, since there are currently
+no reliable data for describing volumetric pulsating com-
+bustion, the dependence (12) is used in the model under
+consideration. Since the length of the engine is relatively
+large, but the residence time of the fuel in the gas–air tract
+is not long, in the ﬁrst approximation, it is assumed that η0
+lies within the range of 0.70–0.75 (Schmidt 1957). It is also
+assumed that the combustion model will be further reﬁned
+as the entire algorithm for modeling the engine’s working
+process is improved.
+The instantaneous mass ﬂow rate of air through the valve
+system will be equal to
+d ¯me
+d¯t
+= μe ¯ρe ¯veFe,
+Or in dimensionless form
+dme
+dt
+= d ¯me/d¯t
+¯ρ0 ¯a0Fa
+= μeρeve
+Fe
+Fa
+.
+(13)
+where μe is the ﬂow rate coefficient of the intake system.
+The instantaneous gas ﬂow rate through the nozzle, tak-
+ing into account the “–” sign, since the ﬂow occurs from the
+combustion chamber, will be equal to
+dmc
+dt
+= −μcρcvc,
+where μc is the ﬂow rate coefficient through the nozzle.
+Assuming approximately that under conditions p ≥1 and v
+≥0 a complete gas expansion occurs in the nozzle, we obtain
+the following expression:
+dmc
+dt
+= −μc
+p
+RT
+ pa
+p
+ 1
+γ
+vc,
+(14)
+where pa is the static pressure at the nozzle exit.
+It means the boundary condition used here is the equality
+of the pressure at the exhaust pipe section to the ambient
+pressure pa = 1.
+The last term of eq. 8 takes into account heat losses through
+the walls of the engine ﬂow path. Since heat loss occurs
+through all engine external surfaces, the value qw includes
+the heat ﬂow into the walls of the combustion chamber (in-
+cluding nozzle cone) qwK and exhaust pipe qwT; therefore, the
+total heat loss can be represented as
+¯Qw = ¯qwKF′
+K + ¯qwTF′
+T,
+where F′
+K, F′
+T are the surface areas of the combustion chamber
+and the exhaust pipe.
+The chosen “piston analogy” model for the exhaust pipe
+does not allow modeling the gas ﬂow with heat exchange
+there; therefore, heat losses through the walls of the exhaust
+pipe are taken into account in the heat balance of the com-
+bustion chamber. Then it is obvious that
+¯qw = ¯qwK + ¯qwT
+F′
+T
+F′
+K
+,
+whence:
+qw = qwK + qwT
+L
+LK
+
+Fa
+FK
+,
+where LK, FK are the length and cross-sectional area of the
+combustion chamber.
+We transform the last term in the eq. 8:
+k RT
+Cpp
+UL
+F qw = 4k RT
+Cppqw
+L
+DK
+= 4k RT
+Cpp
+L
+DK
+
+qwK + qwT
+L
+LK
+
+Fa
+FK
+
+= 4k RT
+Cpp
+L
+DK
+
+1 + ¯qwT
+¯qwK
+L
+LK
+
+Fa
+FK
+
+qw
+′
+K = 4k RT
+Cpp
+L
+DK
+qwKKw,
+where Kw = 1 + qwT
+qwK
+L
+LK
+
+Fa
+FK .
+In existing designs of pulsejets, on average, we get
+L
+LK ≈5,
+FK
+Fa ≈1, 85. If we also approximately assume that qwT ≈qwK,
+then Kw = 3.7. This value can be used in approximate calcu-
+lations. Thus, we obtain a certain thermal parameter of the
+engine’s working process, characterizing heat losses through
+the walls of the ﬂow part, which we denote by the letter θ
+θ = L
+DK
+qwKKw.
+(15)
+In accordance with the accepted notations, eq. 8 is ﬁnally
+written as
+⎧
+⎪⎪⎨
+⎪⎪⎩
+dT
+dt = γ
+Cp
+dq
+dt + RT
+p
+
+(γ −1) T dmc
+dt +
+
+γ τ (M)
+Cp
+−T
+ dme
+dt
+
+−4γ RT
+Cppθ
+dp
+dt = γ
+Cp
+p
+T
+dq
+dt + γ 
+
+RT dmc
+dt + τ (M)
+Cp
+dme
+dt
+
+−4γ R
+Cp
+θ.
+(16)
+The gas constants——the heat capacity ratio γ, the gas
+constant R and, consequently, the heat capacity at con-
+stant pressure Cp——can be represented as functions of
+the temperature and pressure in the combustion cham-
+ber, as well as excess air coefficient. Thus, the follow-
+ing relations were used to calculate in the pulsejet model
+Drone Syst. Appl. Downloaded from cdnsciencepub.com by 75.87.134.13 on 08/09/26

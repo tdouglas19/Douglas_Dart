@@ -9,7 +9,18 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .config import load_fuels, load_reference_case
+from .feasibility import evaluate_level0_feasibility
 from .fuel_trade import fuel_performance_trade
+from .mass_model import calibrate_mass_model, evaluate_parametric_mass
+from .propulsion_map import (
+    NOMINAL,
+    PULSEJET_FIDELITY_FAST,
+    PULSEJET_FIDELITY_FULL,
+    PULSEJET_MODE,
+    RAMJET_MODE,
+    build_propulsion_map,
+    write_propulsion_map_csv,
+)
 from .openvsp_geometry import build_openvsp_geometry
 from .pulsejet import PulsejetSimulator, summarize_pulsejet
 from .ramjet import evaluate_ramjet
@@ -54,6 +65,13 @@ def _write_samples(path: Path, samples: list) -> None:
 
 
 def _pulsejet(args: argparse.Namespace) -> int:
+    # Intentionally NOT migrated to propulsion_map.py: this standalone
+    # diagnostic command's entire purpose is exposing the raw simulator
+    # (per-step samples, conservation audit) for direct human inspection of
+    # one chamber run -- not participating in the cross-consumer consistency
+    # guarantee propulsion_map.py exists for. See docs/design_workflow.md
+    # Gate 2 and evaluate_ramjet_handoff_sizing's docstring in sizing.py for
+    # the same reasoning applied elsewhere.
     case = load_reference_case(args.config, args.fuels)
     simulator = PulsejetSimulator(
         case.pulsejet,
@@ -79,6 +97,11 @@ def _pulsejet(args: argparse.Namespace) -> int:
 
 
 def _ramjet(args: argparse.Namespace) -> int:
+    # Intentionally NOT migrated to propulsion_map.py: same reasoning as
+    # _pulsejet above -- this is a standalone single-point diagnostic dump of
+    # the full RamjetResult (including solver internals like fuel_air_ratio
+    # and nozzle_capacity_kg_per_s that PropulsionMapPoint deliberately
+    # omits), not a value consumed by another design calculation.
     case = load_reference_case(args.config, args.fuels)
     result = evaluate_ramjet(
         case.ramjet,
@@ -141,9 +164,7 @@ def _shared_nozzle_trade(args: argparse.Namespace) -> int:
         throat_diameters_m=args.throat_diameters,
         exit_to_throat_area_ratios=args.area_ratios,
         propulsion_derate_fraction=args.propulsion_derate,
-        pulsejet_warmup_s=args.pulsejet_warmup,
-        pulsejet_measurement_s=args.pulsejet_measurement,
-        pulsejet_time_step_s=args.pulsejet_dt,
+        pulsejet_fidelity=args.pulsejet_fidelity,
     )
     selected = select_minimum_feasible_shared_nozzle(points)
     if args.csv:
@@ -167,6 +188,46 @@ def _design_convergence(args: argparse.Namespace) -> int:
     )
     print(json.dumps(asdict(bounds), indent=2))
     return 0
+
+
+def _propulsion_map(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    modes = (PULSEJET_MODE, RAMJET_MODE) if args.mode == "both" else (args.mode,)
+    points = build_propulsion_map(
+        case,
+        mach_values=tuple(args.mach_values),
+        altitude_values=tuple(args.altitude_values),
+        modes=modes,
+        scenario=NOMINAL,
+    )
+    if args.csv:
+        write_propulsion_map_csv(Path(args.csv), points)
+    print(json.dumps([asdict(point) for point in points], indent=2))
+    return 0
+
+
+def _mass_breakdown(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    calibration = calibrate_mass_model(case, args.mass_budget)
+    breakdown = evaluate_parametric_mass(
+        case,
+        calibration,
+        body_diameter_m=args.body_diameter,
+        body_length_m=args.body_length,
+        throat_diameter_m=args.throat_diameter,
+    )
+    print(json.dumps({"calibration": asdict(calibration), "breakdown": asdict(breakdown)}, indent=2))
+    return 0
+
+
+def _level0_bounds(args: argparse.Namespace) -> int:
+    case = load_reference_case(args.config, args.fuels)
+    report = evaluate_level0_feasibility(case)
+    output = asdict(report)
+    print(json.dumps(output, indent=2))
+    if not report.all_pass:
+        print(f"\nLevel 0 FAILING checks: {', '.join(report.failing_checks)}")
+    return 0 if report.all_pass or not args.strict else 1
 
 
 def _fuel_trade(args: argparse.Namespace) -> int:
@@ -211,30 +272,13 @@ def _robustness_trade(args: argparse.Namespace) -> int:
 
 def _key_variables(args: argparse.Namespace) -> int:
     case = load_reference_case(args.config, args.fuels)
-    pulsejet_warmup_s = (
-        case.simulation.pulsejet_steady_warmup_s
-        if args.pulsejet_warmup is None
-        else args.pulsejet_warmup
-    )
-    pulsejet_measurement_s = (
-        case.simulation.pulsejet_steady_measurement_s
-        if args.pulsejet_measurement is None
-        else args.pulsejet_measurement
-    )
-    pulsejet_time_step_s = (
-        case.simulation.time_step_s
-        if args.pulsejet_dt is None
-        else args.pulsejet_dt
-    )
     points = []
     if args.engine in {"pulsejet", "both"}:
         points.extend(
             pulsejet_local_sensitivities(
                 case,
                 perturbation_fraction=args.perturbation,
-                warmup_s=pulsejet_warmup_s,
-                measurement_s=pulsejet_measurement_s,
-                time_step_s=pulsejet_time_step_s,
+                pulsejet_fidelity=args.pulsejet_fidelity,
             )
         )
     if args.engine in {"ramjet", "both"}:
@@ -281,6 +325,7 @@ def _design_optimize(args: argparse.Namespace) -> int:
 
     records = run_differential_evolution(
         case,
+        mass_budget_path=args.mass_budget,
         population_size=args.population,
         generations=args.generations,
         mutation_factor=args.mutation_factor,
@@ -420,9 +465,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated exit-to-throat area ratios",
     )
     shared_nozzle.add_argument("--propulsion-derate", type=float, default=0.15)
-    shared_nozzle.add_argument("--pulsejet-warmup", type=float, default=None)
-    shared_nozzle.add_argument("--pulsejet-measurement", type=float, default=None)
-    shared_nozzle.add_argument("--pulsejet-dt", type=float, default=None)
+    shared_nozzle.add_argument(
+        "--pulsejet-fidelity",
+        choices=(PULSEJET_FIDELITY_FAST, PULSEJET_FIDELITY_FULL),
+        default=PULSEJET_FIDELITY_FULL,
+    )
     shared_nozzle.add_argument("--csv", default=None)
     shared_nozzle.set_defaults(func=_shared_nozzle_trade)
 
@@ -440,6 +487,97 @@ def build_parser() -> argparse.ArgumentParser:
     design_convergence.add_argument("--fuels", default=None)
     design_convergence.add_argument("--propulsion-derate", type=float, default=0.15)
     design_convergence.set_defaults(func=_design_convergence)
+
+    propulsion_map = subparsers.add_parser(
+        "propulsion-map",
+        help=(
+            "Gate 2 authoritative propulsion map (docs/design_workflow.md, "
+            "propulsion_map.py): thrust, fuel flow, TSFC, spillage, recovery, and "
+            "operability vs. Mach and altitude for pulsejet and/or ramjet"
+        ),
+    )
+    propulsion_map.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_b.yaml",
+    )
+    propulsion_map.add_argument("--fuels", default=None)
+    propulsion_map.add_argument(
+        "--mode",
+        choices=("pulsejet", "ramjet", "both"),
+        default="both",
+    )
+    propulsion_map.add_argument(
+        "--mach-values",
+        type=float,
+        nargs="+",
+        default=[0.2, 0.4, 0.6, 0.8, 1.0, 1.1],
+    )
+    propulsion_map.add_argument(
+        "--altitude-values",
+        type=float,
+        nargs="+",
+        default=[0.0, 4500.0],
+    )
+    propulsion_map.add_argument("--csv", default=None)
+    propulsion_map.set_defaults(func=_propulsion_map)
+
+    mass_breakdown = subparsers.add_parser(
+        "mass-breakdown",
+        help=(
+            "docs/design_workflow.md Level 3 parametric mass model "
+            "(mass_model.py): geometry-linked empty-mass breakdown, calibrated "
+            "against a named mass-budget YAML"
+        ),
+    )
+    mass_breakdown.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_b.yaml",
+    )
+    mass_breakdown.add_argument("--fuels", default=None)
+    mass_breakdown.add_argument(
+        "--mass-budget",
+        default="configs/robustness_candidate_b.yaml",
+    )
+    mass_breakdown.add_argument(
+        "--body-diameter",
+        type=float,
+        default=None,
+        help="override body diameter (m); defaults to the configured value",
+    )
+    mass_breakdown.add_argument(
+        "--body-length",
+        type=float,
+        default=None,
+        help="override body length (m); defaults to the configured value",
+    )
+    mass_breakdown.add_argument(
+        "--throat-diameter",
+        type=float,
+        default=None,
+        help="override nozzle throat diameter (m); defaults to the configured value",
+    )
+    mass_breakdown.set_defaults(func=_mass_breakdown)
+
+    level0_bounds = subparsers.add_parser(
+        "level0-bounds",
+        help=(
+            "Gate 1 hand-calculation feasibility bounds (docs/design_workflow.md): "
+            "stall speed, lift area, thrust-to-weight, climb rate, dive energy, "
+            "fuel/endurance, packaging -- rejects impossible concepts, does not "
+            "select a design"
+        ),
+    )
+    level0_bounds.add_argument(
+        "--config",
+        default="configs/shared_nozzle_candidate_b.yaml",
+    )
+    level0_bounds.add_argument("--fuels", default=None)
+    level0_bounds.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit with a nonzero status if any Level 0 check fails",
+    )
+    level0_bounds.set_defaults(func=_level0_bounds)
 
     fuel_trade = subparsers.add_parser(
         "fuel-trade",
@@ -506,9 +644,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="both",
     )
     key_variables.add_argument("--perturbation", type=float, default=0.10)
-    key_variables.add_argument("--pulsejet-warmup", type=float, default=None)
-    key_variables.add_argument("--pulsejet-measurement", type=float, default=None)
-    key_variables.add_argument("--pulsejet-dt", type=float, default=None)
+    key_variables.add_argument(
+        "--pulsejet-fidelity",
+        choices=(PULSEJET_FIDELITY_FAST, PULSEJET_FIDELITY_FULL),
+        default=PULSEJET_FIDELITY_FULL,
+    )
     key_variables.add_argument("--csv", default=None)
     key_variables.set_defaults(func=_key_variables)
 
@@ -539,8 +679,10 @@ def build_parser() -> argparse.ArgumentParser:
         "design-optimize",
         help=(
             "run a local, unattended differential-evolution search over body "
-            "diameter, throat, area ratio, fuel split, and climb/dive geometry "
-            "against the nominal and adverse trajectory scenarios; no AI model calls"
+            "diameter/length, throat, area ratio, fuel split, sled release speed, "
+            "climb/dive geometry, wing area, and ramjet lightoff Mach against the "
+            "nominal and adverse trajectory scenarios, with mass_model.py's "
+            "geometry-linked mass; no AI model calls"
         ),
     )
     design_optimize.add_argument(
@@ -548,6 +690,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="configs/shared_nozzle_candidate_b.yaml",
     )
     design_optimize.add_argument("--fuels", default=None)
+    design_optimize.add_argument(
+        "--mass-budget",
+        default="configs/robustness_candidate_b.yaml",
+        help="mass budget YAML used to calibrate mass_model.py's geometry-linked scaling",
+    )
     design_optimize.add_argument("--population", type=int, default=20)
     design_optimize.add_argument("--generations", type=int, default=30)
     design_optimize.add_argument("--mutation-factor", type=float, default=0.6)

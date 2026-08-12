@@ -3,6 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from douglas_dart.config import load_reference_case
+from douglas_dart.propulsion_map import PULSEJET_FIDELITY_FAST
 from douglas_dart.sizing import (
     evaluate_shared_nozzle_trade,
     evaluate_peak_mach_diameter_trade,
@@ -49,9 +50,15 @@ class RamjetSizingTests(unittest.TestCase):
         self.assertAlmostEqual(points[-1].mach, 1.3)
 
     def test_outer_body_can_grow_without_changing_fixed_intake_capture(self):
+        # 0.400, not 0.250: the ramjet capture-area fix (ramjet.py now reads the
+        # full circular intake, not selector.available_area_m2's 50% split --
+        # docs/assumptions.md) roughly doubles captured mass flow, so the
+        # required matched throat is now ~0.326 m (was ~0.322 m before the
+        # ramjet-vs-EngineSim rework further shifted it, docs/ramjet_enginesim_comparison.md);
+        # 0.250 m no longer fits it.
         larger_body_case = replace(
             self.case,
-            vehicle=replace(self.case.vehicle, body_diameter_m=0.250),
+            vehicle=replace(self.case.vehicle, body_diameter_m=0.400),
         )
         original = evaluate_ramjet_handoff_sizing(self.case, altitude_m=4500.0, mach=1.1)
         larger = evaluate_ramjet_handoff_sizing(
@@ -73,14 +80,26 @@ class RamjetSizingTests(unittest.TestCase):
         self.assertAlmostEqual(large, 4.0 * small)
 
     def test_peak_mach_hold_duration_is_derived_from_fuel_budget(self):
+        # ceiling 0.0022, not 0.003: the ramjet-vs-EngineSim rework (MIL-E-5008B
+        # inlet recovery + real-gas cp/gamma, docs/ramjet_enginesim_comparison.md)
+        # raised the required matched throat from ~0.322 to ~0.326 m and shifted
+        # full-throttle thrust at peak Mach, closing the previous razor-thin
+        # (and, it turned out, no-longer-existing) margin at diameter=0.325 m /
+        # ceiling=0.003 -- confirmed by direct sweep that no diameter satisfies
+        # both packaging and a non-negative thrust margin under the old ceiling
+        # anymore. 0.0022 restores a comfortable (not razor-thin) positive margin.
         low_drag_case = replace(
             self.case,
             vehicle=replace(
                 self.case.vehicle,
-                peak_mach_drag_area_ceiling_m2=0.003,
+                peak_mach_drag_area_ceiling_m2=0.0022,
             ),
         )
-        one_budget = evaluate_peak_mach_diameter_trade(low_drag_case, 0.230)
+        # 0.330: clears the ~0.326 m required matched throat with a little
+        # packaging room, same intent as before -- diameter is now driven only
+        # by that clearance since drag margin comes from the ceiling, not from
+        # picking a diameter right at the packaging edge.
+        one_budget = evaluate_peak_mach_diameter_trade(low_drag_case, 0.330)
         two_budget_case = replace(
             low_drag_case,
             mission=replace(
@@ -88,7 +107,7 @@ class RamjetSizingTests(unittest.TestCase):
                 ramjet_speed_run_fuel_budget_kg=2.80,
             ),
         )
-        two_budget = evaluate_peak_mach_diameter_trade(two_budget_case, 0.230)
+        two_budget = evaluate_peak_mach_diameter_trade(two_budget_case, 0.330)
         self.assertTrue(one_budget.can_hold_peak_mach_against_scaled_drag_target)
         self.assertIsNotNone(one_budget.fuel_limited_peak_mach_hold_duration_s)
         self.assertAlmostEqual(
@@ -97,7 +116,11 @@ class RamjetSizingTests(unittest.TestCase):
         )
 
     def test_reference_trade_reports_packaging_and_drag_separately(self):
-        points = peak_mach_diameter_trade_sweep(self.case, 0.195, 0.235, 0.005)
+        # Upper bound widened from 0.235 to 0.400: the ramjet capture-area fix
+        # raised the required matched throat to ~0.326 m (further raised from
+        # the fix's own ~0.322 m by the later ramjet-vs-EngineSim rework), so
+        # 0.235 m no longer reaches a packageable point.
+        points = peak_mach_diameter_trade_sweep(self.case, 0.195, 0.400, 0.005)
         self.assertFalse(points[0].throat_packageable_without_radial_allowance)
         self.assertTrue(points[-1].throat_packageable_without_radial_allowance)
         self.assertGreater(points[-1].available_radial_clearance_m, 0.0)
@@ -118,9 +141,7 @@ class RamjetSizingTests(unittest.TestCase):
             candidate.vehicle.body_diameter_m,
             candidate.nozzle.throat_diameter_m,
             candidate.nozzle.exit_to_throat_area_ratio,
-            pulsejet_warmup_s=0.05,
-            pulsejet_measurement_s=0.05,
-            pulsejet_time_step_s=0.00004,
+            pulsejet_fidelity=PULSEJET_FIDELITY_FAST,
         )
         self.assertTrue(point.packageable_with_configured_allowances)
         self.assertFalse(point.can_hold_peak_mach_with_derate)
@@ -128,8 +149,8 @@ class RamjetSizingTests(unittest.TestCase):
         self.assertTrue(point.configured_loaded_mass_within_requirement)
         self.assertLess(point.ramjet_derated_thrust_margin_n, 0.0)
         self.assertGreater(point.pulsejet_mean_net_thrust_n, 0.0)
-        self.assertEqual(point.pulsejet_warmup_duration_s, 0.05)
-        self.assertEqual(point.pulsejet_measurement_duration_s, 0.05)
+        self.assertTrue(point.pulsejet_cycle_average_converged)
+        self.assertGreater(point.pulsejet_completed_cycles, 0)
 
     def test_candidate_b_closes_nominal_static_reserve_and_duration(self):
         candidate = load_reference_case(
@@ -140,9 +161,7 @@ class RamjetSizingTests(unittest.TestCase):
             candidate.vehicle.body_diameter_m,
             candidate.nozzle.throat_diameter_m,
             candidate.nozzle.exit_to_throat_area_ratio,
-            pulsejet_warmup_s=0.05,
-            pulsejet_measurement_s=0.05,
-            pulsejet_time_step_s=0.00004,
+            pulsejet_fidelity=PULSEJET_FIDELITY_FAST,
         )
         self.assertTrue(point.packageable_with_configured_allowances)
         self.assertTrue(point.can_hold_peak_mach_with_derate)
@@ -158,9 +177,7 @@ class RamjetSizingTests(unittest.TestCase):
             body_diameters_m=(0.205,),
             throat_diameters_m=(0.130, 0.140, 0.160),
             exit_to_throat_area_ratios=(1.05,),
-            pulsejet_warmup_s=0.05,
-            pulsejet_measurement_s=0.05,
-            pulsejet_time_step_s=0.00004,
+            pulsejet_fidelity=PULSEJET_FIDELITY_FAST,
         )
         selected = select_minimum_feasible_shared_nozzle(points)
         self.assertIsNotNone(selected)

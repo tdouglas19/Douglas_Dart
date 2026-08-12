@@ -29,17 +29,48 @@ Design choices, stated explicitly so they are not mistaken for validated dynamic
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from math import atan, cos, radians, sin, sqrt
 
 from .atmosphere import standard_atmosphere
 from .config import ReferenceCase
 from .drag import evaluate_total_drag
-from .pulsejet import PulsejetSimulator, summarize_pulsejet
-from .ramjet import evaluate_ramjet
+from .propulsion_map import (
+    PULSEJET_FIDELITY_FULL,
+    PULSEJET_MODE,
+    RAMJET_MODE,
+    PropulsionScenario,
+    evaluate_propulsion_map_point,
+)
 
 G0_M_PER_S2 = 9.80665
 _SEA_LEVEL_DENSITY_KG_PER_M3 = standard_atmosphere(0.0).density_kg_per_m3
+
+# Sampled Mach grid for the sea-level static pulsejet thrust table
+# (_pulsejet_static_thrust_table). Previously stopped at 0.50 with no
+# documented technical reason -- not a physical limit of PulsejetSimulator,
+# which accepts any non-negative Mach; _interp_table/_installed_pulsejet_thrust_n
+# clamped to that last entry above it rather than re-simulating, so every
+# pulsejet-thrust claim above Mach 0.5 was extrapolation of a value only
+# ever actually computed at 0.50. Extended through 1.00 (covers
+# optimizer.py's minimum_lightoff_test_mach search range, 0.50-1.00) so
+# _interp_table has real simulated data across the Mach range this vehicle
+# actually operates the pulsejet in, not a flat guess. Direct simulation
+# (docs/design_convergence.md) shows this is not a flat curve at all: net
+# thrust genuinely *weakens* below roughly Mach 0.3-0.4 (real pulsejets,
+# including this simulator, fire at zero forward speed -- but at low Mach
+# the refill cycle is driven only by a small pressure differential instead
+# of ram pressure, so the real cycle period lengthens to ~0.585 s at Mach 0
+# versus the ~0.014 s minimum_cycle_period_s design rate -- see
+# propulsion_map.py's _run_pulsejet_simulation, which adaptively extends its
+# measurement window so this weaker-but-real low-Mach thrust is actually
+# measured instead of read as zero by a window too short to see even one
+# slow cycle) and *peaks* around Mach 0.85-0.9 before declining as inlet
+# momentum drag outgrows gross thrust -- both real findings this table
+# previously could not see at all.
+_PULSEJET_TABLE_MACH_VALUES: tuple[float, ...] = (
+    0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+)
 
 
 @dataclass(frozen=True)
@@ -128,6 +159,16 @@ class TrajectoryResult:
     meets_minimum_time_above_mach_one: bool
     landed_at_or_below_field_elevation: bool
     transonic_no_altitude_loss_rule_satisfied: bool
+    minimum_stall_margin_fraction: float
+    """(speed / 1g-level-flight stall speed) - 1, minimum over the whole run.
+    Negative means the vehicle spent time below its own configured CL_max's
+    stall speed at that instant's mass/altitude -- see docs/design_workflow.md
+    Level 2 and docs/level0_feasibility_bounds.md for what this does and does
+    not establish (a 1g level-flight bound, not a trimmed/maneuvering check)."""
+    stall_margin_violated: bool
+    peak_dynamic_pressure_pa: float
+    """Reported only -- no configured ceiling exists to compare against yet
+    (unlike CL_max for stall margin). See this field's construction site."""
     final_status: tuple[str, ...]
     numerical_reference_only: bool = True
 
@@ -137,28 +178,34 @@ def _pulsejet_static_thrust_table(
     scenario: MissionScenario,
     mach_values: tuple[float, ...],
     *,
-    warmup_s: float = 0.25,
-    measurement_s: float = 0.25,
-    time_step_s: float = 0.00005,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> list[tuple[float, float, float]]:
-    """Return ``[(mach, mean_net_thrust_n, mean_fuel_flow_kg_per_s), ...]`` at sea level."""
+    """Return ``[(mach, mean_net_thrust_n, mean_fuel_flow_kg_per_s), ...]`` at sea level.
 
+    Reads through the authoritative propulsion map (propulsion_map.py,
+    docs/design_workflow.md Gate 2) instead of constructing PulsejetSimulator
+    directly, so this table and every other propulsion-map consumer compute
+    net thrust and fuel flow the same way. No warmup/measurement window
+    (cycle_based_averaging_fix.md, 2026-08-08) -- the propulsion map itself
+    now runs to a converged real-cycle-boundary average. No raw dt float
+    either (dt_convergence_solver_spec.md, 2026-08-08) -- ``pulsejet_fidelity``
+    selects one of the two fixed dt tiers.
+    """
+
+    map_scenario = PropulsionScenario(
+        scenario.name, thrust_multiplier=scenario.thrust_multiplier
+    )
     table: list[tuple[float, float, float]] = []
     for mach in mach_values:
-        simulator = PulsejetSimulator(
-            case.pulsejet, case.selector, case.nozzle, case.fuel, 0.0, mach
+        point = evaluate_propulsion_map_point(
+            case,
+            mach,
+            0.0,
+            PULSEJET_MODE,
+            scenario=map_scenario,
+            pulsejet_fidelity=pulsejet_fidelity,
         )
-        summary = summarize_pulsejet(
-            simulator.run(warmup_s + measurement_s, time_step_s),
-            minimum_time_s=warmup_s,
-        )
-        table.append(
-            (
-                mach,
-                summary.mean_net_thrust_n * scenario.thrust_multiplier,
-                summary.mean_fuel_mass_flow_kg_per_s,
-            )
-        )
+        table.append((mach, point.net_thrust_n, point.fuel_mass_flow_kg_per_s))
     return table
 
 
@@ -244,9 +291,7 @@ def simulate_mission(
     pull_out_load_factor_g: float = 4.0,
     max_time_s: float = 900.0,
     record_every_n_steps: int = 4,
-    pulsejet_table_warmup_s: float = 0.25,
-    pulsejet_table_measurement_s: float = 0.25,
-    pulsejet_table_time_step_s: float = 0.00005,
+    pulsejet_table_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> TrajectoryResult:
     """Integrate one phase-based mission from sled release to landing.
 
@@ -264,12 +309,16 @@ def simulate_mission(
     if time_step_s <= 0.0:
         raise ValueError("time step must be positive")
 
+    propulsion_scenario = PropulsionScenario(
+        scenario.name,
+        thrust_multiplier=scenario.thrust_multiplier,
+        ramjet_total_pressure_recovery_override=scenario.ramjet_total_pressure_recovery,
+    )
     ramjet_recovery = (
         case.selector.ramjet_total_pressure_recovery
         if scenario.ramjet_total_pressure_recovery is None
         else scenario.ramjet_total_pressure_recovery
     )
-    selector = replace(case.selector, ramjet_total_pressure_recovery=ramjet_recovery)
 
     loaded_mass_kg = case.flight.initial_mass_kg + scenario.mass_growth_kg
     pulsejet_fuel_kg = case.mission.loaded_fuel_mass_kg - case.mission.ramjet_speed_run_fuel_budget_kg
@@ -280,10 +329,8 @@ def simulate_mission(
     pulsejet_table = _pulsejet_static_thrust_table(
         case,
         scenario,
-        (0.0, 0.10, 0.20, 0.30, 0.40, 0.50),
-        warmup_s=pulsejet_table_warmup_s,
-        measurement_s=pulsejet_table_measurement_s,
-        time_step_s=pulsejet_table_time_step_s,
+        _PULSEJET_TABLE_MACH_VALUES,
+        pulsejet_fidelity=pulsejet_table_fidelity,
     )
 
     field_elevation_m = case.mission.field_elevation_msl_m
@@ -304,6 +351,20 @@ def simulate_mission(
     time_above_mach_one_s = 0.0
     peak_mach_reached = 0.0
     reached_peak_mach_target = False
+    # docs/design_workflow.md Level 2: "The fast loop must no longer assume
+    # that the requested flight-path angle is automatically achievable."
+    # This is a first increment, not the full set of checks that document
+    # calls for (lift-available-vs-required, trim drag, static margin, CG,
+    # control authority remain unmodeled -- see the Level 2 row there).
+    # Stall margin uses the existing configured CL_max against a 1g
+    # level-flight lift balance at each step's instantaneous mass/altitude/
+    # speed (the same relation feasibility.py's stall_speed_bounds uses).
+    # Dynamic pressure has no configured ceiling anywhere in this codebase
+    # (unlike CL_max), so it is reported, not compared against an invented
+    # threshold -- see docs/assumptions_registry.md's treatment of unsourced
+    # placeholders for why a real number is not fabricated here.
+    minimum_stall_margin_fraction = float("inf")
+    peak_dynamic_pressure_pa = 0.0
 
     phase_name = "pulsejet_climb"
     phase_start_t = 0.0
@@ -340,6 +401,12 @@ def simulate_mission(
         thrust_n = 0.0
         fuel_flow_kg_per_s = 0.0
         fuel_ledger = "none"
+        # Set by the "mach_hold" branch below, which already computes drag
+        # with the exact args (case, case.flight, altitude_m, mach,
+        # lift_coefficient=0.0, drag_multiplier=scenario.drag_multiplier)
+        # the shared block after this if/elif chain would otherwise
+        # recompute unconditionally -- reused there instead of rerun.
+        drag = None
 
         if phase_name == "pulsejet_climb":
             gamma_deg = climb_angle_deg
@@ -412,12 +479,11 @@ def simulate_mission(
             # flight-path angle once inside the regulated Mach 0.8+ regime.
             target_delta_m = speed_run_altitude_m - altitude_m
             gamma_deg = max(0.0, min(6.0, target_delta_m * 0.01))
-            ramjet_nozzle = case.nozzle
-            ramjet_result = evaluate_ramjet(
-                case.ramjet, selector, ramjet_nozzle, case.fuel, altitude_m, mach
+            ramjet_point = evaluate_propulsion_map_point(
+                case, mach, altitude_m, RAMJET_MODE, scenario=propulsion_scenario
             )
-            thrust_n = ramjet_result.net_thrust_n * scenario.thrust_multiplier
-            fuel_flow_kg_per_s = ramjet_result.fuel_mass_flow_kg_per_s
+            thrust_n = ramjet_point.net_thrust_n
+            fuel_flow_kg_per_s = ramjet_point.fuel_mass_flow_kg_per_s
             fuel_ledger = "ramjet"
             if mach >= peak_mach:
                 close_phase("reached_peak_mach_target")
@@ -437,10 +503,10 @@ def simulate_mission(
 
         elif phase_name == "mach_hold":
             gamma_deg = 0.0
-            ramjet_result = evaluate_ramjet(
-                case.ramjet, selector, case.nozzle, case.fuel, altitude_m, mach
+            ramjet_point = evaluate_propulsion_map_point(
+                case, mach, altitude_m, RAMJET_MODE, scenario=propulsion_scenario
             )
-            full_throttle_thrust_n = ramjet_result.net_thrust_n * scenario.thrust_multiplier
+            full_throttle_thrust_n = ramjet_point.net_thrust_n
             drag = evaluate_total_drag(
                 case,
                 case.flight,
@@ -453,14 +519,14 @@ def simulate_mission(
                 close_phase("insufficient_thrust_margin_to_hold_peak_mach")
                 status.append("cannot_hold_peak_mach_under_scenario_multipliers")
                 thrust_n = full_throttle_thrust_n
-                fuel_flow_kg_per_s = ramjet_result.fuel_mass_flow_kg_per_s
+                fuel_flow_kg_per_s = ramjet_point.fuel_mass_flow_kg_per_s
                 fuel_ledger = "ramjet"
                 phase_name, phase_start_t = "zoom_climb", t
                 phase_start_altitude_m, phase_start_mach = altitude_m, mach
             else:
                 throttle_fraction = drag.total_drag_n / full_throttle_thrust_n
                 thrust_n = drag.total_drag_n
-                fuel_flow_kg_per_s = throttle_fraction * ramjet_result.fuel_mass_flow_kg_per_s
+                fuel_flow_kg_per_s = throttle_fraction * ramjet_point.fuel_mass_flow_kg_per_s
                 fuel_ledger = "ramjet"
                 if ramjet_fuel_kg <= 0.0:
                     close_phase("ramjet_fuel_exhausted_ending_mach_hold")
@@ -499,16 +565,29 @@ def simulate_mission(
                 break
 
         gamma_rad = radians(gamma_deg)
-        drag = evaluate_total_drag(
-            case,
-            case.flight,
-            altitude_m,
-            mach,
-            lift_coefficient=0.0,
-            drag_multiplier=scenario.drag_multiplier,
-        )
+        if drag is None:
+            drag = evaluate_total_drag(
+                case,
+                case.flight,
+                altitude_m,
+                mach,
+                lift_coefficient=0.0,
+                drag_multiplier=scenario.drag_multiplier,
+            )
         net_axial_force_n = thrust_n - drag.total_drag_n - mass_kg * G0_M_PER_S2 * sin(gamma_rad)
         acceleration_m_per_s2 = net_axial_force_n / mass_kg
+
+        if speed_m_per_s > 1e-6:
+            step_atmosphere = standard_atmosphere(_clamped_altitude(altitude_m))
+            step_stall_speed_m_per_s = _stall_speed_m_per_s(case, mass_kg, altitude_m)
+            minimum_stall_margin_fraction = min(
+                minimum_stall_margin_fraction,
+                speed_m_per_s / step_stall_speed_m_per_s - 1.0,
+            )
+            peak_dynamic_pressure_pa = max(
+                peak_dynamic_pressure_pa,
+                0.5 * step_atmosphere.density_kg_per_m3 * speed_m_per_s**2,
+            )
 
         if step_index % record_every_n_steps == 0:
             points.append(
@@ -577,6 +656,9 @@ def simulate_mission(
     )
     if not rule_satisfied:
         status.append("transonic_no_altitude_loss_rule_violated")
+    stall_margin_violated = minimum_stall_margin_fraction < 0.0
+    if stall_margin_violated:
+        status.append("stall_margin_violated_1g_level_flight_bound")
     status.append("energy_state_model_no_lift_trim_stability_or_control_solved")
 
     return TrajectoryResult(
@@ -594,5 +676,8 @@ def simulate_mission(
         meets_minimum_time_above_mach_one=meets_duration,
         landed_at_or_below_field_elevation=landed,
         transonic_no_altitude_loss_rule_satisfied=rule_satisfied,
+        minimum_stall_margin_fraction=minimum_stall_margin_fraction,
+        stall_margin_violated=stall_margin_violated,
+        peak_dynamic_pressure_pa=peak_dynamic_pressure_pa,
         final_status=tuple(status),
     )

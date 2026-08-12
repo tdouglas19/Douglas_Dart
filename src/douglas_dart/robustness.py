@@ -11,7 +11,12 @@ import yaml
 
 from .atmosphere import G0_M_PER_S2, standard_atmosphere
 from .config import ReferenceCase
-from .ramjet import evaluate_ramjet
+from .propulsion_map import (
+    PULSEJET_FIDELITY_FULL,
+    RAMJET_MODE,
+    PropulsionScenario,
+    evaluate_propulsion_map_point,
+)
 from .sizing import evaluate_shared_nozzle_trade, geometrically_scaled_drag_area_target_m2
 
 
@@ -170,22 +175,26 @@ def _evaluate_scenario(
     scenario: RobustnessScenario,
     current_mass_kg: float,
 ) -> RobustnessScenarioResult:
-    selector = replace(
-        case.selector,
-        ramjet_total_pressure_recovery=scenario.ramjet_total_pressure_recovery,
-    )
     nozzle = replace(
         case.nozzle,
         throat_diameter_m=throat_diameter_m,
         exit_to_throat_area_ratio=area_ratio,
     )
-    ramjet = evaluate_ramjet(
-        case.ramjet,
-        selector,
-        nozzle,
-        case.fuel,
-        case.mission.speed_run_altitude_msl_m,
+    candidate_case = replace(case, nozzle=nozzle)
+    # thrust_multiplier stays 1.0 here (not scenario.propulsion_thrust_multiplier)
+    # so `point.net_thrust_n` below is the raw, unscaled ramjet result -- reported
+    # separately from `available_thrust_n`, which applies the scenario multiplier
+    # explicitly, matching this function's prior two-value convention.
+    propulsion_scenario = PropulsionScenario(
+        scenario.name,
+        ramjet_total_pressure_recovery_override=scenario.ramjet_total_pressure_recovery,
+    )
+    point = evaluate_propulsion_map_point(
+        candidate_case,
         case.mission.peak_mach,
+        case.mission.speed_run_altitude_msl_m,
+        RAMJET_MODE,
+        scenario=propulsion_scenario,
     )
     atmosphere = standard_atmosphere(case.mission.speed_run_altitude_msl_m)
     speed_m_per_s = case.mission.peak_mach * atmosphere.speed_of_sound_m_per_s
@@ -195,12 +204,12 @@ def _evaluate_scenario(
         * geometrically_scaled_drag_area_target_m2(case, body_diameter_m)
         * scenario.drag_multiplier
     )
-    available_thrust_n = ramjet.net_thrust_n * scenario.propulsion_thrust_multiplier
+    available_thrust_n = point.net_thrust_n * scenario.propulsion_thrust_multiplier
     excess_thrust_n = available_thrust_n - drag_n
     evaluated_mass_kg = current_mass_kg + scenario.mass_growth_kg
     mass_margin_kg = case.requirements.maximum_takeoff_mass_kg - evaluated_mass_kg
-    passes_operability = ramjet.self_sustaining_candidate
-    status = list(ramjet.status)
+    passes_operability = point.self_sustaining_status
+    status = list(point.validity_flags)
     if mass_margin_kg < 0.0:
         status.append("scenario_mass_exceeds_requirement")
     if excess_thrust_n < scenario.required_excess_thrust_n:
@@ -208,8 +217,8 @@ def _evaluate_scenario(
     if not passes_operability:
         status.append("scenario_ramjet_not_self_sustaining_candidate")
     endurance_s = (
-        case.mission.ramjet_speed_run_fuel_budget_kg / ramjet.fuel_mass_flow_kg_per_s
-        if ramjet.fuel_mass_flow_kg_per_s > 0.0
+        case.mission.ramjet_speed_run_fuel_budget_kg / point.fuel_mass_flow_kg_per_s
+        if point.fuel_mass_flow_kg_per_s > 0.0
         else None
     )
     return RobustnessScenarioResult(
@@ -219,13 +228,13 @@ def _evaluate_scenario(
         drag_multiplier=scenario.drag_multiplier,
         evaluated_mass_kg=evaluated_mass_kg,
         mass_margin_to_requirement_kg=mass_margin_kg,
-        ramjet_net_thrust_n=ramjet.net_thrust_n,
+        ramjet_net_thrust_n=point.net_thrust_n,
         available_thrust_n=available_thrust_n,
         drag_n=drag_n,
         excess_thrust_n=excess_thrust_n,
         required_excess_thrust_n=scenario.required_excess_thrust_n,
-        inlet_spillage_fraction=ramjet.inlet_spillage_fraction,
-        fuel_mass_flow_kg_per_s=ramjet.fuel_mass_flow_kg_per_s,
+        inlet_spillage_fraction=point.spilled_mass_flow_fraction,
+        fuel_mass_flow_kg_per_s=point.fuel_mass_flow_kg_per_s,
         full_throttle_fuel_endurance_s=endurance_s,
         passes_mass=mass_margin_kg >= 0.0,
         passes_excess_thrust=excess_thrust_n >= scenario.required_excess_thrust_n,
@@ -238,6 +247,8 @@ def _evaluate_scenario(
 def run_robustness_trade(
     case: ReferenceCase,
     robustness_path: str | Path,
+    *,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> RobustnessTradeResult:
     data = _load_yaml(robustness_path)
     mass_budget = summarize_mass_budget(case, robustness_path)
@@ -262,9 +273,7 @@ def run_robustness_trade(
                     throat_diameter_m,
                     area_ratio,
                     propulsion_derate_fraction=0.0,
-                    pulsejet_warmup_s=float(sweep["pulsejet_warmup_s"]),
-                    pulsejet_measurement_s=float(sweep["pulsejet_measurement_s"]),
-                    pulsejet_time_step_s=float(sweep["pulsejet_time_step_s"]),
+                    pulsejet_fidelity=pulsejet_fidelity,
                 )
                 scenario_results = tuple(
                     _evaluate_scenario(

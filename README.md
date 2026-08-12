@@ -22,7 +22,8 @@ frozen design and not a closed mission.
 |---|---:|
 | Current / high-side loaded mass / maximum allowed | 21.0 / 23.9 / 25.0 kg |
 | Body diameter / length | 210 mm / 2.30 m |
-| Circular intake / area available to one mode | 195 mm / 50% |
+| Circular intake / area available to pulsejet mode | 195 mm / 50% |
+| Area available to ramjet mode | 100% (changed 2026-08-07 -- see `docs/assumptions.md`) |
 | Shared throat / exit-to-throat area ratio | 170 mm / 1.05 |
 | Mach 1.10 altitude | 4,500 m MSL |
 | Nominal ramjet net thrust / drag | 937 / 512 N |
@@ -32,6 +33,12 @@ frozen design and not a closed mission.
 | Ramjet potential-capture spillage | 44.2% nominal |
 | Full-throttle ramjet fuel endurance | 16.8 s |
 | Pulsejet net thrust at sea level, Mach 0.20 | about 119 N |
+
+**Stale as of 2026-08-07:** the ramjet-dependent rows above (nominal net thrust/
+drag, derated margin, conservative/adverse-screen excess thrust, potential-capture
+spillage) were computed before the ramjet's captured-area fix (100% of the intake
+instead of the pulsejet's 50%, see the two rows above and `docs/assumptions.md`).
+They need to be regenerated, not read as current.
 
 The earlier 205/130 mm Candidate A is retained as a rejected regression case. Its
 ramjet result had treated 0.92 total-pressure recovery as recovery of only the ram
@@ -115,6 +122,16 @@ flow stay in the Python propulsion model.
 ```bash
 python -m pip install -e .
 python -m unittest discover -s tests -v
+
+# Optional: the sibling pulsejet-km repo, cloned alongside this one. Needed
+# for PULSEJET_KM_MODE (propulsion_map.py Gate 2's direct, unconditional
+# pulsejet-km query) and, since 2026-08-11, also consulted first by the
+# default PULSEJET_MODE for any candidate whose YAML has a `pulsejet_km:`
+# section (currently only configs/reference_case.yaml) -- guarded, falls
+# back to the native simulator if pulsejet-km can't answer (see
+# docs/design_workflow.md's Gate 2 entry). No current vehicle candidate
+# config has a `pulsejet_km:` section, so everything else runs without it.
+python -m pip install -e ../pulsejet-km
 
 douglas-dart design-convergence \
   --config configs/shared_nozzle_candidate_b.yaml
