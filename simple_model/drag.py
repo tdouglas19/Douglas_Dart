@@ -150,3 +150,114 @@ def stall_speed_m_per_s(
     reference_area_m2 = wingspan_m**2 / aspect_ratio
     weight_n = mass_kg * gravity_m_per_s2
     return sqrt(2.0 * weight_n / (air_density_kg_per_m3 * reference_area_m2 * cl_max))
+
+
+# --- Wing-concept model (2026-08-12) ---------------------------------------
+# Everything below stays single-expression closed-form. A WingConcept
+# generalizes the four fixed wing constants; wing_efficiency/wing drag/stall
+# all reduce EXACTLY to the legacy constants for DEFAULT_WING_CONCEPT
+# (rectangular AR=3 unswept, cl_max 1.0, cd0 0.02 -> e 0.80), verified in
+# tests/test_simple_model.py.
+
+from math import cos as _cos, radians as _radians
+
+from .constants import (
+    AIRFOILS,
+    Airfoil,
+    OSWALD_BASE_E,
+    OSWALD_TAPER_MIN_DELTA_AT,
+    OSWALD_TAPER_PENALTY,
+    WING_CRITICAL_NORMAL_MACH,
+    WING_WAVE_K,
+    WING_WAVE_ONSET_WIDTH,
+)
+
+
+class WingConcept(NamedTuple):
+    span_m: float
+    aspect_ratio: float
+    taper_ratio: float      # tip/root chord, 1.0 = rectangular
+    sweep_deg: float        # leading-edge sweep
+    airfoil: Airfoil
+
+    @property
+    def reference_area_m2(self) -> float:
+        return self.span_m ** 2 / self.aspect_ratio
+
+    @property
+    def oswald_e(self) -> float:
+        """Lifting-line-flavored span efficiency: best near taper ~0.35,
+        quadratic penalty away from it (see constants.py anchors)."""
+        return OSWALD_BASE_E - OSWALD_TAPER_PENALTY * (
+            self.taper_ratio - OSWALD_TAPER_MIN_DELTA_AT
+        ) ** 2
+
+    @property
+    def cl_max_effective(self) -> float:
+        """Sweep decimates usable lift: simple-sweep-theory cos^2 on the
+        normal-component dynamic pressure."""
+        return self.airfoil.cl_max * _cos(_radians(self.sweep_deg)) ** 2
+
+
+DEFAULT_WING_CONCEPT_FOR = None  # sentinel docs; use default_wing_concept()
+
+
+def default_wing_concept(span_m: float) -> WingConcept:
+    """The legacy fixed wing as a concept: rectangular, unswept, AR=3,
+    'naca_symmetric' (cl_max 1.0, cd0 0.02). oswald_e comes out 0.80."""
+    return WingConcept(span_m, WING_ASPECT_RATIO, 1.0, 0.0,
+                       AIRFOILS["naca_symmetric"])
+
+
+def wing_wave_drag_coefficient(concept: WingConcept, mach: float) -> float:
+    """Supersonic thin-wing wave drag on the wing reference area:
+    K (t/c)^2 / sqrt(Mn^2 - 1), onset blended over WING_WAVE_ONSET_WIDTH in
+    leading-edge-normal Mach Mn = M cos(sweep). Zero below onset."""
+    m_normal = mach * _cos(_radians(concept.sweep_deg))
+    onset = WING_CRITICAL_NORMAL_MACH
+    if m_normal <= onset:
+        return 0.0
+    tc = concept.airfoil.thickness_ratio
+    # smooth quadratic ramp across the onset width, then the 1/sqrt(Mn^2-1)
+    # supersonic tail (evaluated no closer than the ramp edge to stay finite)
+    if m_normal < onset + WING_WAVE_ONSET_WIDTH:
+        s = (m_normal - onset) / WING_WAVE_ONSET_WIDTH
+        peak = WING_WAVE_K * tc * tc / sqrt((onset + WING_WAVE_ONSET_WIDTH) ** 2 - 1.0) \
+            if (onset + WING_WAVE_ONSET_WIDTH) > 1.0 else WING_WAVE_K * tc * tc
+        return peak * s * s
+    return WING_WAVE_K * tc * tc / sqrt(max(m_normal * m_normal - 1.0, 1e-6))
+
+
+def wing_concept_drag_n(
+    concept: WingConcept,
+    dynamic_pressure_pa: float,
+    required_lift_n: float,
+    mach: float | None = None,
+) -> tuple[float, float]:
+    """(parasitic+wave, induced) drag of a WingConcept. Same algebra as the
+    legacy functions with the concept's own area/e/profile numbers."""
+    area = concept.reference_area_m2
+    cd0 = concept.airfoil.cd0_wing
+    if mach is not None:
+        cd0 = cd0 + wing_wave_drag_coefficient(concept, mach)
+    parasitic = cd0 * dynamic_pressure_pa * area
+    if dynamic_pressure_pa <= 0.0:
+        return parasitic, 0.0
+    induced = required_lift_n ** 2 / (
+        dynamic_pressure_pa * pi * concept.span_m ** 2 * concept.oswald_e
+    )
+    return parasitic, induced
+
+
+def stall_speed_concept_m_per_s(
+    concept: WingConcept,
+    mass_kg: float,
+    air_density_kg_per_m3: float,
+    gravity_m_per_s2: float,
+) -> float:
+    """Stall speed with the concept's own area and sweep-effective CL_max."""
+    weight_n = mass_kg * gravity_m_per_s2
+    return sqrt(
+        2.0 * weight_n
+        / (air_density_kg_per_m3 * concept.reference_area_m2 * concept.cl_max_effective)
+    )

@@ -76,3 +76,19 @@ Outputs land in `out_simple_model/`:
   `architecture.md` #9–11. If pulsejet-fp is recalibrated, refit the five
   constants the same way (three-anchor log-least-squares — see the
   calibration section of the overview doc).
+
+## v2 pipeline (2026-08-12 late): margin + mass budget + composite objective + wings
+
+`scripts/simple_model_overnight2.py` supersedes the v1 family for full
+studies: per CD0 level it (1) optimizes the vehicle under ALL gates
+(thrust margin >= 1.15x, parametric mass budget from
+simple_model/mass_model.py, fuel-fits, stall cap) with the COMPOSITE
+objective (constants.py OBJECTIVE_* block: T/W + diameter + length +
+span), flying a real thin-wing concept (SIMPLE_MODEL_WING_AIRFOIL) so
+wing wave drag is priced in; then (2) optimizes the wing concept (span,
+AR, taper, sweep, airfoil -- simple_model/wing_optimize.py) for that
+winning vehicle. Results: out_simple_model/overnight2_summary.json +
+o2_*.log. Report: scripts/simple_model_report.py (point it at the v2
+summary). Re-weighting the objective needs only constants.py's
+OBJECTIVE_WEIGHT_* + a re-run; the report table carries mass breakdown,
+thrust margin, and payload/ballast slack.

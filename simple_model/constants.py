@@ -180,3 +180,97 @@ PULSEJET_CHAMBER_FILL_FRACTION = 0.15
 import os as _os
 
 CD0_FRONTAL = float(_os.environ.get("SIMPLE_MODEL_CD0_FRONTAL", CD0_FRONTAL))
+
+# Minimum powered-flight thrust margin (2026-08-12, user requirement):
+# feasibility requires thrust >= (1 + margin) * (drag + weight-along-path)
+# at EVERY powered timestep, not just net-positive acceleration. The
+# calibrated optima otherwise ride thrust ~= drag exactly at the
+# pulsejet->ramjet transition -- a vehicle underperforming by a few percent
+# would stall below ramjet lightoff and never complete the mission. 0.15
+# covers the calibration's own ~10% cross-scale residuals plus closure
+# uncertainty with headroom; the multiplicative form maps directly onto
+# "engines deliver X% less thrust than modeled."
+MIN_POWERED_THRUST_MARGIN_FRACTION = 0.15
+
+# --- Wing-concept model (2026-08-12, wing optimizer) ----------------------
+# Closed-form wing description for simple_model/wing_optimize.py. The
+# DEFAULT concept reproduces the original fixed-wing constants exactly
+# (AR=3, rectangular, unswept, CL_MAX=1.0, CD0_WING=0.02, e=0.80), so the
+# vehicle optimizer's behavior is unchanged unless a concept is supplied.
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass(frozen=True)
+class Airfoil:
+    key: str
+    display_name: str
+    cl_max: float          # low-speed, unswept maximum lift coefficient
+    cd0_wing: float        # profile drag coefficient (wing reference area)
+    thickness_ratio: float # t/c, drives supersonic wave drag
+
+
+# Representative closed-form values for four buildable concepts -- simple
+# placeholders in the same spirit as FUELS, not section data.
+AIRFOILS: dict[str, Airfoil] = {
+    "flat_plate": Airfoil("flat_plate", "Flat plate (sharp)", 0.80, 0.015, 0.03),
+    "thin_cambered": Airfoil("thin_cambered", "Thin cambered plate", 1.20, 0.020, 0.04),
+    "naca_symmetric": Airfoil("naca_symmetric", "Symmetric NACA-ish", 1.00, 0.020, 0.09),
+    "supersonic_wedge": Airfoil("supersonic_wedge", "Double wedge (supersonic)", 0.70, 0.012, 0.04),
+}
+
+# Oswald efficiency vs taper ratio, lifting-line flavor: induced-drag
+# factor delta(lambda) is minimal near lambda ~ 0.35 (closest to elliptic
+# loading) and worst for rectangular (lambda = 1). Quadratic fit anchored
+# so a rectangular AR=3 wing returns exactly the legacy e = 0.80.
+OSWALD_TAPER_MIN_DELTA_AT = 0.35
+OSWALD_BASE_E = 0.85          # near-optimal taper, with fuselage interference
+OSWALD_TAPER_PENALTY = 0.118  # (lambda - 0.35)^2 coefficient -> e(1.0)=0.80
+
+# Supersonic wing wave drag: cd_wave ~ K_WAVE * (t/c)^2 / sqrt(M_n^2 - 1)
+# on the wing area, onset when the component of Mach normal to the leading
+# edge (M * cos(sweep)) exceeds the critical value. Standard thin-wing
+# closed form, smoothly blended over WING_WAVE_ONSET_WIDTH in normal Mach.
+WING_WAVE_K = 4.0
+WING_CRITICAL_NORMAL_MACH = 0.85
+WING_WAVE_ONSET_WIDTH = 0.15
+
+# --- Parametric mass model (2026-08-12, user requirement) ------------------
+# Closed-form structural/auxiliary mass so oversized geometry busts the
+# 50 lb wet-mass budget instead of being free. See simple_model/mass_model.py.
+# Engine duct (chamber + resonance tube): STEEL -- it runs hot (pulsejet
+# cycle peaks ~2400 K wall-adjacent); composite is not credible there.
+STEEL_DENSITY_KG_M3 = 7850.0
+STEEL_ALLOWABLE_STRESS_PA = 125e6   # ~250 MPa yield / SF 2, hot-degraded
+STEEL_MIN_GAUGE_M = 1.0e-3          # manufacturable rolled-sheet floor
+# Outer airframe skin + nose/tail: carbon fiber laminate.
+CFRP_DENSITY_KG_M3 = 1600.0
+CFRP_MIN_GAUGE_M = 1.5e-3
+# Pressure-vessel sizing: hoop stress t = p_gauge * R / sigma_allow, with
+# the design gauge pressure taken from the pulsejet peak chamber pressure
+# (PULSEJET_PEAK_PRESSURE_RATIO - 1) at sea level -- the worst case the
+# duct sees. At ~1.2 atm gauge the min-gauge floor dominates for any sane
+# diameter, which is itself the realistic outcome at this scale.
+STRUCTURAL_OVERHEAD_FRACTION = 0.35  # frames, longerons, fasteners, fins
+NOSE_TAIL_LENGTH_DIAMETERS = 3.0     # nose cone + boattail length, in D
+WING_AREAL_MASS_KG_M2 = 6.0          # solid-ish small supersonic wing panel
+AVIONICS_FIXED_MASS_KG = 2.0         # autopilot, batteries, servos, RF
+TANK_HARDWARE_FIXED_KG = 0.5         # valves, plumbing, regulator
+TANK_HARDWARE_FUEL_FRACTION = 0.15   # tank shell scales with fuel carried
+LANDING_HARDWARE_KG = 0.5            # skids/attach points
+
+# --- Composite design objective (2026-08-12, user requirement) -------------
+# "Some relationship between optimizing for both T/W, overall diameter,
+# overall length, and wingspan": a weighted sum of normalized terms,
+# score = W_TW*(peakTW/10) + W_D*(D/0.30) + W_L*(L_body/2.5) + W_B*(b/1.5)
+# (denominators = rough upper-bound scales so each term is O(1)). Lower is
+# better; feasibility gates are unchanged and absolute. THE tunable knob
+# for design taste -- re-weighting only needs the saved Pareto set
+# (out_simple_model/*pareto*.json), not a re-run.
+OBJECTIVE_WEIGHT_TW = 1.0
+OBJECTIVE_WEIGHT_DIAMETER = 0.5
+OBJECTIVE_WEIGHT_LENGTH = 0.3
+OBJECTIVE_WEIGHT_SPAN = 0.2
+OBJECTIVE_TW_SCALE = 10.0
+OBJECTIVE_DIAMETER_SCALE_M = 0.30
+OBJECTIVE_LENGTH_SCALE_M = 2.5
+OBJECTIVE_SPAN_SCALE_M = 1.5

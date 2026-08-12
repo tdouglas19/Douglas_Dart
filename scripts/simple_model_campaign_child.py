@@ -23,9 +23,12 @@ def _corner_seeds():
     from simple_model.optimize import Candidate
 
     seeds = []
+    # widened 2026-08-12: the mass budget + thrust margin + composite score
+    # move the optimum away from the pure max-diameter corner, so the seed
+    # grid brackets both the old corner and the smaller-diameter direction.
     for D, frac, ch, tube, span, climb, fuel in itertools.product(
-        (0.26, 0.28, 0.30), (0.50, 0.54), (0.40, 0.55), (0.80, 1.00),
-        (0.70, 0.75, 0.80), (1.0, 2.0), FUELS.keys(),
+        (0.18, 0.22, 0.26, 0.30), (0.46, 0.54), (0.35, 0.55), (0.80, 1.00),
+        (0.70, 0.85, 1.00), (1.0, 3.0), FUELS.keys(),
     ):
         seeds.append(Candidate(
             diameter_m=D, throat_diameter_m=D * frac, chamber_length_m=ch,
@@ -53,6 +56,10 @@ def main() -> None:
     print("RESULT_JSON:" + json.dumps({
         "feasible": best.feasible,
         "max_thrust_to_weight": best.max_thrust_to_weight,
+        "score": best.score,
+        "dry_mass_kg": best.dry_mass_kg,
+        "mass_margin_kg": best.mass_margin_kg,
+        "fuel_loaded_kg": best.fuel_loaded_kg,
         "candidate": cand,
     }, default=str))
 

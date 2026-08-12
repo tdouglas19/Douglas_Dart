@@ -72,7 +72,10 @@ from typing import NamedTuple
 from douglas_dart.atmosphere import standard_atmosphere
 
 from .constants import G0_M_PER_S2, Fuel
-from .drag import stall_speed_m_per_s, total_drag_n
+from .drag import (WingConcept, stall_speed_concept_m_per_s,
+                   stall_speed_m_per_s, total_drag_n, wing_concept_drag_n,
+                   parasitic_drag_n, cd0_transonic_multiplier)
+from .constants import CD0_FRONTAL
 from .pulsejet_simple import pulsejet_thrust
 from .ramjet_simple import ramjet_thrust
 
@@ -190,6 +193,22 @@ class FlightResult:
     hit_mass_floor: bool
     stalled: bool
     crossover_mach: float | None
+    min_powered_thrust_margin: float = float("inf")
+    """min over powered steps of thrust/(drag + weight-along-path) -- the
+    worst velocity-regime thrust margin. See the tracking comment in
+    run_flight and MIN_POWERED_THRUST_MARGIN_FRACTION in constants.py."""
+    min_margin_mach: float = 0.0
+    """Mach at which that worst margin occurred (the mission pinch point)."""
+
+
+def _concept_drag(diameter_m, wing_concept, v, rho, m, gamma_rad, mach):
+    from math import cos as _c
+    q = 0.5 * rho * v * v
+    lift = m * G0_M_PER_S2 * _c(gamma_rad)
+    body = parasitic_drag_n(diameter_m, q, CD0_FRONTAL * cd0_transonic_multiplier(mach))
+    wing_par, induced = wing_concept_drag_n(wing_concept, q, lift, mach=mach)
+    from .drag import DragResult
+    return DragResult(body, wing_par, induced, body + wing_par + induced, lift)
 
 
 def run_flight(
@@ -202,7 +221,14 @@ def run_flight(
     dt_s: float = 0.02,
     max_time_s: float = 240.0,
     initial_velocity_m_per_s: float = DEFAULT_RELEASE_VELOCITY_M_PER_S,
+    wing_concept: WingConcept | None = None,
 ) -> FlightResult:
+    # wing_concept=None keeps the legacy fixed wing (AR=3 rectangular,
+    # geometry.wingspan_m) -- bit-identical to the pre-wing-optimizer sim.
+    # A WingConcept replaces stall speed and the wing drag terms with the
+    # concept's own closed forms (drag.py's wing-concept block); its span
+    # OVERRIDES geometry.wingspan_m so the wing optimizer owns all wing
+    # variables in one place.
     climb_angle_rad = radians(climb_angle_deg)
     sin_climb, cos_climb = sin(climb_angle_rad), cos(climb_angle_rad)
     glide_angle_rad = radians(GLIDE_ANGLE_DEG)
@@ -230,11 +256,22 @@ def run_flight(
     safe_landing = False
     hit_mass_floor = False
     stalled = False
+    # Worst powered-flight thrust margin: min over powered steps of
+    # thrust / (drag + weight-along-path). 1.0 = exactly hanging on; below
+    # 1.0 the vehicle decelerates in that regime. Feasibility gating on
+    # this (optimize.py, MIN_POWERED_THRUST_MARGIN_FRACTION) is what keeps
+    # designs safely clear of the pulsejet->ramjet transition pinch instead
+    # of riding thrust ~= drag exactly where underperformance strands them.
+    min_powered_thrust_margin = float("inf")
+    min_margin_mach = 0.0
 
     while True:
         atmosphere = standard_atmosphere(h)
         mach = v / atmosphere.speed_of_sound_m_per_s
-        stall_speed = stall_speed_m_per_s(wingspan_m, m, atmosphere.density_kg_per_m3, G0_M_PER_S2)
+        if wing_concept is None:
+            stall_speed = stall_speed_m_per_s(wingspan_m, m, atmosphere.density_kg_per_m3, G0_M_PER_S2)
+        else:
+            stall_speed = stall_speed_concept_m_per_s(wing_concept, m, atmosphere.density_kg_per_m3, G0_M_PER_S2)
 
         if not engine_off and mach >= motor_cutoff_mach:
             engine_off = True
@@ -262,10 +299,16 @@ def run_flight(
             else:
                 mode = "glide"
                 gamma_rad, sin_gamma, cos_gamma = glide_angle_rad, sin_glide, cos_glide
-            drag_result = total_drag_n(
-                diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
-                gamma_rad, G0_M_PER_S2, mach=mach,
-            )
+            if wing_concept is None:
+                drag_result = total_drag_n(
+                    diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
+                    gamma_rad, G0_M_PER_S2, mach=mach,
+                )
+            else:
+                drag_result = _concept_drag(
+                    diameter_m, wing_concept, v, atmosphere.density_kg_per_m3,
+                    m, gamma_rad, mach,
+                )
         else:
             # BOTH engines run through the transition (2026-08-12): the
             # pulsejet keeps pulsing while the ramjet duct lights -- the
@@ -296,15 +339,28 @@ def run_flight(
             specific_impulse_s = thrust_n / weight_flow if weight_flow > 0.0 else 0.0
             mode = "ramjet" if on_ramjet else "pulsejet"
             sin_gamma, cos_gamma = sin_climb, cos_climb
-            drag_result = total_drag_n(
-                diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
-                climb_angle_rad, G0_M_PER_S2, mach=mach,
-            )
+            if wing_concept is None:
+                drag_result = total_drag_n(
+                    diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
+                    climb_angle_rad, G0_M_PER_S2, mach=mach,
+                )
+            else:
+                drag_result = _concept_drag(
+                    diameter_m, wing_concept, v, atmosphere.density_kg_per_m3,
+                    m, climb_angle_rad, mach,
+                )
 
         weight_n = m * G0_M_PER_S2
         thrust_to_weight = thrust_n / weight_n
         weight_along_path_n = weight_n * sin_gamma
         acceleration_m_per_s2 = (thrust_n - drag_result.total_n - weight_along_path_n) / m
+        if not engine_off:
+            demand_n = drag_result.total_n + weight_along_path_n
+            if demand_n > 1e-9:
+                margin = thrust_n / demand_n
+                if margin < min_powered_thrust_margin:
+                    min_powered_thrust_margin = margin
+                    min_margin_mach = mach
 
         states.append(
             FlightState(
@@ -341,4 +397,7 @@ def run_flight(
         m = max(m - fuel_step_kg, MASS_FLOOR_KG)
         t += dt_s
 
-    return FlightResult(states, motor_cutoff_reached, landed, safe_landing, hit_mass_floor, stalled, crossover_mach)
+    return FlightResult(
+        states, motor_cutoff_reached, landed, safe_landing, hit_mass_floor,
+        stalled, crossover_mach, min_powered_thrust_margin, min_margin_mach,
+    )
