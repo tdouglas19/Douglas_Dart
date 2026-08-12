@@ -31,6 +31,8 @@ def main():
     ap.add_argument("--intake-d", type=float, default=None)
     ap.add_argument("--plenum-v", type=float, default=None)
     ap.add_argument("--preload", type=float, default=None, help="seat preload m")
+    ap.add_argument("--side-inlet", action="store_true",
+                    help="side-mounted boundary-layer intake (derivation #8c)")
     args = ap.parse_args()
 
     from dataclasses import replace
@@ -54,6 +56,7 @@ def main():
     if args.intake_l is not None: ikw["duct_length"] = args.intake_l
     if args.intake_d is not None: ikw["duct_diameter"] = args.intake_d
     if args.plenum_v is not None: ikw["plenum_volume"] = args.plenum_v
+    if args.side_inlet: ikw["orientation"] = "side"
     if ikw:
         intake = IntakeDesign(**ikw)
 

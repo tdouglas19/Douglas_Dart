@@ -14,14 +14,16 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "out")
 
 
 def run_point(args):
-    mach, t_end, n_cells, preload = args
+    mach, t_end, n_cells, preload, side = args
     from dataclasses import replace
-    from pulsejet_fp import Numerics, pulsejet_thrust, reference_valve
+    from pulsejet_fp import (IntakeDesign, Numerics, pulsejet_thrust,
+                             reference_valve)
     valve = reference_valve()
     if preload is not None:
         valve = replace(valve, seat_preload=preload)
+    intake = IntakeDesign(orientation="side") if side else None
     t0 = time.time()
-    res = pulsejet_thrust(mach=mach, t_end=t_end, valve=valve,
+    res = pulsejet_thrust(mach=mach, t_end=t_end, valve=valve, intake=intake,
                           numerics=Numerics(n_cells=n_cells))
     res.traces = None
     return mach, res, time.time() - t0
@@ -36,6 +38,7 @@ def main():
     ap.add_argument("--workers", type=int, default=10)
     ap.add_argument("--tag", type=str, default="fp1")
     ap.add_argument("--preload", type=float, default=None)
+    ap.add_argument("--side-inlet", action="store_true")
     args = ap.parse_args()
 
     machs = []
@@ -44,7 +47,8 @@ def main():
         machs.append(round(m, 3))
         m += args.dm
 
-    jobs = [(m, args.t_end, args.n_cells, args.preload) for m in machs]
+    jobs = [(m, args.t_end, args.n_cells, args.preload, args.side_inlet)
+            for m in machs]
     t0 = time.time()
     with Pool(processes=args.workers) as pool:
         out = pool.map(run_point, jobs)

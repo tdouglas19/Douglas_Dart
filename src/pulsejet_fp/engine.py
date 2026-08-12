@@ -43,10 +43,24 @@ class StartCondition:
 
 @dataclass(frozen=True)
 class IntakeDesign:
-    """Intake duct + valve-face plenum (derivation.md #6b, eq. 23b, A24)."""
+    """Intake duct + valve-face plenum (derivation.md #6b, eq. 23b, A24).
+
+    orientation:
+      "forward" -- ram intake facing the free stream (ideal recovery, A20).
+      "side"    -- inlet perpendicular to flight velocity, ingesting
+                   boundary-layer air (derivation.md #8c): plenum feed at
+                   ambient STATIC pressure, recovery temperature
+                   T_a (1 + r (gamma-1)/2 M^2) (A26), and momentum drag
+                   charged at only bl_momentum_fraction of u_inf because
+                   the swallowed boundary layer arrives momentum-depleted
+                   (A27, 1/7-power-law bracket 0.4-0.9).
+    """
     duct_length: float = 0.060    # m
     duct_diameter: float = 0.050  # m
     plenum_volume: float = 5e-5   # m^3 (valve-cap volume)
+    orientation: str = "forward"
+    bl_recovery_factor: float = 0.9
+    bl_momentum_fraction: float = 0.6
 
     @property
     def duct_area(self) -> float:
@@ -91,6 +105,15 @@ class PulsejetEngine:
         self.p0_up, self.T0_up, self.u_inf = atmosphere.ram_state(
             self.p_a, self.T_a, mach)
         self.mach = mach
+        if self.intake.orientation == "side":
+            # static-pressure boundary-layer ingestion (derivation.md #8c):
+            # no ram recovery; viscous recovery heating; depleted momentum
+            r = self.intake.bl_recovery_factor
+            self.T0_up = self.T_a * (1.0 + r * 0.2 * mach * mach)
+            self.p0_up = self.p_a
+            self.u_drag = self.intake.bl_momentum_fraction * self.u_inf
+        else:
+            self.u_drag = self.u_inf
         # intake column + plenum state (eq. 23b)
         self.mdot_i = 0.0
         self.p_plen = self.p0_up
@@ -103,6 +126,11 @@ class PulsejetEngine:
         g = self.grid
         # zone-exit face index for the turbulence advection-loss term
         self._iz = int(np.searchsorted(g.x, geom.chamber_zone_length))
+        # petal zone: the swept volume (eq. 29) is displaced over the
+        # physical petal length, not one grid cell -- distributing it keeps
+        # the area correction grid-independent and bounded
+        self._pz = g.x < max(valve.petal_length, g.dx)
+        self._n_pz = max(int(np.sum(self._pz)), 1)
 
         # Zeldovich number for the strain-extinction closure (A23):
         # Ze = T_a (T_ad - T_u) / T_ad^2, activation-energy asymptotics --
@@ -215,7 +243,10 @@ class PulsejetEngine:
         rho, u, p, Y, T, a = prims
         dx = self.grid.dx
         dt_conv = self.numerics.cfl * dx / float(np.max(np.abs(u) + a))
-        dt_diff = 0.4 * dx * dx / float(np.max(nu))
+        # effective thermal diffusivity is gamma*nu (energy flux carries
+        # cp dT while the state stores cv T), so the von Neumann bound
+        # tightens by gamma_max ~ 1.4
+        dt_diff = 0.28 * dx * dx / float(np.max(nu))
         dt_valve = 2.0 * math.pi / (20.0 * math.sqrt(
             self.valve_design.stiffness / self.valve_design.effective_mass))
         return min(dt_conv, dt_diff, dt_valve, self.numerics.dt_max)
@@ -273,12 +304,15 @@ class PulsejetEngine:
         lift_old = self.valve.lift
         self.valve.step(dt, self.p_plen, float(p[0]), rho_t, abs(uj), float(rho[0]))
 
-        # ---- variable-volume chamber-cell work (eq. 29) ----
+        # ---- variable-volume chamber cells (eq. 29), distributed over the
+        # petal zone so the correction is grid-independent ----
         S_old = self.valve_design.swept_volume(lift_old)
         S_new = self.valve_design.swept_volume(self.valve.lift)
         if S_new != S_old:
-            self.U[2, 0] += float(p[0]) * (S_new - S_old) / dx
-            self.A_eff[0] = self.grid.A_c[0] - S_new / dx
+            pz, n_pz = self._pz, self._n_pz
+            dS_cell = (S_new - S_old) / n_pz
+            self.U[2, pz] += p[pz] * dS_cell / dx
+            self.A_eff[pz] = self.grid.A_c[pz] - (S_new / n_pz) / dx
 
         # ---- turbulence energy budget (eq. 13) ----
         w = self.grid.chamber_weight
@@ -293,9 +327,13 @@ class PulsejetEngine:
         iz = min(self._iz, len(u) - 1)
         mdot_out = float(rho[iz] * u[iz] * self.grid.A_c[iz])
         tp = self.turb
+        # intensive form of eq. 13: expanding d(m k)/dt with the zone mass
+        # balance, the outflow terms cancel (leaving mass carries k at
+        # concentration k_c); what remains is DILUTION by the incoming jet
+        # mass, which arrives carrying no chamber-scale turbulence yet
         dk = (prod / max(m_cz, 1e-9)
               - tp.c_eps * self.k_c ** 1.5 / self.l_m
-              - self.k_c * max(mdot_out, 0.0) / max(m_cz, 1e-9))
+              - self.k_c * max(mdot_v, 0.0) / max(m_cz, 1e-9))
         self.k_c = max(self.k_c + dt * dk, 1e-6)
 
         self.t += dt
@@ -317,11 +355,17 @@ class PulsejetEngine:
                                  float(p[-1]), float(Y[-1]))
         mdot_e = float(F_exit[0])
         F_mom = float(F_exit[1]) - self.p_a * g.A_f[-1] \
-            - max(mdot_v, 0.0) * self.u_inf
-        # eq. 25: head push + cone pull + intake-jet reaction on the head
-        F_surf = (float(p[0]) - self.p_a) * g.A_f[0] \
+            - max(mdot_v, 0.0) * self.u_drag
+        # eq. 25 (exact discrete momentum-closure identity): cycle-averaged,
+        # F_mom equals the head-face wall-star pressure force + the area-
+        # change integral + the jet momentum influx - ram drag; the residual
+        # measures momentum storage + bookkeeping errors
+        p_w = solver.wall_pressure(float(rho[0]), float(u[0]), float(p[0]),
+                                   float(Y[0]), gas)
+        F_surf = (p_w - self.p_a) * g.A_f[0] \
             + float(np.sum((p - self.p_a) * (g.A_f[1:] - g.A_f[:-1]))) \
-            - max(mdot_v, 0.0) * abs(uj_signed)
+            + abs(mdot_v) * abs(uj_signed) \
+            - max(mdot_v, 0.0) * self.u_drag
         self.history.append(
             t=self.t, p_head=float(p[0]), T_head=float(T[0]),
             u_head=float(u[0]), Y_head=float(Y[0]),

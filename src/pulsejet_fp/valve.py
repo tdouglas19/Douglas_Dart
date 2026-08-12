@@ -97,7 +97,12 @@ class PetalValveState:
         open_frac = 0.0
         if d.port_area > 0.0:
             open_frac = min(self.curtain_per_petal() / d.port_area, 1.0)
-        dp_eff = (p0_up - open_frac * 0.5 * rho_jet * u_jet * u_jet) - p_head
+        # Bernoulli relief acts on the face the jet accelerates OVER, i.e.
+        # the upstream face of whichever flow direction is active -- so it
+        # always reduces the magnitude of the driving differential.
+        dp_raw = p0_up - p_head
+        relief = open_frac * 0.5 * rho_jet * u_jet * u_jet
+        dp_eff = dp_raw - math.copysign(relief, dp_raw) if dp_raw != 0.0 else 0.0
         q_pressure = PSI_INT * d.petal_face_area * dp_eff
         q_drag = -PSI_INT * d.petal_face_area * rho_head * abs(self.lift_rate) * self.lift_rate
         return q_pressure + q_drag

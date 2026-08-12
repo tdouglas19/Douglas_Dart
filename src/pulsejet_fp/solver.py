@@ -198,9 +198,15 @@ def hyperbolic_rhs(U, A_eff, A_f, dx, gas, F_head, F_exit, nu_t, prims=None):
     cp_face = 0.5 * (cp[:-1] + cp[1:])
     u_face = 0.5 * (u[:-1] + u[1:])
 
+    T_face = 0.5 * (T[:-1] + T[1:])
     flux_mom = k_face * du
-    flux_E = k_face * (cp_face * dT) + flux_mom * u_face
     flux_Y = k_face * dY
+    # energy: heat conduction + shear work + interdiffusion enthalpy
+    # (species carry their partial sensible enthalpy h_k = cp_k T; without
+    # the last term, Y-diffusion at uniform T spuriously creates ~30 K
+    # extrema at fresh/burned contacts because cv_R != cv_P)
+    flux_E = k_face * (cp_face * dT) + flux_mom * u_face \
+        + (gas.cp_R - gas.cp_P) * T_face * flux_Y
 
     inv_dx = 1.0 / dx
     rhs[1, :-1] += flux_mom * inv_dx; rhs[1, 1:] -= flux_mom * inv_dx

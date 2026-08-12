@@ -68,7 +68,12 @@ class ThrustResult:
     tsfc_kg_per_n_hr: float = float("nan")
     p_min_ratio: float = float("nan")
     p_max_ratio: float = float("nan")
-    rayleigh_index: float = float("nan")     # J (proxy: head p' x global q')
+    # Unweighted proxy of eq. 28: cycle covariance of head pressure with
+    # global heat release (units Pa*J); positive = combustion drives the
+    # oscillation. The full (gamma-1)/(gamma p_bar)-weighted spatial
+    # integral is not assembled -- head p' stands in for the fundamental
+    # mode (the chamber is its pressure antinode).
+    rayleigh_index: float = float("nan")
     n_cycles: int = 0
     mach: float = 0.0
     traces: dict | None = None

@@ -126,17 +126,21 @@ def propane_air(phi: float = 1.0,
     n_R = 1.0 / W_AIR + f / W_fuel
     W_R = (1.0 + f) / n_R
 
-    # Products (phi <= 1: lean/stoich -- all fuel burns; excess O2 remains).
-    # Moles per kg air basis:
+    # Products: lean/stoich burns all fuel with excess O2 remaining; rich
+    # burns only the O2-limited fuel fraction, leaving unburned fuel vapor
+    # in the product mixture. Moles per kg air basis:
+    burnable = min(1.0, 1.0 / phi) if phi > 0 else 0.0
     n_fuel = f / W_fuel
+    n_fuel_burned = n_fuel * burnable
     n_O2_avail = Y_O2_AIR / W_O2
-    n_O2_used = 5.0 * n_fuel
+    n_O2_used = 5.0 * n_fuel_burned
     # inert moles: air minus O2, treated as effective-N2 carrying Ar/trace
     n_inert = (1.0 / W_AIR) - n_O2_avail
-    n_CO2 = 3.0 * n_fuel
-    n_H2O = 4.0 * n_fuel
+    n_CO2 = 3.0 * n_fuel_burned
+    n_H2O = 4.0 * n_fuel_burned
     n_O2_left = max(n_O2_avail - n_O2_used, 0.0)
-    n_P = n_inert + n_CO2 + n_H2O + n_O2_left
+    n_fuel_left = n_fuel - n_fuel_burned
+    n_P = n_inert + n_CO2 + n_H2O + n_O2_left + n_fuel_left
     W_P = (1.0 + f) / n_P
 
     R_R = R_UNIVERSAL / W_R
@@ -155,7 +159,6 @@ def propane_air(phi: float = 1.0,
     # Dh-vs-De p-v term is ~0.1% and neglected). With this, the effective
     # heat released when converting at temperature T is q_0 - (cv_P-cv_R) T,
     # exactly as energy conservation with per-species cv requires.
-    burnable = min(1.0, 1.0 / phi) if phi > 0 else 0.0
     q_298 = (f * burnable) / (1.0 + f) * lhv
     q_R = q_298 + (cv_P - cv_R) * 298.15
 

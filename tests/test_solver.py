@@ -230,3 +230,39 @@ def test_acoustic_standing_wave_frequency():
     s = np.where((ps[:-1] <= 0) & (ps[1:] > 0))[0]
     f_meas = (len(s) - 1) / (ts[s[-1]] - ts[s[0]])
     assert abs(f_meas - f_th) / f_th < 0.03
+
+
+def test_interdiffusion_preserves_uniform_temperature():
+    """Species diffusion at uniform T must not manufacture temperature:
+    the interdiffusion enthalpy flux (audit finding) keeps a uniform-T,
+    uniform-p state uniform to ~1 K despite a sharp Y step and cv_R != cv_P.
+    Without the (cp_R - cp_P) T dY/dx term this drifts by ~30 K."""
+    gas = inert_gas()
+    N = 40
+    dx = 0.01
+    A = np.ones(N)
+    A_f = np.ones(N + 1)
+    T0 = 1000.0
+    p0 = 1e5
+    Y = np.where(np.arange(N) < N // 2, 1.0, 0.0)
+    rho = p0 / (gas.R_mix(Y) * T0)
+    U = solver.conserved(rho, np.zeros(N), p0 * np.ones(N), Y, gas, A)
+    nu = 0.05 * np.ones(N)
+
+    t = 0.0
+    while t < 1.3e-3:
+        r_, u_, p_, Y_, T_, a_ = solver.primitives(U, A, gas)
+        dt = min(0.3 * dx / float(np.max(np.abs(u_) + a_)),
+                 0.25 * dx * dx / 0.05)
+        rhs1, _ = solver.hyperbolic_rhs(U, A, A_f, dx, gas,
+                                        _wall_flux(U, A, gas, 0),
+                                        _wall_flux(U, A, gas, -1), nu)
+        U1 = U + dt * rhs1
+        rhs2, _ = solver.hyperbolic_rhs(U1, A, A_f, dx, gas,
+                                        _wall_flux(U1, A, gas, 0),
+                                        _wall_flux(U1, A, gas, -1), nu)
+        U = 0.5 * U + 0.5 * (U1 + dt * rhs2)
+        t += dt
+
+    T_fin = solver.primitives(U, A, gas)[4]
+    assert float(np.max(np.abs(T_fin - T0))) < 3.0

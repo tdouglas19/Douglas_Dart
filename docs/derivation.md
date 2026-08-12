@@ -135,7 +135,15 @@ of exhaust velocity.)
 fluid faces ($puA$ flux) and heat is released by reaction and transported by
 turbulent diffusion:
 
-$$ \frac{\partial (\rho E A)}{\partial t} + \frac{\partial \left[(\rho E + p) u A\right]}{\partial x} = \rho A\, q_R\, \dot\omega + \frac{\partial}{\partial x}\!\left(\rho \nu_t A\, c_{p,mix} \frac{\partial T}{\partial x}\right) \tag{9} $$
+$$ \frac{\partial (\rho E A)}{\partial t} + \frac{\partial \left[(\rho E + p) u A\right]}{\partial x} = \rho A\, q_R\, \dot\omega + \frac{\partial}{\partial x}\!\left[\rho \nu_t A\left( c_{p,mix} \frac{\partial T}{\partial x} + (c_{p,R} - c_{p,P})\, T \frac{\partial Y}{\partial x} + u \frac{\partial u}{\partial x}\right)\right] \tag{9} $$
+
+The three diffusive contributions are: heat conduction; the **interdiffusion
+enthalpy flux** — species carry their partial sensible enthalpy
+$h_k = c_{p,k}T$, and since $c_{v,R} \ne c_{v,P}$ omitting this term would
+let $Y$-diffusion at uniform temperature manufacture spurious ~30 K extrema
+at every fresh/burned contact (pinned by a regression test); and the work of
+the turbulent shear stress on the mean flow (the energy conjugate of the
+momentum diffusion term in (8)).
 
 (A6: adiabatic walls — wall heat loss neglected. Justification: energy flux
 balance — convective wall loss per cycle is a few % of heat release for
@@ -203,8 +211,9 @@ then propagates the reaction front at
 $$ S_T \sim \sqrt{\nu_t / \tau_{chem}}, \qquad \tau_{chem} = 1/(A_r e^{-T_a/T_f}) \tag{12} $$
 
 which is grid-independent provided the front thickness
-$\delta \sim \sqrt{\nu_t \tau_{chem}}$ exceeds the cell size (checked at
-runtime).
+$\delta \sim \sqrt{\nu_t \tau_{chem}}$ exceeds the cell size (satisfied by
+the reference design at production resolution — $\delta \sim 5{-}10$ mm vs
+$\Delta x = 3$ mm — and corroborated by the grid-convergence study).
 
 **Turbulent kinetic energy budget (chamber zone).** Let $k_c$ be the
 turbulent kinetic energy per unit mass of gas in the chamber zone (0D — one
@@ -231,7 +240,11 @@ energy theorem:
 $$ \frac{d(m_{cz} k_c)}{dt} = \tfrac12 \dot m_v (u_j - u_c)^2 + \int_{cz} \rho\, \nu_t \left(\frac{\partial u}{\partial x}\right)^{\!2} A\, dx - m_{cz}\, C_\varepsilon \frac{k_c^{3/2}}{\ell_m} - k_c\,\dot m_{out} \tag{13} $$
 
 ($m_{cz}$ = gas mass in the chamber zone; last term = turbulence advected out
-with outflow.) The eddy viscosity, from the mixing-length argument
+with outflow. The implementation advances the *intensive* form obtained by
+expanding the left side with the zone mass balance: the outflow terms cancel
+— leaving mass carries $k$ at concentration $k_c$ — and what survives is
+dilution by the incoming jet mass, $\dot k_c = P/m_{cz} - \varepsilon -
+k_c \dot m_v / m_{cz}$.) The eddy viscosity, from the mixing-length argument
 ($\nu_t \sim u' \ell$, Prandtl):
 
 $$ \nu_{t,cz} = C_\nu \sqrt{k_c}\, \ell_m, \qquad u' = \sqrt{2k_c/3} \tag{14} $$
@@ -437,9 +450,10 @@ permits physical back-spitting through a closing valve.
 **Head plane ($x=0$).** The FV boundary flux on the first face, per unit
 face area $A(0)$ (total-flux form $[\dot m, \dot m u_j + p_1 A(0), \dot m h_0, \dot m Y]$):
 
-- Valve closed ($A_v = 0$): wall — $[0,\; p_1 A(0),\; 0,\; 0]$; purely
-  reflective, as a rigid plate must be.
-- Valve open, inflow: $[\dot m_v,\; \dot m_v u_j + p_1 A(0),\; \dot m_v h_{0,up},\; \dot m_v \cdot 1]$
+- Valve closed ($A_v = 0$): wall — $[0,\; p_w A(0),\; 0,\; 0]$ with $p_w$
+  the exact mirror-state HLLC star pressure (§12), so reflection includes
+  the acoustic $\pm\rho a u$ correction a rigid plate produces.
+- Valve open, inflow: $[\dot m_v,\; \dot m_v u_j + p_w A(0),\; \dot m_v h_{0,up},\; \dot m_v \cdot 1]$
   — the incoming charge is reactant ($Y=1$) premixed at $\phi$ (A19: perfect
   carburetion of fuel into intake air at the valve; justified: real valved
   engines aspirate atomized fuel at the valve head; mixture preparation time
@@ -462,7 +476,15 @@ applied to the duct's air column (the classic inertance element — unsteady
 Bernoulli integrated along the duct) and mass conservation + the isentropic
 EOS applied to the plenum give two ODEs:
 
-$$ \frac{d\dot m_i}{dt} = \frac{A_i}{L_i}\left(p_{0,up} - p_{pl}\right), \qquad \frac{dp_{pl}}{dt} = \frac{\gamma_R R_R T_{0,up}}{V_{pl}}\left(\dot m_i - \dot m_v\right) \tag{23b} $$
+$$ \frac{d\dot m_i}{dt} = \frac{A_i}{L_i}\left(p_{0,up} - p_{pl} - \tfrac12 \rho_0 u_i |u_i| \right), \qquad \frac{dp_{pl}}{dt} = \frac{\gamma_R R_R T_{0,up}}{V_{pl}}\left(\dot m_i - \dot m_v\right) \tag{23b} $$
+
+The $\tfrac12\rho_0 u_i|u_i|$ term is the Borda–Carnot loss where the duct
+dumps into the larger plenum (derived from the momentum theorem on the
+sudden expansion, like §7's); it is also what physically damps the
+duct–plenum Helmholtz mode (~44 kHz). Numerically the pair is advanced with
+the symplectic ordering (column first, then plenum) so the mode is stable
+at the fluid time step, and $p_{pl}$ carries a wide numerical safety clamp
+$[0.2, 5]\,p_a$ that no reported run has touched.
 
 The valve's upstream state is then $(p_{pl}, T_{0,up})$ rather than the ram
 stagnation state. This carries the two real intake effects a reservoir
@@ -475,6 +497,37 @@ plenum as adiabatic at $T_{0,up}$, and back-spit contamination of the plenum
 is neglected; justification: the duct is short — its own acoustic timescale
 $L_i/a \sim 0.2$ ms is marginal but below the cycle scale — and bellmouth
 entries are near-loss-free by design.)
+
+**Side-mounted (boundary-layer) intake (§8c).** When the valve inlets face
+*perpendicular* to the flight velocity and swallow boundary-layer air off
+the vehicle skin, the forward-flight feed changes in three derivable ways:
+
+1. **Pressure**: the inlet sees the wall static pressure of the external
+   flow, $p_{0,up} = p_a$ — no ram recovery (the wall-normal momentum
+   equation across a thin boundary layer gives $\partial p/\partial y
+   \approx 0$, so the wall rides at the edge static pressure).
+2. **Temperature**: boundary-layer air is viscously heated. The
+   Crocco–Busemann energy integral (an exact consequence of the boundary
+   layer equations at $Pr = 1$) gives full recovery to $T_0$ at the wall;
+   real air ($Pr = 0.71$, turbulent) recovers a fraction $r$:
+   $T_{0,up} = T_a\!\left(1 + r\,\tfrac{\gamma-1}{2}M^2\right)$ (A26:
+   $r = 0.9$, bounded above by the derived $Pr = 1$ limit $r = 1$). The
+   charge density therefore *falls* with $M^2$ even though pressure holds.
+3. **Momentum drag**: the swallowed stream arrives already
+   momentum-depleted — the vehicle paid for that momentum loss through
+   skin friction upstream, so charging the engine the full
+   $\dot m_v u_\infty$ would double-count it. For a 1/7-power turbulent
+   profile the mass-flow-weighted momentum of the *whole* layer is
+   $\tfrac{8}{9}u_\infty$, and less for partial capture; the drag term
+   becomes $\dot m_v\, k_{bl} u_\infty$ (A27: $k_{bl}$ is a design input,
+   default 0.6, derived bracket 0.4–0.9 by capture-height-to-thickness
+   ratio).
+
+A major systems consequence follows directly: with $p_{0,up} = p_a$ the
+plenum never develops the steady ram bias that holds petals off their seats
+at speed — the §8b forward-inlet quench mechanism is absent, at the price
+of forgoing ram supercharging and accepting recovery-heated (less dense)
+charge.
 
 **Exit plane ($x=L$).** Characteristics of the 1D Euler system (eigenvalues
 $u-a$, $u$, $u+a$; Riemann invariants $J_\pm = u \pm \frac{2a}{\gamma-1}$
@@ -508,18 +561,25 @@ where $\dot m_e = (\rho u A)_e$ (sign carries the suction-phase backflow
 automatically). External aerodynamic drag of the cowl is deliberately
 excluded — this is engine thrust, not vehicle net force.
 
-**Independent verification identity.** The same force must equal the integral
-of gauge pressure over the engine's *interior* walls (the only surfaces that
-can push the engine forward):
+**Momentum-closure verification identity.** Integrating the discrete
+momentum equation over the duct and one cycle (storage
+$\frac{d}{dt}\int \rho u A\,dx$ averages to zero on a periodic cycle) and
+substituting the head boundary flux $|\dot m_v| u_j + p_w A(0)$ (§8, with
+$p_w$ the mirror-Riemann wall-star pressure the scheme itself uses) gives
+the exact identity the implementation checks:
 
-$$ F_{surf}(t) = (p_1 - p_a) A(0) - \dot m_v u_j - \int_0^L (p - p_a) \frac{dA}{dx} dx \tag{25} $$
+$$ \overline{F}_{(24)} = \overline{(p_w - p_a) A(0)} + \overline{\int_0^L (p - p_a) \frac{dA}{dx} dx} + \overline{|\dot m_v|\, u_j} - \overline{\dot m_v u_\infty} \tag{25} $$
 
-(head-plate push, minus the reaction of the entering jet on the head, minus
-the pull of the contracting cone). Cycle-averaged, (24) and (25) must agree;
-the implementation computes both and reports the discrepancy as a
-conservation diagnostic. Momentum storage $\frac{d}{dt}\int \rho u A\,dx$
-inside the duct causes the two to differ instantaneously but not on average
-over a periodic cycle.
+The area integral is *positive-signed*; for this geometry $dA/dx \le 0$ in
+the cone with $p > p_a$, so the term is negative — the rearward pull of the
+contracting cone enters through the sign of $dA/dx$. The right side is
+recorded as $F_{surf}(t)$; its cycle-averaged agreement with (24) verifies
+the flux/source/storage bookkeeping of the whole discretization (boundary
+fluxes, the $p\,dA/dx$ source, and the cycle closure), and its
+instantaneous difference is the momentum storage. (During back-spit windows
+the recorded (24)/(25) both clip the ram term to inflow only,
+$\max(\dot m_v, 0)\,u_\infty$ — spit mass re-swallowed by the intake is not
+charged ram drag twice.)
 
 **Cycle-averaged thrust** — the primary query output:
 
@@ -548,8 +608,11 @@ $$ \mathcal{R} = \oint\!\!\int_0^L \frac{\gamma-1}{\gamma \bar p}\, p'\, \dot q'
 
 — heat release in phase with pressure feeds the wave (Rayleigh's criterion,
 here *derived* as the source term of the acoustic energy equation). The
-implementation computes $\mathcal{R}$ every cycle from the simulated fields
-as a diagnostic of whether combustion drives or damps the resonance. In this
+implementation reports an unweighted *proxy* of (28): the per-cycle
+covariance of head pressure with globally-integrated heat release (the
+chamber is the fundamental mode's pressure antinode, so head $p'$ stands in
+for the modal amplitude; the $(\gamma{-}1)/\gamma\bar p$ weight and spatial
+integral are not assembled). Its sign — drive vs damp — is the diagnostic. In this
 model the phasing is emergent: the returning tailpipe compression wave
 raises $T$, the Arrhenius rate (11) spikes, and heat release lands on the
 pressure crest — or fails to, in which case the design decays, which is
@@ -631,9 +694,12 @@ under the Euler CFL limit.
    (in practice constraint 1 is ~20× stricter).
 
 **Operator ordering per step**: transport (hyperbolic + diffusion, RK2) →
-reaction sub-step → valve ODE update (RK2 on (19), same $\Delta t$, forced by
-the current-step face pressures) → contact projection → chamber-volume work
-(29) → turbulence budget (13).
+reaction sub-step → valve ODE update (semi-implicit *symplectic Euler* on
+(19) at the fluid $\Delta t$ — velocity from acceleration, then position
+from the new velocity — which is ~20× finer than the petal period, and
+symplectic so the contact-free oscillation neither gains nor loses energy) →
+contact projection → chamber-volume work (29, distributed over the petal
+zone so the area correction is grid-independent) → turbulence budget (13).
 
 ---
 
@@ -663,8 +729,9 @@ Algorithm:
 4. **Cycle detection**: a cycle boundary is a positive-going crossing of the
    head pressure through its trailing mean. Per cycle, compute impulse,
    frequency, swallowed mass, burned fuel, $\mathcal R$.
-5. **Limit-cycle test**: converged when the last $n=6$ cycle impulses and
-   periods each vary < 2% (relative RMS); diverged/quenched flags otherwise
+5. **Limit-cycle test**: converged when the last $n=6$ cycle periods vary
+   < 2% (relative RMS) and cycle-mean thrusts vary by less than
+   $\max(5\%\,|\bar F|,\ 0.75\ \mathrm{N})$; diverged/quenched flags otherwise
    (quench = no reignition: $\max_x T$ falls below 900 K and stays there;
    the model reports failure to self-sustain as a *result*, not an error).
 6. **Outputs**: (26) over the converged window, plus diagnostics; optional
@@ -684,7 +751,7 @@ numerical settings, run in parallel worker processes.
 | A3 | No product dissociation | Endothermic equilibria negligible < 2400 K cycle mean | Flame T high ~5–8% |
 | A4 | Quasi-1D | $D/L \ll 1$, transverse acoustic equilibration ≫ faster | No radial modes |
 | A5 | Inviscid walls | Friction impulse < ~3% of pressure impulse (scale analysis) | $u_e$ slightly high |
-| A6 | Adiabatic walls | Wall loss few % of heat release per cycle (flux scaling) | Cycle runs hot |
+| A6 | Adiabatic walls | Wall heat loss omitted (a defensible convective estimate needs an empirical Nusselt correlation, excluded by the clean-room rules) | **Significant** at this size class: real losses are ~10–30% of heat release, so the model runs hot and its thrust/TSFC are optimistic by a corresponding margin |
 | A7 | $Pr_t = Sc_t = 1$ | Reynolds analogy — common eddy transport mechanism | — |
 | A8 | Single-step, 1st-order kinetics | Law of mass action on a single progress variable | No multi-stage ignition chemistry |
 | A9 | Fixed $A_r$ (one calibration) | One-step surrogate can't match all regimes; $E_a$ held at physical value | Absolute delay times approximate |
@@ -704,6 +771,8 @@ numerical settings, run in parallel worker processes.
 | A23 | Jet strain field $s = (u_j/\xi)e^{-x/L_{jet}}$, $L_{jet}=15\xi$ | Self-similar free-jet momentum-integral decay; extinction criterion from ZFK asymptotics (eq. 12b-c) | Ignition-onset timing ±30% |
 | A24 | Intake column: frictionless slug + adiabatic plenum (eq. 23b) | Newton's law on the duct column (inertance); isentropic plenum compliance; bellmouth ~loss-free | Duct acoustics unresolved (~0.2 ms) |
 | A25 | Seat preload $\xi_0$ (spring term $k(\xi+\xi_0)$) | Residual-curvature preload restored by the derived cantilever stiffness; standard reed-valve cracking mechanism | $\xi_0$ is a design input |
+| A26 | Side inlet: recovery factor $r = 0.9$ | Crocco–Busemann energy integral gives $r = 1$ at $Pr = 1$; real turbulent air recovers slightly less | Intake density vs M approximate |
+| A27 | Side inlet: ingested-momentum fraction $k_{bl} = 0.6$ | 1/7-power-law boundary-layer momentum integral brackets 0.4–0.9 by capture height | Ram-drag charge ±30% at high M |
 
 Every other relation in this document — the field equations, valve beam
 mechanics, orifice/choking relations, HLLC construction, Rayleigh balance,

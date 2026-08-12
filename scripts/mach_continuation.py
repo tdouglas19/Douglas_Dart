@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import numpy as np
 
-from pulsejet_fp import (Numerics, PulsejetEngine, ThrustResult,
+from pulsejet_fp import (IntakeDesign, Numerics, PulsejetEngine, ThrustResult,
                          reference_gas, reference_geometry, reference_valve)
 from pulsejet_fp.query import analyze_cycles
 
@@ -30,11 +30,13 @@ def main():
     ap.add_argument("--n-cells", type=int, default=200)
     ap.add_argument("--preload", type=float, default=0.5e-3)
     ap.add_argument("--tag", type=str, default="fp1_continuation")
+    ap.add_argument("--side-inlet", action="store_true")
     args = ap.parse_args()
 
     gas = reference_gas()
     geom = reference_geometry()
     valve = replace(reference_valve(), seat_preload=args.preload)
+    intake = IntakeDesign(orientation="side") if args.side_inlet else None
 
     machs = []
     m = 0.0
@@ -47,7 +49,7 @@ def main():
     results = []
     t_start = time.time()
     for i, mach in enumerate(machs):
-        eng = PulsejetEngine(gas, geom, valve, mach=mach,
+        eng = PulsejetEngine(gas, geom, valve, mach=mach, intake=intake,
                              numerics=Numerics(n_cells=args.n_cells))
         if snap is not None:
             eng.restore(snap)
