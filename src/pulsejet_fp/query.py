@@ -77,6 +77,7 @@ class ThrustResult:
     n_cycles: int = 0
     mach: float = 0.0
     traces: dict | None = None
+    end_state: dict | None = None   # engine snapshot for warm-starting
 
 
 def _upcrossings(t, y, level):
@@ -170,9 +171,21 @@ def pulsejet_thrust(mach: float = 0.0, altitude_m: float = 0.0, *,
                     start: StartCondition | None = None,
                     intake: IntakeDesign | None = None,
                     t_end: float = 0.30,
-                    keep_traces: bool = False) -> ThrustResult:
+                    keep_traces: bool = False,
+                    stop_when_converged: bool = True,
+                    seed_state: dict | None = None,
+                    return_state: bool = False) -> ThrustResult:
     """Primary query (derivation.md #13): cycle-averaged thrust at a flight
-    condition, from the transient first-principles simulation."""
+    condition, from the transient first-principles simulation.
+
+    stop_when_converged: check the limit-cycle criterion online and stop as
+        soon as it is met (t_end remains the cap) -- same convergence
+        standard, less wall time.
+    seed_state: warm-start from a nearby converged snapshot (see
+        ThrustResult.end_state / PulsejetEngine.snapshot). Legitimate for
+        configurations whose start branches coincide (side inlet); for
+        hysteretic configs the seed selects the branch.
+    """
     gas = gas or reference_gas()
     geom = geom or reference_geometry()
     valve = valve or reference_valve()
@@ -180,13 +193,33 @@ def pulsejet_thrust(mach: float = 0.0, altitude_m: float = 0.0, *,
     eng = PulsejetEngine(gas, geom, valve, mach=mach, altitude_m=altitude_m,
                          numerics=numerics, turb=turb, start=start,
                          intake=intake)
-    hist = eng.run(t_end)
+    settle = 0.35
+    if seed_state is not None:
+        eng.restore(seed_state)
+        settle = 0.25
+    if stop_when_converged:
+        first_check = 0.06 if seed_state is not None else 0.12
+        next_check = first_check
+        while eng.t < t_end and eng.status == "running":
+            eng.step()
+            if eng.t >= next_check:
+                next_check += 0.02
+                probe = analyze_cycles(eng.history.as_arrays(), eng.p_a,
+                                       gas, settle_frac=settle)
+                if probe.get("converged"):
+                    break
+        if eng.status == "running":
+            eng.status = "completed"
+        hist = eng.history.as_arrays()
+    else:
+        hist = eng.run(t_end)
 
     if eng.status == "diverged":
         return ThrustResult(thrust_n=float("nan"), status="diverged",
                             mach=mach, traces=hist if keep_traces else None)
 
-    an = analyze_cycles(hist, eng.p_a, gas)
+    an = analyze_cycles(hist, eng.p_a, gas, settle_frac=settle)
+    end_state = eng.snapshot() if return_state else None
 
     # quench check: no sustained hot zone in the last quarter of the run
     tail = hist["t"] > hist["t"][-1] - 0.25 * (hist["t"][-1] - hist["t"][0])
@@ -196,7 +229,8 @@ def pulsejet_thrust(mach: float = 0.0, altitude_m: float = 0.0, *,
         status = "quenched" if quenched else "unconverged"
         return ThrustResult(thrust_n=float("nan"), status=status, mach=mach,
                             n_cycles=an.get("n_cycles", 0),
-                            traces=hist if keep_traces else None)
+                            traces=hist if keep_traces else None,
+                            end_state=end_state)
 
     status = "quenched" if quenched else (
         "converged" if an["converged"] else "unconverged")
@@ -211,4 +245,5 @@ def pulsejet_thrust(mach: float = 0.0, altitude_m: float = 0.0, *,
         p_min_ratio=an["p_min_ratio"], p_max_ratio=an["p_max_ratio"],
         rayleigh_index=an["rayleigh"], n_cycles=an["n_cycles"], mach=mach,
         traces=hist if keep_traces else None,
+        end_state=end_state,
     )

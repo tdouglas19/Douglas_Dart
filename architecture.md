@@ -299,3 +299,38 @@ finder outputs were self-verified, but an independent verification pass
 would strengthen the audit record; (4) side-inlet external aerodynamics
 (suction/entrainment by the crossflow past the inlet orifice) is neglected
 beyond the static-pressure assumption.
+
+## 10. Query-speed package: JIT + early-stop + warm-start (2026-08-12)
+
+User asked for faster single-point queries WITHOUT touching fidelity.
+Three levers, all preserving the physics, grid, and convergence criterion:
+
+1. **Numba JIT kernels** (`solver_jit.py`): primitives, fused
+   MUSCL+HLLC+sources+diffusion RHS, and the reaction substep as explicit
+   loops -- identical formulas/floors/limiter to the numpy reference paths,
+   which remain as fallback. Fidelity pinned by
+   `tests/test_jit_equivalence.py` (agreement ~1e-10..1e-12 on a stressing
+   state with shocks/contacts/area variation/active reaction). Disk-cached
+   compilation (cache=True) so only the first process ever compiles.
+2. **Online convergence stop** in `pulsejet_thrust`
+   (stop_when_converged=True, t_end becomes a cap): the run halts as soon
+   as the SAME limit-cycle criterion (6 complete cycles, periods <2%,
+   stable per-cycle thrust) is met. Averaging remains cycle-synchronous --
+   integer complete cycles between interpolated pressure-crossing
+   boundaries -- so early stopping can never truncate mid-pulse (the user
+   specifically checked this; it was the design from #13.4-5 day one).
+3. **Warm-start** (`seed_state=` / `return_state=True` -> res.end_state):
+   restore the full dynamic state from a nearby converged point and
+   re-converge in ~5-10 cycles. Branch-safe for the side inlet (both
+   branches measured coincident across M 0-0.9); for hysteretic configs
+   the seed deliberately selects running-vs-cold-start.
+
+Benchmark, M=0.21 @ 2000 ft side-inlet (N=200, same fidelity):
+**317 s (pre-JIT baseline) -> 76 s cold (4.2x) -> 42.8 s warm-started
+(7.4x)**; answers 14.02 -> 14.05 N (0.2%, roundoff-path difference),
+166.3 Hz both. Suite: 35/35 (3 new equivalence tests; engine tests now
+exercise the JIT paths end-to-end). Physics note logged with the M=0.21
+point: the altitude thrust penalty (-18% for -5.7% charge density) is ~3x
+the linear density-scaling estimate -- the near-threshold amplitude
+feedback amplifies ambient changes, so flight-condition queries need the
+transient sim, not scaling corrections.

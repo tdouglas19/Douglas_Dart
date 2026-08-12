@@ -9,8 +9,10 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import atmosphere, orifice, solver
+from . import atmosphere, orifice, solver, solver_jit
 from .gas import GasModel
+
+_JIT = solver_jit.HAS_NUMBA
 from .geometry import EngineGeometry, Grid, build_grid
 from .valve import PetalValveDesign, PetalValveState
 
@@ -226,17 +228,31 @@ class PulsejetEngine:
         w = self.grid.chamber_weight
         return w * nu_cz + (1.0 - w) * nu_pipe + t.nu_min
 
+    def _primitives(self, U):
+        if _JIT:
+            g = self.gas
+            return solver_jit.primitives_jit(U, self.A_eff, g.cv_R, g.cv_P,
+                                             g.R_R, g.R_P)
+        return solver.primitives(U, self.A_eff, self.gas)
+
     def _rhs(self, U, nu_t, prims=None):
         if prims is None:
-            prims = solver.primitives(U, self.A_eff, self.gas)
+            prims = self._primitives(U)
         rho, u, p, Y, T, a = prims
         F_head, mdot_v, uj, rho_t = self._head_flux(
             float(rho[0]), float(u[0]), float(p[0]), float(Y[0]), float(T[0]))
         F_exit = self._exit_flux(
             float(rho[-1]), float(u[-1]), float(p[-1]), float(Y[-1]))
-        rhs, _ = solver.hyperbolic_rhs(U, self.A_eff, self.grid.A_f,
-                                       self.grid.dx, self.gas,
-                                       F_head, F_exit, nu_t, prims=prims)
+        if _JIT:
+            g = self.gas
+            rhs = solver_jit.rhs_jit(U, self.A_eff, self.grid.A_f,
+                                     self.grid.dx, g.cv_R, g.cv_P, g.R_R,
+                                     g.R_P, 0.0, F_head, F_exit, nu_t,
+                                     rho, u, p, Y, T, a)
+        else:
+            rhs, _ = solver.hyperbolic_rhs(U, self.A_eff, self.grid.A_f,
+                                           self.grid.dx, self.gas,
+                                           F_head, F_exit, nu_t, prims=prims)
         return rhs, (mdot_v, uj, rho_t)
 
     def _dt_from(self, prims, nu):
@@ -252,14 +268,14 @@ class PulsejetEngine:
         return min(dt_conv, dt_diff, dt_valve, self.numerics.dt_max)
 
     def compute_dt(self):
-        prims = solver.primitives(self.U, self.A_eff, self.gas)
+        prims = self._primitives(self.U)
         return self._dt_from(prims, self._nu_t_field(prims[1]))
 
     def step(self):
         gas = self.gas
         dx = self.grid.dx
 
-        prims0 = solver.primitives(self.U, self.A_eff, gas)
+        prims0 = self._primitives(self.U)
         nu_t = self._nu_t_field(prims0[1])
         dt = self._dt_from(prims0, nu_t)
 
@@ -271,7 +287,7 @@ class PulsejetEngine:
 
         # ---- jet-strain extinction field (derivation.md #5b, A23) ----
         mdot_v, uj, rho_t = bc1
-        prims2 = solver.primitives(self.U, self.A_eff, gas)
+        prims2 = self._primitives(self.U)
         quench = None
         if mdot_v > 0.0 and abs(uj) > 1.0 and self.valve.lift > 1e-5:
             T2 = prims2[4]
@@ -283,8 +299,16 @@ class PulsejetEngine:
             quench = 1.0 / (1.0 + (s * self.Ze2 / np.maximum(k_arr, 1e-30)) ** 2)
 
         # ---- reaction sub-step (operator split) ----
-        heat_per_len, q_rate = solver.reaction_substep(
-            self.U, self.A_eff, gas, dt, quench, prims=prims2)
+        if _JIT:
+            quench_arr = quench if quench is not None \
+                else np.ones(self.U.shape[1])
+            heat_per_len, q_rate = solver_jit.reaction_jit(
+                self.U, self.A_eff, gas.cv_R, gas.cv_P, gas.R_R, gas.R_P,
+                gas.A_r, gas.T_a, gas.q_R, dt, quench_arr,
+                prims2[0], prims2[4], prims2[3])
+        else:
+            heat_per_len, q_rate = solver.reaction_substep(
+                self.U, self.A_eff, gas, dt, quench, prims=prims2)
         q_tot = float(np.sum(q_rate)) * dx  # W
 
         # ---- intake column + plenum ODEs (eq. 23b, symplectic order) ----
@@ -300,7 +324,7 @@ class PulsejetEngine:
         self.p_plen = min(max(self.p_plen, 0.2 * self.p_a), 5.0 * self.p_a)
 
         # ---- valve ODE + contact (eq. 19) ----
-        rho, u, p, Y, T, a = solver.primitives(self.U, self.A_eff, gas)
+        rho, u, p, Y, T, a = self._primitives(self.U)
         lift_old = self.valve.lift
         self.valve.step(dt, self.p_plen, float(p[0]), rho_t, abs(uj), float(rho[0]))
 
@@ -349,7 +373,7 @@ class PulsejetEngine:
     def _record_now(self, mdot_v=0.0, uj_signed=0.0, q_tot=0.0):
         gas = self.gas
         g = self.grid
-        rho, u, p, Y, T, a = solver.primitives(self.U, self.A_eff, gas)
+        rho, u, p, Y, T, a = self._primitives(self.U)
         dx = g.dx
         F_exit = self._exit_flux(float(rho[-1]), float(u[-1]),
                                  float(p[-1]), float(Y[-1]))
