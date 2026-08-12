@@ -267,6 +267,11 @@ def evaluate(
         from .drag import WingConcept as _WC
         wing_concept = _WC(candidate.wingspan_m, _AR, 1.0, 0.0,
                            AIRFOILS[wing_airfoil_key])
+    tank_capacity_kg = (FUEL_VOLUME_FRACTION_OF_ANNULUS
+                        * _annular_volume_m3(candidate.diameter_m,
+                                             candidate.throat_diameter_m,
+                                             candidate.throat_length_m)
+                        * FUELS[candidate.fuel_key].density_kg_per_m3)
     result = run_flight(
         candidate.to_geometry(),
         MAX_WET_MASS_KG,
@@ -275,6 +280,7 @@ def evaluate(
         dt_s=dt_s,
         max_time_s=max_time_s,
         wing_concept=wing_concept,
+        max_fuel_burn_kg=tank_capacity_kg / (1.0 + FUEL_RESERVE_MARGIN),
     )
     final_state = result.states[-1]
     kept_result = result if return_result else None

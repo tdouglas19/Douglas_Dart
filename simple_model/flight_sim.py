@@ -222,7 +222,13 @@ def run_flight(
     max_time_s: float = 240.0,
     initial_velocity_m_per_s: float = DEFAULT_RELEASE_VELOCITY_M_PER_S,
     wing_concept: WingConcept | None = None,
+    max_fuel_burn_kg: float | None = None,
 ) -> FlightResult:
+    # max_fuel_burn_kg: physical usable-fuel limit (tank capacity minus
+    # reserve). Exceeding it is a FLAMEOUT: engine off wherever the flight
+    # is, cutoff NOT credited. Without this cap, marginal designs could
+    # hover at thrust ~= demand for hundreds of seconds and 'succeed' by
+    # burning 20+ kg of phantom fuel down to the mass floor.
     # wing_concept=None keeps the legacy fixed wing (AR=3 rectangular,
     # geometry.wingspan_m) -- bit-identical to the pre-wing-optimizer sim.
     # A WingConcept replaces stall speed and the wing drag terms with the
@@ -276,6 +282,9 @@ def run_flight(
         if not engine_off and mach >= motor_cutoff_mach:
             engine_off = True
             motor_cutoff_reached = True
+        if (not engine_off and max_fuel_burn_kg is not None
+                and fuel_burned_kg >= max_fuel_burn_kg):
+            engine_off = True  # flameout: tank dry before cutoff
 
         if engine_off:
             thrust_n = 0.0

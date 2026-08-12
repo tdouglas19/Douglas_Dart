@@ -218,14 +218,19 @@ def wing_wave_drag_coefficient(concept: WingConcept, mach: float) -> float:
     if m_normal <= onset:
         return 0.0
     tc = concept.airfoil.thickness_ratio
-    # smooth quadratic ramp across the onset width, then the 1/sqrt(Mn^2-1)
-    # supersonic tail (evaluated no closer than the ramp edge to stay finite)
+    # Linear supersonic thin-wing theory diverges as Mn -> 1+ (the
+    # 1/sqrt(Mn^2 - 1) singularity); real transonic wave drag stays finite,
+    # so the factor is capped at its Mn ~= 1.17 value (argument floor 0.36)
+    # -- the standard regularization. Quadratic ramp from onset up to that
+    # capped peak, then the capped supersonic tail. (An earlier version
+    # kept a 1e-6 floor here: cd_wave ~ 3.6 at exactly Mach 1 -- a ~60 kN
+    # phantom drag wall that silently made every transonic mission
+    # infeasible. Pinned by test_simple_model.)
+    peak_factor = 1.0 / sqrt(0.36)
     if m_normal < onset + WING_WAVE_ONSET_WIDTH:
         s = (m_normal - onset) / WING_WAVE_ONSET_WIDTH
-        peak = WING_WAVE_K * tc * tc / sqrt((onset + WING_WAVE_ONSET_WIDTH) ** 2 - 1.0) \
-            if (onset + WING_WAVE_ONSET_WIDTH) > 1.0 else WING_WAVE_K * tc * tc
-        return peak * s * s
-    return WING_WAVE_K * tc * tc / sqrt(max(m_normal * m_normal - 1.0, 1e-6))
+        return WING_WAVE_K * tc * tc * peak_factor * s * s
+    return WING_WAVE_K * tc * tc / sqrt(max(m_normal * m_normal - 1.0, 0.36))
 
 
 def wing_concept_drag_n(

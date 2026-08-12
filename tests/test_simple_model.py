@@ -91,5 +91,21 @@ class FlightChainTests(unittest.TestCase):
         self.assertIn("pulsejet", modes)
 
 
+class WingWaveDragRegressionTests(unittest.TestCase):
+    def test_no_sonic_singularity(self):
+        """cd_wave must stay bounded through Mach 1 (an unregularized
+        1/sqrt(Mn^2-1) once produced cd ~ 3.6 at Mn=1.0 -- a ~60 kN phantom
+        drag wall that silently killed every transonic mission)."""
+        from simple_model.drag import (default_wing_concept,
+                                       wing_wave_drag_coefficient)
+        c = default_wing_concept(0.85)
+        for m in (0.95, 0.99, 1.0, 1.001, 1.05, 1.1, 1.5):
+            cd = wing_wave_drag_coefficient(c, m)
+            self.assertLess(cd, 0.06, f"M={m}: cd_wave={cd}")
+        # and it is monotonically DECREASING well past the peak
+        self.assertGreater(wing_wave_drag_coefficient(c, 1.2),
+                           wing_wave_drag_coefficient(c, 2.0))
+
+
 if __name__ == "__main__":
     unittest.main()

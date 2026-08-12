@@ -101,12 +101,18 @@ def evaluate_wing(args) -> EvaluatedWing:
         wingspan_m=wing.span_m,  # overridden by the concept anyway
         fuel=FUELS[vehicle.fuel_key],
     )
+    tank_capacity_kg = (FUEL_VOLUME_FRACTION_OF_ANNULUS
+                        * _annular_volume_m3(vehicle.diameter_m,
+                                             vehicle.throat_diameter_m,
+                                             vehicle.throat_length_m)
+                        * FUELS[vehicle.fuel_key].density_kg_per_m3)
     result = run_flight(
         geometry, MAX_WET_MASS_KG,
         climb_angle_deg=vehicle.climb_angle_deg,
         motor_cutoff_mach=MOTOR_CUTOFF_MACH,
         dt_s=dt_s, max_time_s=MAX_TIME_S,
         wing_concept=wing.to_concept(),
+        max_fuel_burn_kg=tank_capacity_kg / (1.0 + FUEL_RESERVE_MARGIN),
     )
     final = result.states[-1]
     feasible = (
