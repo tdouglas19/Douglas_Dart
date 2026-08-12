@@ -14,3 +14,7 @@ first-principles primary.
 import os
 
 os.environ.setdefault("DOUGLAS_DART_DISABLE_PULSEJET_FP", "1")
+# Same rationale for the ramjet-fp guarded primary (2026-08-12): each FP
+# ramjet point is a ~15-120 s transient sim. test_ramjet_fp_bridge.py
+# re-enables the switch per-test.
+os.environ.setdefault("DOUGLAS_DART_DISABLE_RAMJET_FP", "1")

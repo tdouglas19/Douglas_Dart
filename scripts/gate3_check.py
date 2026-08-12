@@ -19,10 +19,16 @@ from pathlib import Path
 
 from douglas_dart.config import load_reference_case
 from douglas_dart.propulsion_map import PULSEJET_FIDELITY_FULL
+from douglas_dart.ramjet_fp_bridge import ramjet_fp_primary_enabled
 from douglas_dart.trajectory import ADVERSE_SCENARIO, NOMINAL_SCENARIO, simulate_mission
 
 config_path = sys.argv[1] if len(sys.argv) > 1 else "configs/shared_nozzle_candidate_b.yaml"
 case = load_reference_case(config_path)
+
+# Gate 3's ramjet source (2026-08-12): the first-principles ramjet-fp lazy
+# table when enabled (thrust AND flame stability resolved; blown-off cells
+# surface as ramjet_fp_* status strings below), native 0D otherwise.
+print(f"ramjet source: {'ramjet-fp (first-principles, guarded primary)' if ramjet_fp_primary_enabled() else 'native 0D (kill-switch set)'}")
 
 print(f"Gate 3 check: {config_path}")
 print(f"  body_diameter_m={case.vehicle.body_diameter_m}  body_length_m={case.vehicle.body_length_m}")
@@ -34,7 +40,8 @@ print()
 for scenario in (NOMINAL_SCENARIO, ADVERSE_SCENARIO):
     t0 = time.time()
     result = simulate_mission(
-        case, scenario, pulsejet_table_fidelity=PULSEJET_FIDELITY_FULL
+        case, scenario, pulsejet_table_fidelity=PULSEJET_FIDELITY_FULL,
+        ramjet_table_fidelity="full",
     )
     dt = time.time() - t0
     print(f"=== {scenario.name} ({dt:.1f}s) ===")

@@ -1597,3 +1597,62 @@ under `results/generated/design_optimize_v12/` for the result; treat
 conclusion touching lightoff Mach, inlet recovery, or real-gas effects,
 the same way this document has repeatedly flagged earlier runs stale
 after each physics correction.
+
+## 2026-08-12: ramjet-fp becomes RAMJET_MODE's guarded primary (Gate 2) and the mission solver's ramjet source (Gate 3)
+
+**What changed.** The sibling first-principles ramjet model (`ramjet-fp`,
+unsteady quasi-1D HLLC relaxation: Rankine-Hugoniot inlet, WSR flameholder
+with emergent Damkohler blow-off, resolved choking/thermal choking,
+eq.30/32 dual-thrust verification -- see `ramjet-fp/architecture.md` and
+`docs/derivation.md` there) is now:
+
+1. **Gate 2**: `propulsion_map._ramjet_point` dispatches to ramjet-fp as
+   its guarded PRIMARY via the new `ramjet_fp_bridge.py` (direct flowpath
+   geometry mapping from the case config; flameholder scaled from the
+   validated RJ-1 proportions and capped so the gutter never chokes ahead
+   of the shared nozzle throat -- both flagged). ``blown_off`` is a USABLE
+   answer: the point carries the cold-throughflow drag,
+   `self_sustaining_status=False`, and visible flags. Fallback to the
+   native 0D `evaluate_ramjet` is flagged
+   (`ramjet_fp_primary_rejected_fell_back_to_native`), and
+   `DOUGLAS_DART_DISABLE_RAMJET_FP=1` is the documented kill-switch (the
+   legacy test suite sets it in conftest, exactly like the pulsejet one).
+   The native model's MIL-E-5008B recovery schedule, configured combustor
+   efficiency, and discharge coefficients are exactly what the primary
+   replaces with derived physics; achieved recovery is now an OUTPUT
+   (scenario recovery overrides do not apply to FP points -- flagged).
+2. **Gate 3**: `trajectory.simulate_mission`'s ramjet_accel/mach_hold
+   phases read a lazy 0.1-Mach x 1500-m bilinear table over the memoized
+   FP query (~12-16 transient runs per unique engine geometry, shared
+   across scenarios in-process) instead of a per-step call -- the same
+   table-not-per-step pattern as the pulsejet static table. Blown-off
+   cells surface as `ramjet_fp_flame_unstable_during_ramjet_phase` in the
+   run status.
+
+**Model-fidelity change, and a design-relevant one.** ramjet-fp's campaign
+(sibling architecture.md #3-#8) found: (a) at the configs' ramjet
+`target_equivalence_ratio: 0.60` a fully-premixed flame holds at NO Mach --
+every FP-sourced RAMJET_MODE point at phi 0.60 is `blown_off` with
+negative (drag-only) thrust, so Gate 3 missions now fail in the ramjet
+phase for the honest reason that the engine as configured cannot burn;
+(b) near-stoich fueling is required, with a Mach- and altitude-dependent
+lean limit (phi_min 0.87 at M 0.4 SL, ~1.00 in the M 0.6-0.9 oscillation
+pinch); (c) cold relight has an altitude-dependent no-go hole (M 0.7-0.8
+at 1500 m widening to M 0.8-1.1 at 6000 m) while a continuously carried
+flame transits the band at <=~1000 m and survives climb at M >= 1.1 --
+i.e. the mission profile wants transonic acceleration LOW, then a lit
+supersonic climb to the 4500 m speed run; and (d) every lit point is a
+bounded chugging limit cycle (cycle-mean reported; amplitude flagged).
+The phi finding means the ramjet `target_equivalence_ratio` config value
+is now a live design decision with a physics-backed viability boundary
+(`ramjet_fp.minimum_stable_phi` is the queryable schedule); 0.60 was
+backed out of a fixed-1900K-exit-temperature assumption that the
+first-principles model does not support.
+
+**Verification.** 10 new bridge unit tests (spec round-trip against the
+live sibling RJ-1 reference, gutter/throat cap on candidate B, usability
+guard incl. blown-off-is-usable, dispatch prefer/fallback/crash/kill-switch
+paths) + 2 live end-to-end tests (Gate 2 point and Gate 3 table at fast
+fidelity); full legacy regression suite green with the kill-switch
+defaulted in conftest (native path byte-identical). `gate3_check.py` now
+reports its ramjet source and runs the FP table at full fidelity.

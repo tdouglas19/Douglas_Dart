@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import csv
 import math
+import os
 from dataclasses import asdict, dataclass, replace as dataclasses_replace
 from functools import lru_cache
 from pathlib import Path
@@ -48,6 +49,9 @@ if TYPE_CHECKING:
     # pulsejet-fp: same optional-dependency pattern (pulsejet_fp_bridge.py's
     # runtime imports are lazy inside run_pulsejet_fp_query).
     from pulsejet_fp import ThrustResult as PulsejetFpThrustResult
+    # ramjet-fp: same pattern (ramjet_fp_bridge.py's runtime imports are
+    # lazy, inside run_ramjet_fp_query).
+    from ramjet_fp import RamjetResult as RamjetFpResult
 
 from .atmosphere import standard_atmosphere
 from .compressible import stagnation_pressure
@@ -65,6 +69,22 @@ from .pulsejet_fp_bridge import (
     run_pulsejet_fp_query,
 )
 from .ramjet import evaluate_ramjet
+from .ramjet_fp_bridge import (
+    RAMJET_FP_ADIABATIC_OPTIMISM_FLAG,
+    RAMJET_FP_BLOWN_OFF_FLAG,
+    RAMJET_FP_FALLBACK_FLAG,
+    RAMJET_FP_FLAMEHOLDER_SCALED_FLAG,
+    RAMJET_FP_GUTTER_CAPPED_FLAG,
+    RAMJET_FP_OSCILLATORY_FLAG,
+    RAMJET_FP_PREMIXED_CONSERVATIVE_FLAG,
+    RAMJET_FP_RECOVERY_OUTPUT_FLAG,
+    RAMJET_FP_RECOVERY_OVERRIDE_NA_FLAG,
+    RamjetFpSpec,
+    derive_ramjet_fp_spec,
+    ramjet_fp_primary_enabled,
+    ramjet_fp_result_is_usable,
+    run_ramjet_fp_query,
+)
 
 PULSEJET_MODE = "pulsejet"
 RAMJET_MODE = "ramjet"
@@ -408,7 +428,151 @@ def _pulsejet_point(
     )
 
 
+def _ramjet_fp_result_to_point(
+    result: "RamjetFpResult",
+    spec: RamjetFpSpec,
+    mach: float,
+    altitude_m: float,
+    scenario: PropulsionScenario,
+    *,
+    extra_validity_flags: tuple[str, ...] = (),
+) -> PropulsionMapPoint:
+    """Map a ramjet-fp ``RamjetResult`` into the common schema.
+
+    Cycle-mean values throughout (the model's lit attractor is a bounded
+    combustion oscillation -- flagged). ramjet-fp's eq. 30 net thrust
+    already charges the swallowed stream's freestream momentum, so
+    ``gross - drag == net`` holds exactly with drag reconstructed as
+    gross - net. The achieved total-pressure recovery is an OUTPUT of the
+    resolved inlet/duct physics (Rankine-Hugoniot + resolved losses), so
+    scenario recovery overrides cannot apply and are flagged instead."""
+
+    mult = scenario.thrust_multiplier
+    net_thrust_n = result.net_thrust_n * mult
+    gross_thrust_n = (result.gross_thrust_n
+                      if math.isfinite(result.gross_thrust_n)
+                      else result.net_thrust_n) * mult
+    drag_n = gross_thrust_n - net_thrust_n
+
+    fuel_flow = result.mdot_fuel_kg_s if math.isfinite(result.mdot_fuel_kg_s) else 0.0
+    specific_impulse_s = None
+    tsfc_per_hour = None
+    if fuel_flow > 1e-12 and net_thrust_n > 0.0:
+        specific_impulse_s = net_thrust_n / (fuel_flow * 9.80665)
+        tsfc_per_hour = 3600.0 / specific_impulse_s
+
+    captured = result.mdot_air_kg_s if math.isfinite(result.mdot_air_kg_s) else 0.0
+    potential = None
+    spill = result.spillage_fraction
+    if math.isfinite(spill) and spill < 1.0 - 1e-9:
+        potential = captured / (1.0 - spill)
+    else:
+        spill = None
+
+    recovery = (result.recovery_p0
+                if math.isfinite(result.recovery_p0) else None)
+
+    validity_flags: list[str] = [
+        f"ramjet_fp_status_{result.status}",
+        RAMJET_FP_ADIABATIC_OPTIMISM_FLAG,
+        RAMJET_FP_PREMIXED_CONSERVATIVE_FLAG,
+        RAMJET_FP_RECOVERY_OUTPUT_FLAG,
+        RAMJET_FP_FLAMEHOLDER_SCALED_FLAG,
+    ]
+    if spec.gutter_capped_by_throat:
+        validity_flags.append(RAMJET_FP_GUTTER_CAPPED_FLAG)
+    if result.status == "oscillatory" and result.oscillation_amplitude_n \
+            > 0.5 * max(abs(result.net_thrust_n), 5.0):
+        validity_flags.append(RAMJET_FP_OSCILLATORY_FLAG)
+    if not result.flame_stable:
+        validity_flags.append(RAMJET_FP_BLOWN_OFF_FLAG)
+    if scenario.ramjet_total_pressure_recovery_override is not None:
+        validity_flags.append(RAMJET_FP_RECOVERY_OVERRIDE_NA_FLAG)
+    validity_flags.extend(extra_validity_flags)
+
+    lightoff_status = (
+        f"ramjet_fp_flame_stable_{result.status}"
+        if result.flame_stable else f"ramjet_fp_flame_out_{result.status}"
+    )
+    return PropulsionMapPoint(
+        mode=RAMJET_MODE,
+        mach=mach,
+        altitude_m=altitude_m,
+        scenario_name=scenario.name,
+        gross_thrust_n=gross_thrust_n,
+        inlet_momentum_drag_n=drag_n,
+        net_thrust_n=net_thrust_n,
+        fuel_mass_flow_kg_per_s=fuel_flow,
+        tsfc_per_hour=tsfc_per_hour,
+        specific_impulse_s=specific_impulse_s,
+        captured_air_mass_flow_kg_per_s=captured,
+        potential_air_mass_flow_kg_per_s=potential,
+        spilled_mass_flow_fraction=spill,
+        installed_total_pressure_recovery=recovery,
+        nozzle_flow_regime="unsteady_fp_resolved",
+        combustor_temperature_k=None,
+        peak_chamber_pressure_pa=None,
+        lightoff_status=lightoff_status,
+        self_sustaining_status=result.flame_stable,
+        validity_flags=tuple(validity_flags),
+    )
+
+
 def _ramjet_point(
+    case: ReferenceCase,
+    mach: float,
+    altitude_m: float,
+    scenario: PropulsionScenario,
+) -> PropulsionMapPoint:
+    """RAMJET_MODE's dispatch target. Priority order (2026-08-12, Gate 2):
+
+    1. **ramjet-fp** (first-principles unsteady quasi-1D model, sibling
+       repo with a pinned editable install) -- the PRIMARY. Always
+       derivable from the case's own flowpath dimensions, guarded by
+       `ramjet_fp_result_is_usable`. Note ``blown_off`` is a USABLE
+       answer (the flame will not hold at this condition; the point
+       carries the cold-throughflow drag and a visible flag) -- the
+       stability physics the native 0D model cannot represent is exactly
+       what this primary contributes to Gate 2/Gate 3.
+    2. The native steady 0D cycle (`evaluate_ramjet`) -- the fallback,
+       and the path taken when `DOUGLAS_DART_DISABLE_RAMJET_FP=1`.
+
+    Demotion is visible via `RAMJET_FP_FALLBACK_FLAG`, never silent; an
+    exception inside the sibling model falls through (a sibling crash
+    must not take down an overnight design run)."""
+
+    if ramjet_fp_primary_enabled():
+        fp_result: "RamjetFpResult | None" = None
+        fp_spec = None
+        try:
+            fp_spec = derive_ramjet_fp_spec(case)
+            fp_result = run_ramjet_fp_query(fp_spec, mach, altitude_m,
+                                            _ramjet_fp_fidelity_default())
+        except Exception:
+            fp_result = None
+        if fp_result is not None and fp_spec is not None \
+                and ramjet_fp_result_is_usable(fp_result):
+            return _ramjet_fp_result_to_point(
+                fp_result, fp_spec, mach, altitude_m, scenario
+            )
+        point = _ramjet_native_point(case, mach, altitude_m, scenario)
+        return dataclasses_replace(
+            point,
+            validity_flags=point.validity_flags + (RAMJET_FP_FALLBACK_FLAG,),
+        )
+    return _ramjet_native_point(case, mach, altitude_m, scenario)
+
+
+def _ramjet_fp_fidelity_default() -> str:
+    """Map-level FP queries default to 'fast' (N=162, ~+-1-3% vs the
+    production grid per the sibling's grid study) so a propulsion-map
+    build stays tractable; override via DOUGLAS_DART_RAMJET_FP_FIDELITY."""
+
+    value = os.environ.get("DOUGLAS_DART_RAMJET_FP_FIDELITY", "fast")
+    return value if value in ("fast", "full") else "fast"
+
+
+def _ramjet_native_point(
     case: ReferenceCase,
     mach: float,
     altitude_m: float,

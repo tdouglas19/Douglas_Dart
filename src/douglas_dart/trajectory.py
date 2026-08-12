@@ -17,8 +17,18 @@ Design choices, stated explicitly so they are not mistaken for validated dynamic
   once per run with :class:`douglas_dart.pulsejet.PulsejetSimulator` at sea level and
   scaled by the local-to-sea-level density ratio. This is a first-order installed
   effect, not a re-run of the unsteady chamber model at every trajectory time step.
-- Ramjet thrust is the steady station model in :mod:`douglas_dart.ramjet`, evaluated
-  at each step's altitude and Mach.
+- Ramjet thrust comes from the first-principles ramjet-fp model (Gate 2
+  primary, see :mod:`douglas_dart.ramjet_fp_bridge`) through a lazy
+  0.1-Mach x 1500-m bilinear table (cycle-mean thrust/fuel of the resolved
+  unsteady engine; corner points computed on demand and memoized -- the
+  same table-not-per-step pattern as the pulsejet). When the FP primary is
+  disabled (``DOUGLAS_DART_DISABLE_RAMJET_FP=1``) or the table cannot be
+  built, each step falls back to the native steady station model in
+  :mod:`douglas_dart.ramjet`, visibly. FP-sourced steps also carry the
+  flame-stability answer: a blown-off cell reports its (negative)
+  cold-throughflow thrust and marks the run's status, so Gate 3 sees the
+  stability physics instead of a thrust curve that silently assumes a lit
+  combustor.
 - The Mach-1.10 hold uses the same linear throttle/fuel scaling already used in
   ``sizing.py`` and is fuel-limited, not duration-prescribed, per the mission
   requirement that speed-run duration is an output, not an input.
@@ -41,6 +51,11 @@ from .propulsion_map import (
     RAMJET_MODE,
     PropulsionScenario,
     evaluate_propulsion_map_point,
+)
+from .ramjet_fp_bridge import (
+    derive_ramjet_fp_spec,
+    get_ramjet_fp_mission_table,
+    ramjet_fp_primary_enabled,
 )
 
 G0_M_PER_S2 = 9.80665
@@ -292,6 +307,7 @@ def simulate_mission(
     max_time_s: float = 900.0,
     record_every_n_steps: int = 4,
     pulsejet_table_fidelity: str = PULSEJET_FIDELITY_FULL,
+    ramjet_table_fidelity: str = "fast",
 ) -> TrajectoryResult:
     """Integrate one phase-based mission from sled release to landing.
 
@@ -348,6 +364,38 @@ def simulate_mission(
     points: list[TrajectoryPoint] = []
     phases: list[PhaseOutcome] = []
     status: list[str] = []
+
+    # Gate 3 ramjet source: the first-principles lazy table when the FP
+    # primary is enabled (see module docstring); native per-step fallback
+    # otherwise, always visibly.
+    ramjet_fp_table = None
+    if ramjet_fp_primary_enabled():
+        try:
+            ramjet_fp_table = get_ramjet_fp_mission_table(
+                derive_ramjet_fp_spec(case), ramjet_table_fidelity
+            )
+        except Exception:
+            ramjet_fp_table = None
+            status.append("ramjet_fp_table_unavailable_fell_back_to_native")
+
+    def _ramjet_thrust_and_fuel(mach_now: float, altitude_now_m: float) -> tuple[float, float]:
+        if ramjet_fp_table is not None:
+            try:
+                thrust_n, fuel_kg_s, flame_ok = ramjet_fp_table.query(
+                    mach_now, altitude_now_m
+                )
+            except Exception:
+                if "ramjet_fp_table_query_failed_fell_back_to_native" not in status:
+                    status.append("ramjet_fp_table_query_failed_fell_back_to_native")
+            else:
+                if not flame_ok and \
+                        "ramjet_fp_flame_unstable_during_ramjet_phase" not in status:
+                    status.append("ramjet_fp_flame_unstable_during_ramjet_phase")
+                return thrust_n * scenario.thrust_multiplier, fuel_kg_s
+        point = evaluate_propulsion_map_point(
+            case, mach_now, altitude_now_m, RAMJET_MODE, scenario=propulsion_scenario
+        )
+        return point.net_thrust_n, point.fuel_mass_flow_kg_per_s
     time_above_mach_one_s = 0.0
     peak_mach_reached = 0.0
     reached_peak_mach_target = False
@@ -479,11 +527,7 @@ def simulate_mission(
             # flight-path angle once inside the regulated Mach 0.8+ regime.
             target_delta_m = speed_run_altitude_m - altitude_m
             gamma_deg = max(0.0, min(6.0, target_delta_m * 0.01))
-            ramjet_point = evaluate_propulsion_map_point(
-                case, mach, altitude_m, RAMJET_MODE, scenario=propulsion_scenario
-            )
-            thrust_n = ramjet_point.net_thrust_n
-            fuel_flow_kg_per_s = ramjet_point.fuel_mass_flow_kg_per_s
+            thrust_n, fuel_flow_kg_per_s = _ramjet_thrust_and_fuel(mach, altitude_m)
             fuel_ledger = "ramjet"
             if mach >= peak_mach:
                 close_phase("reached_peak_mach_target")
@@ -503,10 +547,8 @@ def simulate_mission(
 
         elif phase_name == "mach_hold":
             gamma_deg = 0.0
-            ramjet_point = evaluate_propulsion_map_point(
-                case, mach, altitude_m, RAMJET_MODE, scenario=propulsion_scenario
-            )
-            full_throttle_thrust_n = ramjet_point.net_thrust_n
+            full_throttle_thrust_n, _ramjet_full_fuel_kg_s = \
+                _ramjet_thrust_and_fuel(mach, altitude_m)
             drag = evaluate_total_drag(
                 case,
                 case.flight,
@@ -519,14 +561,14 @@ def simulate_mission(
                 close_phase("insufficient_thrust_margin_to_hold_peak_mach")
                 status.append("cannot_hold_peak_mach_under_scenario_multipliers")
                 thrust_n = full_throttle_thrust_n
-                fuel_flow_kg_per_s = ramjet_point.fuel_mass_flow_kg_per_s
+                fuel_flow_kg_per_s = _ramjet_full_fuel_kg_s
                 fuel_ledger = "ramjet"
                 phase_name, phase_start_t = "zoom_climb", t
                 phase_start_altitude_m, phase_start_mach = altitude_m, mach
             else:
                 throttle_fraction = drag.total_drag_n / full_throttle_thrust_n
                 thrust_n = drag.total_drag_n
-                fuel_flow_kg_per_s = throttle_fraction * ramjet_point.fuel_mass_flow_kg_per_s
+                fuel_flow_kg_per_s = throttle_fraction * _ramjet_full_fuel_kg_s
                 fuel_ledger = "ramjet"
                 if ramjet_fuel_kg <= 0.0:
                     close_phase("ramjet_fuel_exhausted_ending_mach_hold")
