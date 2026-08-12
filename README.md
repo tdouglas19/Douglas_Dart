@@ -47,6 +47,38 @@ print(res.thrust_n, res.frequency_hz, res.status)
 extremes, the Rayleigh index, an independent surface-pressure-integral
 thrust cross-check (eq. 25), and optional full time traces.
 
+## Headline results (FP-1 reference design, sea level)
+
+Static (M=0), production resolution (N=300, ~30 settled cycles): sustained
+limit cycle at **~18–19 N, 160–162 Hz**, chamber pressure swinging
+0.77–1.65× ambient, strongly positive Rayleigh index (heat release
+phase-locked to the pressure wave — emergent, not imposed). The two
+independent thrust formulations (exit momentum flux, eq. 24, vs the exact
+interior-surface momentum-closure identity, eq. 25) agree to <1%.
+
+Thrust vs flight Mach (`out/thrust_vs_mach_FINAL.png`):
+
+- **Side-mounted boundary-layer intake** (inlets perpendicular to flight
+  velocity, static-pressure feed — derivation #8c): operates across the
+  entire sweep **M 0 → 0.9, every point a converged limit cycle**, thrust
+  declining gently 19 → 11.6 N (boundary-layer momentum drag + recovery-
+  heated, less-dense charge). Cold-start and operating branches coincide:
+  the engine is air-startable at any speed in this configuration, because
+  no steady ram bias ever loads the reed petals.
+- **Forward ram intake** (comparison): ram supercharging peaks at
+  ~25 N near M 0.15–0.20 (+30% over static), then the plenum's steady ram
+  bias holds the petals off their seats, the valve stops rectifying, and
+  the engine quenches by M 0.40 — even when approached with the engine
+  already running.
+
+Uncertainty, stated honestly: discretization ~±5% (N=300 vs N=450 grid
+study); the near-threshold oscillator amplifies closure constants (a +3.4%
+heat-release change moved static thrust +34%), so absolute thrust carries
+the assumption registry's stated closure uncertainty, while curve shapes,
+frequencies, and mechanisms (valve rectification, quench boundaries,
+branch structure) are the robust outputs. Adiabatic walls (A6) make
+thrust/TSFC optimistic at this engine scale.
+
 ## Layout
 
 - `src/pulsejet_fp/` — model (`gas`, `geometry`, `valve`, `orifice`,

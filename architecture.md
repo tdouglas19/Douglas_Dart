@@ -262,3 +262,40 @@ IntakeDesign.orientation="side"; all scripts take --side-inlet.
 mechanism is absent exactly as the physics says. Final campaign running:
 frozen-config grid study, M=0 production plots, side-inlet operating +
 cold-start branches, forward-inlet operating branch for comparison.
+
+## 9. Final campaign complete: the deliverable (2026-08-11)
+
+All post-audit-fix production data, frozen FP-1 design (0.5 mm preload):
+
+**M=0 (N=300, 31 cycles)**: 18.2 N @ 162.3 Hz (N=300 grid-study row);
+production plot run 18.6-19.1 N depending on resolution/branch -- p/p0
+0.77-1.65, eq.24/eq.25 agreement <1%, Rayleigh strongly positive. Grid
+study (N=150/200/300/450): 20.2/19.1/18.2/17.5 N, 157.6/160.4/162.3/164.2
+Hz -- ~4%/level thrust drift (the interdiffusion fix made contact physics
+sharper and more resolution-sensitive than the pre-fix study's 1.2%);
+quoted uncertainty: discretization ~+/-5%.
+
+**Side-inlet (user's vehicle config): operates M 0 -> 0.9, all 19 points
+converged on BOTH branches** -- operating: 19.13 -> 11.62 N; cold-start:
+18.24 -> 11.39 N; the branches nearly coincide (no start hysteresis; no
+ram bias on the petals). Gentle monotone decline from BL momentum drag
+(k_bl=0.6) + recovery heating (r=0.9); frequency 160 -> 174 Hz.
+
+**Forward inlet: ram supercharging then valve defeat** -- operating branch
+rises to 24.9 N at M=0.15 (+30%), collapses through M=0.25-0.35
+(period-irregularity at 0.35), quenched from M=0.40 on both branches.
+
+Final deliverables: out/thrust_vs_mach_FINAL.png (side vs forward, both
+branches), thrust_vs_mach_fp1s_side_{operating,coldstart}.csv,
+thrust_vs_mach_fp1_fwd_operating.csv, cycle_fp1s_m0*.png (standard
+two-panel diagnostics), overview_fp1s_m0.png, grid study log. 32/32 tests.
+
+Open follow-ups, priority order: (1) numba/JIT port of the solver hot loop
+(~5-20x) before plugging pulsejet_thrust into any optimizer loop; (2) wall
+heat loss (A6) is the biggest known bias at this scale -- needs either an
+empirical Nusselt closure (clean-room exception to discuss) or a conjugate
+wall model; (3) the audit's verify-phase agents never ran (quota) -- the 6
+finder outputs were self-verified, but an independent verification pass
+would strengthen the audit record; (4) side-inlet external aerodynamics
+(suction/entrainment by the crossflow past the inlet orifice) is neglected
+beyond the static-pressure assumption.
