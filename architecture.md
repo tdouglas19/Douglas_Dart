@@ -334,3 +334,35 @@ point: the altitude thrust penalty (-18% for -5.7% charge density) is ~3x
 the linear density-scaling estimate -- the near-threshold amplitude
 feedback amplifies ambient changes, so flight-condition queries need the
 transient sim, not scaling corrections.
+
+## 11. Douglas Dart integration; the scale-up physics (2026-08-12)
+
+pulsejet-fp is now the PRIMARY pulsejet solver in Douglas_Dart
+(`src/douglas_dart/pulsejet_fp_bridge.py` + PULSEJET_MODE dispatch:
+FP guarded-primary -> km -> native 0D, visible fallback flags, kill-switch
+DOUGLAS_DART_DISABLE_PULSEJET_FP for the legacy suite). Vehicle candidates
+have only chamber_volume_m3 (0.025 m^3, s = 2.84x FP-1), so the bridge
+scales FP-1 isometrically. Getting that right surfaced two real findings:
+
+**Finding 11a — valve dynamic similarity.** First attempt scaled petal
+COUNT (72 small petals) at fixed petal geometry: engine started, ran 4
+ragged cycles, died (valve f_n relatively 7.4x the cycle vs the validated
+2.6x; lift stop relatively choked). Euler-Bernoulli similarity says scale
+the PETALS isometrically instead: f_n ~ h/L^2 ~ 1/s matches the cycle
+scaling exactly, cracking pressure is scale-invariant, lift proportional.
+9 Argus-plausible large petals (57 mm, 0.57 mm steel, 10 mm stop).
+
+**Finding 11b — Damkohler mixing limit (new physics, eq. 12d/A28).** With
+the similar valve the scaled engine still died -- diagnosis via the
+standard plots: 2 MW near-vertical heat-release BANGS. The ZFK closure's
+burn time is chemistry-absolute, so a 2.84x engine burns its 23x charge in
+the same ~2 ms -- an impulsive broadband source that scatters energy into
+high harmonics instead of driving the 48 Hz fundamental. Real turbulent
+combustion saturates at the mixing rate (Damkohler's limit); added
+k_eff = min(kinetic, C_EBU sqrt(k_c)/l_m), C_EBU = 4 (A28). Burn duration
+now scales with engine size. FP-1 regression: 19.26 N @ 147.7 Hz (within
+~3% -- the cap only grazes the small engine, which is why its absence
+never showed at validation scale). Vehicle scale: **133 N @ 59.2 Hz,
+converged, p/p0 0.78-1.56** -- FP-1's dimensionless cycle reproduced at
+2.84x scale, and same order as Douglas Dart's native 0D estimate (182 N
+gross) rather than the km path's known 8x-low bias.

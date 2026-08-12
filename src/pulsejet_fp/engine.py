@@ -34,6 +34,15 @@ class TurbulenceParams:
     mixing_length_frac: float = 0.35  # l_m = frac * D_chamber
     nu_min: float = 2e-5
     k_init: float = 10.0
+    # Damkohler-limit (eddy-breakup) cap on the reaction rate (A28):
+    # reactants cannot burn faster than turbulence delivers them to the
+    # flame, k_mix = c_ebu * sqrt(k_c) / l_m. This is what keeps the burn
+    # duration proportional to engine size (real large pulsejets burn over
+    # a proportional fraction of their cycle); without it the absolute
+    # Arrhenius timescale makes scaled-up engines detonate impulsively and
+    # scatter their energy into high harmonics instead of driving the
+    # fundamental.
+    c_ebu: float = 4.0
 
 
 @dataclass
@@ -285,18 +294,24 @@ class PulsejetEngine:
         rhs2, _ = self._rhs(U1, nu_t)
         self.U = 0.5 * self.U + 0.5 * (U1 + dt * rhs2)
 
-        # ---- jet-strain extinction field (derivation.md #5b, A23) ----
+        # ---- reaction-rate limiting field: Damkohler mixing cap (A28)
+        # + jet-strain extinction (derivation.md #5b, A23) ----
         mdot_v, uj, rho_t = bc1
         prims2 = self._primitives(self.U)
-        quench = None
+        T2 = prims2[4]
+        k_arr = gas.A_r * np.exp(-gas.T_a / T2)
+        k_mix = self.turb.c_ebu * math.sqrt(max(self.k_c, 0.0)) / self.l_m
+        w = self.grid.chamber_weight
+        # cap applies in the chamber zone (where k_c is defined); the pipe
+        # burns residuals kinetics-limited as before
+        cap = np.minimum(1.0, k_mix / np.maximum(k_arr, 1e-30))
+        quench = w * cap + (1.0 - w)
         if mdot_v > 0.0 and abs(uj) > 1.0 and self.valve.lift > 1e-5:
-            T2 = prims2[4]
             s_jet = abs(uj) / max(self.valve.lift, 3e-4)
             L_jet = float(np.clip(15.0 * self.valve.lift, 5e-3,
                                   0.6 * self.geom.chamber_zone_length))
             s = s_jet * np.exp(-self.grid.x / L_jet)
-            k_arr = gas.A_r * np.exp(-gas.T_a / T2)
-            quench = 1.0 / (1.0 + (s * self.Ze2 / np.maximum(k_arr, 1e-30)) ** 2)
+            quench = quench / (1.0 + (s * self.Ze2 / np.maximum(k_arr, 1e-30)) ** 2)
 
         # ---- reaction sub-step (operator split) ----
         if _JIT:

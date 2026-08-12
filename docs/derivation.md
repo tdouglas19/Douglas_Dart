@@ -300,6 +300,26 @@ inherits ~±30% uncertainty in $L_{jet}$, but the *mechanism* — charge
 accumulates unburned while intake is fast, burns when intake slows — is
 strain physics, not a fitted delay).
 
+**Damköhler mixing limit (eq. 12d).** At high Damköhler number the burn
+rate saturates at the turbulent mixing rate — reactants cannot be consumed
+faster than eddies deliver them to reaction surfaces (Damköhler's classic
+limit; the eddy-turnover argument). The chamber-zone kinetic rate is
+therefore capped:
+
+$$ k_{eff} = \min\!\left(A_r e^{-T_a/T},\; C_{EBU}\frac{\sqrt{k_c}}{\ell_m}\right) \tag{12d} $$
+
+(A28: $C_{EBU} = 4$, an O(1) eddy-breakup constant fixed once, same status
+as A11.) This is what makes burn *duration* scale with engine size — the
+mixing rate goes as eddy turnover $\sqrt{k_c}/\ell_m \propto 1/s$ while the
+Arrhenius rate is scale-absolute. Without it, a geometrically-scaled-up
+engine burns its (proportionally larger) charge in the same absolute time:
+an impulsive, near-constant-volume bang that drives every acoustic mode
+broadband instead of feeding the fundamental — observed directly as the
+failure mode of a 2.84×-scale engine before this term was added. At the
+FP-1 reference scale the cap only grazes the hottest instants
+(kinetics-limited regime), which is why the small-engine validation was
+insensitive to its absence.
+
 ---
 
 ## 6. Valve structural dynamics from beam theory
@@ -772,6 +792,7 @@ numerical settings, run in parallel worker processes.
 | A24 | Intake column: frictionless slug + adiabatic plenum (eq. 23b) | Newton's law on the duct column (inertance); isentropic plenum compliance; bellmouth ~loss-free | Duct acoustics unresolved (~0.2 ms) |
 | A25 | Seat preload $\xi_0$ (spring term $k(\xi+\xi_0)$) | Residual-curvature preload restored by the derived cantilever stiffness; standard reed-valve cracking mechanism | $\xi_0$ is a design input |
 | A26 | Side inlet: recovery factor $r = 0.9$ | Crocco–Busemann energy integral gives $r = 1$ at $Pr = 1$; real turbulent air recovers slightly less | Intake density vs M approximate |
+| A28 | Damköhler mixing cap $C_{EBU}=4$ (eq. 12d) | Eddy-turnover delivery limit on consumption rate (Damköhler/eddy-breakup argument) | Burn duration at large scale ± the O(1) constant |
 | A27 | Side inlet: ingested-momentum fraction $k_{bl} = 0.6$ | 1/7-power-law boundary-layer momentum integral brackets 0.4–0.9 by capture height | Ram-drag charge ±30% at high M |
 
 Every other relation in this document — the field equations, valve beam
