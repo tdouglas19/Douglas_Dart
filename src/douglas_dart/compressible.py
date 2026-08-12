@@ -107,7 +107,7 @@ _NOZZLE_ONSET_SMOOTHING_PRESSURE_RATIO_MARGIN = 0.02
 # thrust uncertainty (+/-17%) and every numeric test's assertAlmostEqual
 # tolerance (>= 1e-6) in this repo -- a real speedup with no detectable
 # change in output.
-_BISECTION_ITERATIONS = 30
+_BISECTION_ITERATIONS = 200
 
 
 def _nozzle_onset_smoothing_factor(

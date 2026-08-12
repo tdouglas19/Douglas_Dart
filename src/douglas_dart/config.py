@@ -712,7 +712,7 @@ def load_fuels(fuels_path: str | Path) -> dict[str, Fuel]:
     }
 
 
-def _load_pulsejet_km_engine_config(section: Mapping[str, Any]) -> "PulsejetKmEngineConfig":
+def _load_pulsejet_km_engine_config(section: Mapping[str, Any]) -> "PulsejetKmEngineConfig | None":
     """Build a real pulsejet-km ``EngineConfig`` from an optional YAML
     ``pulsejet_km:`` section -- see ``ReferenceCase.pulsejet_km_engine_config``
     for why this is pulsejet-km's own dataclass shape, not a translation from
@@ -724,12 +724,23 @@ def _load_pulsejet_km_engine_config(section: Mapping[str, Any]) -> "PulsejetKmEn
 
     try:
         from pulsejet_km.config import EngineConfig, EngineGeometry, FuelProperties, ModelConstants, ValvePetalGeometry
-    except ImportError as exc:
-        raise ImportError(
+    except ImportError:
+        # Degrade loudly-but-nonfatally: pulsejet-km is a sibling-checkout
+        # dependency that CI (and fresh clones) legitimately lack. The case
+        # still loads with pulsejet_km_engine_config=None -- PULSEJET_MODE's
+        # dispatch already handles that (falls back with a visible validity
+        # flag), and the km-mode tests skip themselves when the package is
+        # absent. A hard raise here took down every test that merely loads
+        # reference_case.yaml (2026-08-12 CI run on PR #4).
+        import warnings
+
+        warnings.warn(
             "This reference case has a 'pulsejet_km:' section but the pulsejet-km "
-            "package is not installed -- run `pip install -e ../pulsejet-km` "
-            "(see README.md's 'Run locally' section)."
-        ) from exc
+            "package is not installed -- run `pip install -e ../pulsejet-km` to "
+            "enable the pulsejet-km comparison path; continuing without it.",
+            stacklevel=2,
+        )
+        return None
 
     geometry = _mapping(section, "geometry")
     valve_petal = _mapping(section, "valve_petal")

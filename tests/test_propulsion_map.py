@@ -1,4 +1,5 @@
 import dataclasses
+import importlib.util
 import unittest
 from pathlib import Path
 
@@ -105,6 +106,10 @@ class PropulsionMapTests(unittest.TestCase):
         self.assertEqual(above.lightoff_status, "at_or_above_self_sustaining_mach")
 
 
+@unittest.skipIf(
+    importlib.util.find_spec("pulsejet_km") is None,
+    "pulsejet-km sibling checkout not installed (expected on CI/fresh clones)",
+)
 class PulsejetKmModeTests(unittest.TestCase):
     """PULSEJET_KM_MODE: additive third mode, sibling pulsejet-km model
     (docs/pulsejet_external_model_audit.md). Uses reference_case.yaml, not
@@ -160,6 +165,10 @@ class PulsejetKmModeTests(unittest.TestCase):
         self.assertTrue(all(point.mode == PULSEJET_KM_MODE for point in points))
 
 
+@unittest.skipIf(
+    importlib.util.find_spec("pulsejet_km") is None,
+    "pulsejet-km sibling checkout not installed (expected on CI/fresh clones)",
+)
 class PulsejetModeGuardedPrimaryDispatchTests(unittest.TestCase):
     """PULSEJET_MODE's guarded pulsejet-km-first dispatch (propulsion_map.py's
     `_pulsejet_mode_point`, 2026-08-11): pulsejet-km is tried first whenever
