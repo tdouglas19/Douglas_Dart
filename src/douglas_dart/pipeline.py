@@ -778,9 +778,6 @@ def run_all_analyses(
             throat_diameters_m=throat_values,
             exit_to_throat_area_ratios=area_ratios,
             propulsion_derate_fraction=propulsion_derate_fraction,
-            pulsejet_warmup_s=case.simulation.pulsejet_steady_warmup_s,
-            pulsejet_measurement_s=case.simulation.pulsejet_steady_measurement_s,
-            pulsejet_time_step_s=case.simulation.time_step_s,
         )
         selected_nozzle = select_minimum_feasible_shared_nozzle(shared_nozzle_points)
         return (
@@ -867,9 +864,6 @@ def run_all_analyses(
             pulsejet_local_sensitivities(
                 case,
                 perturbation_fraction=0.10,
-                warmup_s=case.simulation.pulsejet_steady_warmup_s,
-                measurement_s=case.simulation.pulsejet_steady_measurement_s,
-                time_step_s=case.simulation.time_step_s,
             )
         )
         points.extend(

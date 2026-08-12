@@ -77,9 +77,10 @@ class Level0FeasibilityTests(unittest.TestCase):
         # window _run_pulsejet_simulation uses). With the configured "side"
         # inlet_type, real cycle period lengthens sharply below roughly
         # Mach 0.3-0.35 (refill is driven by a weak pressure differential
-        # instead of ram pressure -- a side inlet is credited only
-        # SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION of the ram-pressure rise a
-        # straight inlet gets), so a short fixed window there reads as
+        # instead of ram pressure -- a side inlet is credited only a mass-
+        # flow-coefficient-dependent fraction of the ram-pressure rise a
+        # straight inlet gets, see side_inlet_ram_recovery_ratio), so a
+        # short fixed window there reads as
         # near-zero thrust even though the engine is still genuinely firing.
         # 0.5 sits safely above where that fixed-window measurement is valid
         # and below the lightoff gate.

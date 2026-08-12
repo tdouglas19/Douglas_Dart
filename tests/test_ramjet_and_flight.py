@@ -34,6 +34,48 @@ class RamjetAndFlightTests(unittest.TestCase):
             places=12,
         )
 
+    def test_below_lightoff_mach_reports_zero_thrust_not_negative(self):
+        lightoff_mach = self.case.ramjet.minimum_lightoff_test_mach
+        result = evaluate_ramjet(
+            self.case.ramjet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            self.case.mission.speed_run_altitude_msl_m,
+            lightoff_mach - 0.35,
+        )
+        self.assertEqual(result.net_thrust_n, 0.0)
+        self.assertEqual(result.gross_thrust_n, 0.0)
+        self.assertEqual(result.inlet_momentum_drag_n, 0.0)
+        self.assertEqual(result.fuel_mass_flow_kg_per_s, 0.0)
+        self.assertEqual(result.air_mass_flow_kg_per_s, 0.0)
+        self.assertFalse(result.self_sustaining_candidate)
+        self.assertIn("below_configured_lightoff_test_mach", result.status)
+        self.assertIn("ramjet_not_attempted_below_lightoff_mach", result.status)
+        self.assertGreater(result.potential_captured_air_mass_flow_kg_per_s, 0.0)
+
+    def test_thrust_is_continuous_at_the_lightoff_mach_boundary(self):
+        lightoff_mach = self.case.ramjet.minimum_lightoff_test_mach
+        altitude_m = self.case.mission.speed_run_altitude_msl_m
+        just_below = evaluate_ramjet(
+            self.case.ramjet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            altitude_m,
+            lightoff_mach - 1e-6,
+        )
+        at_threshold = evaluate_ramjet(
+            self.case.ramjet,
+            self.case.selector,
+            self.case.nozzle,
+            self.case.fuel,
+            altitude_m,
+            lightoff_mach,
+        )
+        self.assertEqual(just_below.net_thrust_n, 0.0)
+        self.assertGreaterEqual(at_threshold.net_thrust_n, 0.0)
+
     def test_flight_mass_rate_is_negative(self):
         derivative = longitudinal_derivative(
             PointMassState(0.0, 0.0, 100.0, 0.0, self.case.flight.initial_mass_kg),
@@ -90,17 +132,16 @@ class RamjetAndFlightTests(unittest.TestCase):
     def test_ideal_inlet_shock_recovery_is_lossless_below_mach_one(self):
         from douglas_dart.ramjet import ideal_inlet_shock_recovery
 
-        self.assertEqual(ideal_inlet_shock_recovery(0.0, 1.4), 1.0)
-        self.assertEqual(ideal_inlet_shock_recovery(0.99, 1.4), 1.0)
+        self.assertEqual(ideal_inlet_shock_recovery(0.0), 1.0)
+        self.assertEqual(ideal_inlet_shock_recovery(0.99), 1.0)
 
-    def test_ideal_inlet_shock_recovery_matches_normal_shock_relation_above_mach_one(self):
-        from douglas_dart.compressible import normal_shock_total_pressure_ratio
+    def test_ideal_inlet_shock_recovery_matches_mil_e_5008b_above_mach_one(self):
         from douglas_dart.ramjet import ideal_inlet_shock_recovery
 
         for mach in (1.05, 1.10, 1.30, 2.0):
             self.assertAlmostEqual(
-                ideal_inlet_shock_recovery(mach, 1.4),
-                normal_shock_total_pressure_ratio(mach, 1.4),
+                ideal_inlet_shock_recovery(mach),
+                1.0 - 0.075 * (mach - 1.0) ** 1.35,
                 places=12,
             )
 
@@ -108,7 +149,7 @@ class RamjetAndFlightTests(unittest.TestCase):
         from douglas_dart.ramjet import ideal_inlet_shock_recovery
 
         machs = [1.0, 1.05, 1.10, 1.30, 1.60, 2.0]
-        recoveries = [ideal_inlet_shock_recovery(m, 1.4) for m in machs]
+        recoveries = [ideal_inlet_shock_recovery(m) for m in machs]
         self.assertTrue(all(a >= b for a, b in zip(recoveries, recoveries[1:])))
 
 

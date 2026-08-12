@@ -11,7 +11,12 @@ import yaml
 
 from .atmosphere import G0_M_PER_S2, standard_atmosphere
 from .config import ReferenceCase
-from .propulsion_map import RAMJET_MODE, PropulsionScenario, evaluate_propulsion_map_point
+from .propulsion_map import (
+    PULSEJET_FIDELITY_FULL,
+    RAMJET_MODE,
+    PropulsionScenario,
+    evaluate_propulsion_map_point,
+)
 from .sizing import evaluate_shared_nozzle_trade, geometrically_scaled_drag_area_target_m2
 
 
@@ -242,6 +247,8 @@ def _evaluate_scenario(
 def run_robustness_trade(
     case: ReferenceCase,
     robustness_path: str | Path,
+    *,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> RobustnessTradeResult:
     data = _load_yaml(robustness_path)
     mass_budget = summarize_mass_budget(case, robustness_path)
@@ -266,9 +273,7 @@ def run_robustness_trade(
                     throat_diameter_m,
                     area_ratio,
                     propulsion_derate_fraction=0.0,
-                    pulsejet_warmup_s=float(sweep["pulsejet_warmup_s"]),
-                    pulsejet_measurement_s=float(sweep["pulsejet_measurement_s"]),
-                    pulsejet_time_step_s=float(sweep["pulsejet_time_step_s"]),
+                    pulsejet_fidelity=pulsejet_fidelity,
                 )
                 scenario_results = tuple(
                     _evaluate_scenario(

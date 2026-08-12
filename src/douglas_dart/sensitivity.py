@@ -6,7 +6,12 @@ from dataclasses import dataclass, replace
 from typing import Iterable
 
 from .config import ReferenceCase
-from .propulsion_map import PULSEJET_MODE, RAMJET_MODE, evaluate_propulsion_map_point
+from .propulsion_map import (
+    PULSEJET_FIDELITY_FULL,
+    PULSEJET_MODE,
+    RAMJET_MODE,
+    evaluate_propulsion_map_point,
+)
 
 
 @dataclass(frozen=True)
@@ -131,9 +136,19 @@ def _ramjet_case_modifier(
         "mass_capture_coefficient",
         "combustor_total_pressure_loss_fraction",
         "combustor_efficiency",
-        "target_combustor_exit_temperature_k",
     }:
         return replace(case, ramjet=replace(case.ramjet, **{variable: value}))
+    if variable == "ramjet_target_equivalence_ratio":
+        # Prefixed like selector_ramjet_total_pressure_recovery above --
+        # RamjetConfig.target_equivalence_ratio and PulsejetConfig's own field
+        # of the same name are genuinely different values (2026-08-10 session),
+        # so the shared _input_values sources dict below needs a distinct
+        # public variable name even though the underlying config field name
+        # (target_equivalence_ratio) is identical on both.
+        return replace(
+            case,
+            ramjet=replace(case.ramjet, target_equivalence_ratio=value),
+        )
     if variable == "fuel_lower_heating_value_j_per_kg":
         return replace(
             case,
@@ -166,9 +181,7 @@ def _input_values(
             case.ramjet.combustor_total_pressure_loss_fraction
         ),
         "combustor_efficiency": case.ramjet.combustor_efficiency,
-        "target_combustor_exit_temperature_k": (
-            case.ramjet.target_combustor_exit_temperature_k
-        ),
+        "ramjet_target_equivalence_ratio": case.ramjet.target_equivalence_ratio,
         "fuel_lower_heating_value_j_per_kg": case.fuel.lower_heating_value_j_per_kg,
     }
     if variable not in sources:
@@ -187,18 +200,14 @@ def _input_values(
 
 def _pulsejet_outputs(
     case: ReferenceCase,
-    warmup_s: float,
-    measurement_s: float,
-    time_step_s: float,
+    pulsejet_fidelity: str,
 ) -> tuple[float, float, float]:
     point = evaluate_propulsion_map_point(
         case,
         case.mach,
         case.altitude_m,
         PULSEJET_MODE,
-        pulsejet_warmup_s=warmup_s,
-        pulsejet_measurement_s=measurement_s,
-        pulsejet_time_step_s=time_step_s,
+        pulsejet_fidelity=pulsejet_fidelity,
     )
     return (
         point.net_thrust_n,
@@ -222,34 +231,21 @@ def pulsejet_local_sensitivities(
     ),
     *,
     perturbation_fraction: float = 0.10,
-    warmup_s: float = 0.25,
-    measurement_s: float = 0.25,
-    time_step_s: float = 0.00004,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> list[EngineSensitivityPoint]:
     if not 0.0 < perturbation_fraction < 1.0:
         raise ValueError("perturbation fraction must be in (0, 1)")
-    if warmup_s <= 0.0 or measurement_s <= 0.0:
-        raise ValueError("pulsejet warmup and measurement durations must be positive")
-    baseline_outputs = _pulsejet_outputs(
-        case,
-        warmup_s,
-        measurement_s,
-        time_step_s,
-    )
+    baseline_outputs = _pulsejet_outputs(case, pulsejet_fidelity)
     points: list[EngineSensitivityPoint] = []
     for variable in variables:
         low, baseline, high = _input_values(case, variable, perturbation_fraction)
         low_outputs = _pulsejet_outputs(
             _pulsejet_case_modifier(case, variable, low),
-            warmup_s,
-            measurement_s,
-            time_step_s,
+            pulsejet_fidelity,
         )
         high_outputs = _pulsejet_outputs(
             _pulsejet_case_modifier(case, variable, high),
-            warmup_s,
-            measurement_s,
-            time_step_s,
+            pulsejet_fidelity,
         )
         points.append(
             EngineSensitivityPoint(
@@ -311,7 +307,7 @@ def ramjet_local_sensitivities(
         "mass_capture_coefficient",
         "combustor_total_pressure_loss_fraction",
         "combustor_efficiency",
-        "target_combustor_exit_temperature_k",
+        "ramjet_target_equivalence_ratio",
         "fuel_lower_heating_value_j_per_kg",
     ),
     *,

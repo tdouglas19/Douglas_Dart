@@ -7,8 +7,14 @@ from math import floor, sqrt
 
 from .atmosphere import G0_M_PER_S2, standard_atmosphere
 from .config import ReferenceCase
-from .propulsion_map import RAMJET_MODE, evaluate_propulsion_map_point
-from .pulsejet import PulsejetSimulator, summarize_pulsejet
+from .propulsion_map import (
+    PULSEJET_FIDELITY_FULL,
+    RAMJET_MODE,
+    evaluate_propulsion_map_point,
+    pulsejet_cycle_bounds_for_fidelity,
+    pulsejet_time_step_s_for_fidelity,
+)
+from .pulsejet import run_pulsejet_to_converged_cycle_average
 from .ramjet import evaluate_ramjet
 
 
@@ -96,8 +102,12 @@ class SharedNozzleTradePoint:
     pulsejet_peak_chamber_pressure_pa: float
     pulsejet_peak_chamber_temperature_k: float
     pulsejet_completed_cycles: int
-    pulsejet_warmup_duration_s: float
-    pulsejet_measurement_duration_s: float
+    pulsejet_cycle_average_converged: bool
+    """False if the convergence-driven cycle average (pulsejet.py's
+    run_pulsejet_to_converged_cycle_average, cycle_based_averaging_fix.md)
+    hit its cycle cap without settling inside tolerance -- see
+    pulsejet_completed_cycles for how many post-transient cycles were
+    actually averaged."""
     pulsejet_mean_net_thrust_to_weight: float
     loaded_mass_margin_to_requirement_kg: float
     propulsion_derate_fraction: float
@@ -416,9 +426,7 @@ def evaluate_shared_nozzle_trade(
     exit_to_throat_area_ratio: float,
     *,
     propulsion_derate_fraction: float = 0.15,
-    pulsejet_warmup_s: float | None = None,
-    pulsejet_measurement_s: float | None = None,
-    pulsejet_time_step_s: float | None = None,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> SharedNozzleTradePoint:
     """Evaluate one fixed throat/exit geometry in both propulsion modes.
 
@@ -503,39 +511,26 @@ def evaluate_shared_nozzle_trade(
         )
         hold_distance_m = speed_m_per_s * hold_duration_s
 
-    warmup_s = (
-        case.simulation.pulsejet_steady_warmup_s
-        if pulsejet_warmup_s is None
-        else pulsejet_warmup_s
-    )
-    measurement_s = (
-        case.simulation.pulsejet_steady_measurement_s
-        if pulsejet_measurement_s is None
-        else pulsejet_measurement_s
-    )
-    if warmup_s <= 0.0 or measurement_s <= 0.0:
-        raise ValueError("pulsejet warmup and measurement durations must be positive")
-    time_step_s = (
-        case.simulation.time_step_s
-        if pulsejet_time_step_s is None
-        else pulsejet_time_step_s
-    )
     # Intentionally NOT migrated to propulsion_map.py: this report needs
     # peak_net_thrust_n and completed_cycles, which PropulsionMapPoint
     # deliberately omits (peaks/cycle-counts are pulsejet-specific report
     # detail, not part of the common cross-mode schema -- see
-    # propulsion_map.py's module docstring).
-    pulsejet = PulsejetSimulator(
+    # propulsion_map.py's module docstring). Still uses the shared
+    # convergence-driven cycle average (pulsejet.py, cycle_based_averaging_
+    # fix.md) directly, not a fixed warmup_s/measurement_s window, and the
+    # same fixed fidelity tiers (dt_convergence_solver_spec.md) rather than a
+    # raw dt float.
+    _cycle_cap, _simulated_time_cap_s = pulsejet_cycle_bounds_for_fidelity(pulsejet_fidelity)
+    pulsejet_summary = run_pulsejet_to_converged_cycle_average(
         case.pulsejet,
         case.selector,
         nozzle,
         case.fuel,
         case.altitude_m,
         case.mach,
-    )
-    pulsejet_summary = summarize_pulsejet(
-        pulsejet.run(warmup_s + measurement_s, time_step_s),
-        minimum_time_s=warmup_s,
+        pulsejet_time_step_s_for_fidelity(pulsejet_fidelity),
+        _maximum_cycles_override=_cycle_cap,
+        _maximum_simulated_time_s_override=_simulated_time_cap_s,
     )
     pulsejet_thrust_to_weight = pulsejet_summary.mean_net_thrust_n / (
         case.flight.initial_mass_kg * G0_M_PER_S2
@@ -566,7 +561,11 @@ def evaluate_shared_nozzle_trade(
         status.append("configured_loaded_mass_exceeds_requirement")
     if pulsejet_summary.mean_net_thrust_n <= 0.0:
         status.append("pulsejet_mean_net_thrust_nonpositive")
-    status.append("pulsejet_statistics_exclude_configured_startup_transient")
+    if pulsejet_summary.averaged_cycles == 0:
+        status.append("pulsejet_no_completed_cycles_within_simulation_cap")
+    elif not pulsejet_summary.converged:
+        status.append("pulsejet_cycle_average_did_not_converge")
+    status.append("pulsejet_statistics_exclude_startup_transient")
 
     return SharedNozzleTradePoint(
         altitude_m=altitude_m,
@@ -604,9 +603,8 @@ def evaluate_shared_nozzle_trade(
         pulsejet_peak_chamber_temperature_k=(
             pulsejet_summary.peak_chamber_temperature_k
         ),
-        pulsejet_completed_cycles=pulsejet_summary.completed_cycles,
-        pulsejet_warmup_duration_s=warmup_s,
-        pulsejet_measurement_duration_s=measurement_s,
+        pulsejet_completed_cycles=pulsejet_summary.averaged_cycles,
+        pulsejet_cycle_average_converged=pulsejet_summary.converged,
         pulsejet_mean_net_thrust_to_weight=pulsejet_thrust_to_weight,
         loaded_mass_margin_to_requirement_kg=mass_margin_kg,
         propulsion_derate_fraction=propulsion_derate_fraction,
@@ -625,9 +623,7 @@ def shared_nozzle_trade_sweep(
     exit_to_throat_area_ratios: list[float] | tuple[float, ...],
     *,
     propulsion_derate_fraction: float = 0.15,
-    pulsejet_warmup_s: float | None = None,
-    pulsejet_measurement_s: float | None = None,
-    pulsejet_time_step_s: float | None = None,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> list[SharedNozzleTradePoint]:
     if not body_diameters_m or not throat_diameters_m or not exit_to_throat_area_ratios:
         raise ValueError("shared-nozzle sweep arrays cannot be empty")
@@ -638,9 +634,7 @@ def shared_nozzle_trade_sweep(
             throat_diameter_m,
             area_ratio,
             propulsion_derate_fraction=propulsion_derate_fraction,
-            pulsejet_warmup_s=pulsejet_warmup_s,
-            pulsejet_measurement_s=pulsejet_measurement_s,
-            pulsejet_time_step_s=pulsejet_time_step_s,
+            pulsejet_fidelity=pulsejet_fidelity,
         )
         for body_diameter_m in body_diameters_m
         for throat_diameter_m in throat_diameters_m

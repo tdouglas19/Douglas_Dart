@@ -736,3 +736,864 @@ scale correctly if the selector intake diameter trade ever moves, instead of nee
 a manual absolute-dimension update; the resulting geometry is numerically close to
 the prior hand-picked values (was 70-80 mm length / 5-6 mm lip thickness at 195 mm
 intake diameter).
+
+## Low-Mach thrust magnitude sanity check: real, but explained by duty cycle, not a bug
+
+The unsteady simulator's low-Mach (M=0.05-0.30) net thrust, with the inlet-inertia
+fix in place and evaluated at full fidelity (`warmup_s=measurement_s=0.25`,
+`time_step_s=0.00005`), is ~2.3-3.3N across that band -- confirmed by direct
+re-run, not just the earlier session's report. A naive capture-area scale of the
+externally cited NACA MR E5J02 static result (2224N from a 22-inch/0.559 m intake)
+down to this vehicle's 195 mm intake, `(0.195/0.559)^2 = 0.122`, predicts ~271N --
+roughly **90-115x** higher than what this model produces. That NACA figure is taken
+from the planning document that supplied it, not re-derived from the primary
+source in this repo; treat its exact value as unverified within this codebase even
+though the qualitative comparison below still holds regardless of moderate error in
+it.
+
+This is a real, large gap, but it does not indicate a bug once duty cycle is
+accounted for. Re-running the reference case at M=0.10 shows ignition events at
+t=0.0013, 0.861, 1.825 s -- a real cycle period of ~0.86-0.96 s, against
+`PulsejetConfig.minimum_cycle_period_s = 0.014` s (the tuned/design period). That is
+a duty cycle of roughly 1.5-2% of design frequency: at low Mach, refill is starved
+(only the small `inlet_total_pressure_pa` minus blown-down chamber pressure
+differential drives inflow, not ram pressure -- see `propulsion_map.py`'s adaptive-
+window comment), so the engine fires far less often than a resonance-tuned engine
+like NACA's reference would. A ~60x lower firing rate, compounded with
+`SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION = 0.15` crediting only a fraction of
+whatever ram pressure exists at low Mach, plausibly accounts for the full ~90-115x
+gap without requiring a modeling defect.
+
+**Conclusion**: the low-Mach thrust magnitude is gated by cycle period, not simply
+"how much air the intake can capture." This reinforces (does not newly reveal) why
+the fluid-inertance/side-inlet-recovery work targets the refill-phase mass flow --
+that is the actual lever on this number -- and it is a genuine open question whether
+this vehicle's cycle period should realistically be this long at low Mach, or
+whether the refill-phase physics (inertance duct sizing, check-valve idealization)
+is itself under-predicting inflow. Not resolved here; flagged for the closed-form
+and phase-lag work already in progress to address, not force-fit away.
+
+## Ramjet nozzle near-critical onset smoothing: a real, consequential fix
+
+`compressible.py`'s `fixed_cd_nozzle` had a hard `chamber_total_pressure_pa <=
+ambient_pressure_pa` gate returning exactly zero mass flow. Direct re-derivation
+this session found the underlying isentropic relation is actually continuous across
+that boundary (`_mach_from_static_pressure_ratio`'s limit as pressure ratio -> 1 is
+genuinely zero) -- but with an infinite initial slope (mach ~ sqrt(2*(1-ratio)/gamma)
+near the crossing), the same square-root-of-differential-pressure behavior any
+small-driving-pressure nozzle shows. Combined with the ramjet's momentum drag
+(mdot * V_freestream, mdot ~ sqrt(eps)) growing far faster near the crossing than
+gross thrust (mdot * V_exit, both ~ sqrt(eps), so gross ~ eps), this produced a real
+but numerically pathological narrow trough -- confirmed by direct fine-resolution
+evaluation at 0.0005 Mach steps: net thrust plunged to -16.31N within 0.005 Mach of
+the M=0.46 crossing (`evaluate_ramjet` on `reference_case.yaml`), a cusp sharp enough
+to look like a hard binary cutoff to any coarse Mach sweep, search algorithm, or
+interpolation. Fixed with `_nozzle_onset_smoothing_factor` (`compressible.py`): a
+smoothstep blend of the isentropic exit Mach over a small (2%, unsourced engineering
+regularization, not a physical value)  pressure-ratio margin approaching the
+crossing, giving the curve zero slope there instead of infinite slope. The trough is
+now shallower per-Mach-step but wider (bottoms near -17.2N around M=0.48 instead of
+-16.3N at M=0.47), and the choked-regime plateau above M~0.535 is essentially
+unchanged (was 39.49N at M=0.54, still ~39.5N).
+
+**This is not cosmetic.** `shared_nozzle_candidate_b.yaml`'s adverse-scenario mission
+trajectory was riding the exact top edge of the old cusp: before this fix, the
+pulsejet climb reached `dive_entry_mach=0.45`, dove to `ramjet_lightoff_mach=0.50`
+(landing right at the boundary), then immediately stalled
+(`nonpositive_ramjet_net_thrust_cannot_accelerate`) -- `adverse_peak_mach` reported as
+0.5006, just barely counted as "reaching" ramjet range. After the fix, the same
+mission simply never reaches `dive_entry_mach` at all: pulsejet climb runs out of
+mission time first, and `adverse_peak_mach` plateaus at 0.386 -- identically,
+regardless of `ramjet_fuel_fraction` (checked 0.05-0.892) or `dive_angle_deg`/
+`dive_entry_mach` (checked a 4x3 grid). The old "crossing" result was an artifact of
+landing exactly on top of the un-smoothed cusp's peak, not a robust margin -- this
+fix makes that visible rather than hiding it, consistent with this codebase's
+practice of surfacing real feasibility gaps (`test_optimizer.py`'s and
+`test_robustness.py`'s expected values updated accordingly to the new real,
+recomputed numbers, not guessed).
+
+Two concrete, verified effects, both real re-runs, not estimates:
+- `robustness.py`'s minimum-feasible trade shifted back from 210/170 mm to 205/160 mm
+  (the pulsejet inertia fix's own earlier 210/170 mm shift, described above, is
+  partially undone by this fix reducing ramjet contribution near the transition band).
+- The differential-evolution search's own "did not find a design that closes under
+  both scenarios" finding (above, "Coupled mission-level design search") is now
+  **more severe for this exact design point**: no explored fuel split reaches ramjet
+  range at all in the adverse scenario, not merely a duration-closure shortfall past
+  a reached ramjet Mach. Whether a materially different geometry (larger throat, more
+  aggressive dive) can still close under the corrected model is open -- the coupled
+  search documented above was run before this fix and should be considered stale for
+  any conclusion involving the M=0.46-0.53 transition band specifically.
+
+  (This finding is itself superseded by the side-inlet ram recovery fix immediately
+  below -- see that section for the updated picture.)
+
+## Side-inlet ram recovery: real correlation, and it reopens the ramjet crossing
+
+`pulsejet.py`'s `SIDE_INLET_RAM_PRESSURE_CREDIT_FRACTION = 0.15` (an unsourced flat
+placeholder) is replaced by `side_inlet_ram_recovery_ratio`, a real correlation from
+Hall & Frank, NACA RM A8I29 (1948), "Ram-Recovery Characteristics of NACA Submerged
+Inlets at High Subsonic Speeds" -- flush fuselage inlets, matching this vehicle's
+confirmed flush/side-mounted reed-valve architecture (unlike the previously-considered
+NACA MR E5J02, a forward-facing inlet that doesn't apply here). The correlation is a
+function of mass-flow coefficient (captured mass flow / freestream mass flow through
+the capture area), not Mach: 0.50 at zero flow, 0.90 at a 0.6 mass-flow coefficient,
+0.95 near 1.0 (Mach/angle-of-attack effects reported under 0.03, not modeled). Coupled
+to the fluid-inertance inlet model, not independent: `PulsejetSimulator.step()`
+recomputes the recovery ratio every step from the *previous* step's own
+`inlet_mass_flow_kg_per_s` state (the same quasi-steady, lagged coupling the
+inertance ODE's own explicit-Euler integration already uses), rather than assuming a
+separate flow rate.
+
+The floor value (0.50) is more than 3x the old flat 0.15 credit, so this raises
+pulsejet thrust broadly, not just at high flow -- confirmed by direct re-run of the
+robustness trade and the mission-level crossing check used above:
+
+- `robustness.py`'s minimum-feasible trade moved from 205/160 mm (after the nozzle
+  smoothing fix alone) back to 210/170 mm.
+- The mission-level crossing check above (`shared_nozzle_candidate_b.yaml`,
+  `body_diameter_m=0.21`, `throat_diameter_m=0.14`) now crosses into ramjet range in
+  the adverse scenario again, reliably: checked `ramjet_fuel_fraction` from 0.05 to
+  0.892, and **every value** produces the identical outcome, `adverse_peak_mach =
+  0.5080459099127839` and `score = -6692.232342970098` (both exact matches across
+  the whole range, not approximate). The trajectory: pulsejet climb reaches
+  `dive_entry_mach`, dive reaches `ramjet_lightoff_mach`, then `ramjet_accel`
+  immediately terminates with `nonpositive_ramjet_net_thrust_cannot_accelerate` --
+  the M~0.50-0.51 crossing lands inside the still-negative part of the smoothed
+  trough (see the section above; the trough's zero-crossing is near M=0.4975-0.50 in
+  the bare `evaluate_ramjet` function, but this trajectory's exact flight state lands
+  it just inside the negative side). Because this failure depends only on the
+  instantaneous flight condition at the lightoff boundary, not on how much fuel was
+  allocated to the ramjet, **no fuel split changes the outcome** -- `test_optimizer.py`'s
+  crossing-reward test, which specifically checked that fuel allocation could tip this
+  balance, no longer has anything to differentiate and is skipped with a citation to
+  this section rather than force-fit to a new pair of numbers that don't actually
+  differ.
+
+**Net picture across all three fixes this session (inertia -> nozzle smoothing ->
+side-inlet recovery)**: the vehicle now reliably *reaches* ramjet lightoff Mach in the
+adverse scenario (a real improvement -- it previously either barely grazed it by
+coincidence or missed it entirely, depending on which intermediate fix state is
+compared). But it cannot yet produce positive net thrust there, so it still cannot
+cross into self-sustaining ramjet operation under adverse conditions, for any tested
+fuel allocation. This narrows the open problem considerably: it is no longer "does
+the vehicle ever reach ramjet range" but specifically "why is ramjet net thrust still
+negative in the M~0.50-0.53 window right at this design point's crossing," which is a
+`ramjet.py`/nozzle-geometry/`minimum_lightoff_test_mach` question, not a pulsejet-side
+one -- worth investigating directly (e.g. does a larger throat or different area ratio
+move the positive-thrust onset below the actual crossing Mach?) before re-running the
+full differential-evolution search, since the search itself would otherwise spend most
+of its budget rediscovering this same local structure.
+
+## Calibration DOE sizing: re-measured cost, and a philosophy check before running anything
+
+Re-measured directly against the current code (inertia + nozzle-smoothing + side-inlet
+recovery all in place), an 11-Mach-point pulsejet table now costs:
+
+- **Fast fidelity** (`warmup_s=measurement_s=0.10`, `time_step_s=0.0001`, `optimizer.py`
+  defaults): 22.5s / 11 points ~= 2.05s/point. Slightly worse than the earlier ~19.3s/11
+  points reported before this session's fixes -- the per-step side-inlet recovery
+  recalculation and the wider nozzle-onset trough both add real cost, not just the
+  inertia model alone.
+- **Full fidelity** (`warmup_s=measurement_s=0.25`, `time_step_s=0.00005`,
+  `trajectory.py` defaults): 101.9s / 11 points ~= 9.3s/point -- ~4.5x fast fidelity.
+
+A full pop-70/gen-250 differential-evolution search (17,500 candidates x 11-point
+pulsejet tables) would now cost ~109 hours at fast fidelity, ~496 hours at full
+fidelity -- both worse than the ~94-hour figure reported before this session, not
+better. This *strengthens*, not weakens, the case for the closed form as the search's
+actual propulsion model.
+
+**But before sizing a large internal-simulator calibration DOE, a real conflict needs
+resolving first, not silently worked around:** the governing unified plan's own stated
+philosophy is "stop calibrating the pulsejet closed form against our own
+`PulsejetSimulator` ... validate against real external data instead" (NASA/TM-2008-215432,
+Litke/Schauer/Paxson) -- `PulsejetSimulator` is explicitly repurposed for
+design-sensitivity work only, not as ground truth. A large internal-simulator DOE built
+to *calibrate* the closed form the way `pulsejet_calibration_fit.py`/
+`pulsejet_calibration_generate.py` (this session's untracked scripts, predating the
+philosophy pivot) currently do would directly contradict that decision. Recommendation,
+not yet executed pending confirmation:
+
+1. **Do not run a large calibration-DOE sweep against `PulsejetSimulator`** for the
+   closed form's coefficients -- that whole approach is superseded per the unified
+   plan, regardless of how affordable it is now. `configs/pulsejet_closed_form_calibration.yaml`
+   and the `pulsejet_calibration_*.py` scripts are stale artifacts of the pre-pivot
+   approach and should be treated as such (not deleted without confirming, since they
+   may still be useful as a design-sensitivity harness once repurposed, but not as
+   calibration inputs).
+2. **What a DOE is still legitimately needed for**: `PulsejetSimulator`'s new
+   design-sensitivity role (Part 3's own stated purpose -- "how thrust shifts with
+   chamber volume, intake diameter, and other geometry changes"). At ~2.05s/point fast
+   fidelity, a bounded sensitivity sweep (e.g. 5 geometry variables x 5 levels x 11 Mach
+   points = 1,375 points ~= 47 minutes) is comfortably affordable without any special
+   sparsity treatment -- the ~100+ hour cost problem is specific to the *unbounded*
+   17,500-candidate differential-evolution search, not to a designed sensitivity study.
+3. **The closed form itself** should validate against the external NASA/Litke data
+   points directly (a handful of spot checks, not a DOE) once Part 3's static-baseline
+   derivation (still blocked on this session's other open items) exists to validate.
+
+This is a scope/direction question, not a technical blocker -- flagging for
+confirmation before any further calibration-shaped work proceeds, rather than
+defaulting back to the pre-pivot approach because its scripts already exist.
+
+**Self-correction (2026-08-09):** picked up the closed-form task after the Gate 3
+architectural-blocker finding below and started re-running exactly the superseded
+approach this section warns against -- fixed `pulsejet_calibration_generate.py`'s
+stale API call (harmless, real bugfix, left in place) and launched it against
+`PulsejetSimulator` to rebuild the Mach-sweep calibration dataset. Caught and killed
+before it produced output: this section, written earlier in the same session, already
+flags that path as superseded pending confirmation, and no confirmation was given.
+Leaving both this task and Task 7 pending rather than proceeding further -- the
+external-data-validation approach recommendation above still stands, unexecuted.
+
+## Cycle-based convergent averaging: fixed, confirmed by direct re-plot
+
+Per `cycle_based_averaging_fix.md` (2026-08-08, user-supplied): the pulsejet path's
+fixed `warmup_s`+`measurement_s` wall-clock averaging window caught a different,
+non-integer number of real ignition cycles at each Mach step, producing broad
+sawtooth jaggedness in every Mach sweep this session had regenerated -- confirmed
+present in all three "regenerated plots" from earlier in this session, absent from
+the smooth closed-form-free ramjet curve (the control case, unaffected since
+`evaluate_ramjet` is a steady closed form with no cycle concept). Structurally the
+same class of bug as the original Gate 2 fast/full-fidelity mismatch: two callers
+choosing different window settings could disagree on the same physical question.
+
+Replaced the fixed window with `pulsejet.py`'s
+`run_pulsejet_to_converged_cycle_average`: detects real ignition-cycle boundaries
+directly from the simulator's own `event == "ignition"` trigger (no separate
+detection algorithm), discards the first 2 completed cycles as startup transient,
+then accumulates a running per-cycle average and stops once it has held inside
+tolerance (max of 0.1% relative or 0.05N absolute, on net thrust) for 3 consecutive
+cycle updates -- or reports `converged=False` if a 30-cycle cap is hit first
+(matching `ramjet.py`'s own supercritical-recovery iteration-cap convention), never
+silently trusting an unconverged value. Tolerance and the cycle cap are fixed
+internal constants now, not caller-adjustable parameters -- `warmup_s`/`measurement_s`
+no longer exist as a concept anywhere in the propulsion-map-routed path
+(`propulsion_map.py`, `trajectory.py`, `optimizer.py`, `robustness.py`,
+`sensitivity.py`, `sizing.py`'s `evaluate_shared_nozzle_trade` which is load-bearing
+for `robustness.py`'s trade search, not just a report) -- this closes out that half
+of the original Gate 2 fidelity bug for the unsteady-sim path. `time_step_s` (dt)
+remains caller-adjustable, deliberately: cycle-counting and integration step size
+are separate concerns (the fix doc's step 7), and dt's own convergence study is not
+done here.
+
+**Not touched, deliberately scoped out**: three genuinely standalone diagnostic call
+sites that construct `PulsejetSimulator` directly for raw per-step sample dumps or
+conservation audits (`pipeline.py`'s pulsejet diagnostic stage, `cli.py`'s standalone
+`pulsejet` command) -- already documented in `propulsion_map.py`'s own docstring as
+intentional exceptions that don't feed another design calculation, so migrating them
+doesn't change any design conclusion. Flagged here so this remaining gap doesn't go
+unnoticed, not because it's been forgotten.
+
+**Validated by direct re-run, not assumed**: regenerated all three thrust-vs-Mach
+plots (`scripts/plot_thrust_vs_mach.py`, `scripts/plot_thrust_curves.py`) at dense
+Mach sampling (0.01 step, 100+ points) with the new convergence-driven averaging.
+The broad structural jaggedness tracking Mach step-to-step is gone in all three --
+`reference_case.yaml`'s pulsejet curve is now a single smooth rise/dip/climb shape
+end to end, and the fast-vs-full-dt comparison plot shows both dt curves tracking
+each other closely with only fine-scale local wiggle remaining (expected, per the
+fix doc's own prediction -- that residual is dt sensitivity, a separate still-open
+concern, not evidence the windowing fix failed).
+
+**Real cost, measured not assumed**: a 20-point Mach sweep (`reference_case.yaml`,
+full-fidelity dt=5e-5) averaged 6.5s/point (range 1.9-17.1s), noticeably uneven --
+some points converge in 5-9 cycles, others need the full 30-cycle cap without
+settling (observed at M=0.65, 0.70, 1.00 on this exact sweep: `converged=False`,
+correctly flagged via `cycle_average_did_not_converge` rather than silently
+reported). This is not uniformly faster or slower than the old fixed-window
+approach -- exactly the caveat the fix doc itself flagged in advance.
+
+## Sawtooth root cause: a real damped cycle-to-cycle oscillation, not dt noise
+
+The plots above still showed fine-scale zigzag after the fix, concentrated around
+M=0.6-0.75. Direct instrumentation of the raw (unaveraged) per-cycle net thrust
+inside a single Mach point found the actual cause: the pulsejet has a genuine,
+physical damped oscillation from cycle to cycle, not measurement noise. At M=0.65
+(`reference_case.yaml`), consecutive post-transient cycles ran:
+
+```
+33 -> 338 -> 103 -> 257 -> 128 -> 226 -> 141 -> 218 -> 147 -> 208 -> 154 -> 198 -> 159 ...
+```
+
+still visibly alternating strong/weak after 13 cycles. Mechanism: a strong ignition
+burns more of the chamber's fuel/air, leaving less behind for the next refill, so
+the next cycle ignites weaker -- which under-consumes the reservoir, so the cycle
+after that is strong again. This decays toward a true limit cycle, but how fast
+varies a lot by Mach (M=0.45 and M=0.8 damp out in ~3-4 cycles in the original,
+looser check; M=0.35 and M=0.65 were still swinging after 13).
+
+The original fix's convergence check (running-mean stability only) was not a
+reliable signal for this: because each new cycle's influence on a cumulative mean
+shrinks as roughly 1/N, the running mean can stop moving by tolerance well before
+the underlying oscillation has actually decayed -- so some Mach points reported a
+"converged" value that still carried a phase-dependent residual bias, and this
+residual varied unpredictably point to point as Mach stepped by 0.01. Confirmed
+directly: at M=0.61-0.70 and M=0.74, nearly every point hit the original 30-cycle
+cap and reported `converged=False` (a partial average taken mid-oscillation),
+while immediately adjacent points (M=0.71-0.73, 0.75) converged cleanly in
+8-15 cycles -- neighboring points getting a real converged value next to a flagged
+partial one is a direct, mechanical explanation for visible zigzag in exactly that
+band, on top of the subtler mean-lag effect.
+
+**Fix (2026-08-08, user decision)**: `run_pulsejet_to_converged_cycle_average` now
+requires *two* conditions before declaring convergence, both inside the same
+tolerance (max of 0.1% relative or 0.05N absolute), for 3 consecutive updates:
+
+1. The running mean has stopped moving (original check).
+2. The raw per-cycle net thrust itself has settled -- max minus min over the
+   trailing 4-cycle window (`_CYCLE_AVERAGE_SWING_WINDOW_CYCLES`, spans two full
+   periods of the observed period-2-like alternation, so a persistent
+   not-yet-decayed oscillation cannot pass by chance landing on a same-phase pair).
+
+The cycle cap was also raised from 30 to 100 (`_CYCLE_AVERAGE_MAXIMUM_CYCLES`) --
+explicit user preference: report honest non-convergence over an averaged value from
+a model that has not actually reached steady state, rather than tune the cap to
+hide slow-decaying points. Re-verified on the previously-affected range: M=0.65 now
+correctly hits the 100-cycle cap and reports `converged=False` (was silently
+"converged" at 30 cycles before), while M=0.45/0.6/0.8 still converge cleanly (19,
+25, and 14 cycles respectively under the stricter check, vs. far fewer under the
+old mean-only check -- the stricter check costs more cycles across the board, not
+just at the hard points, which is expected and intentional). All 128 tests still
+pass. Real per-point cost is correspondingly higher and more uneven (observed up to
+~43s for a point that runs the full 100-cycle cap) -- accepted tradeoff per the
+above preference, not treated as a defect to optimize away.
+
+## Inflow phase-lag mismatch: root cause found (idealized valve, not the ignition trigger)
+
+NASA/TM-2008-215432 reports peak inflow lagging the chamber pressure minimum by
+~1/9 cycle; this codebase's own cycle instead showed peak inflow landing right at the
+next ignition event. Direct instrumentation of one full cycle at M=0.45
+(`reference_case.yaml`, period 0.014s) confirms this and identifies the mechanism:
+
+```
+t (ms)   chamber p (Pa)   inlet mdot (kg/s)   phase
+ 0.0        105,584            4.114          combustion (tail of prior cycle)
+ 1-6        180k->108k          0.0            combustion/blowdown (valve closed)
+ 7.0         91,827             0.122          blowdown (valve reopens)
+ 8.0         91,872             0.940          refill
+ 9.0         92,565             2.066          refill
+10.0         94,462             3.197          refill
+11.0         98,477             4.001          refill (near-peak)
+12.0         99,506             0.0            brief reclosure
+13.0         91,783             0.310          refill
+14.0            --                --           next ignition
+```
+
+Mass flow rises essentially continuously from valve-reopen (t=7ms) to t=11ms, i.e.
+across nearly the whole refill window, peaking close to (not right after) the next
+ignition -- confirming the earlier report, not just re-describing it. The mechanism:
+the idealized instantaneous check valve (Ghulam et al. 2024's two-state
+simplification, adopted specifically to avoid needing NASA eq. 3-4's unmeasured reed
+valve mass/spring-constant -- see this session's handoff) has no dynamics of its own.
+While the valve is open, `dmdot/dt = (A_in/L_in)*(P_in - P_chamber)` is sign-definite
+(positive as long as `P_in > P_chamber`), so captured mass flow is *mathematically
+forced to be non-decreasing* for as long as the valve stays open, regardless of how
+small the driving pressure differential shrinks to. It can only fall by the valve
+closing outright (chamber pressure catching up to inlet total pressure) or by
+ignition truncating the cycle -- there is no mechanism in this model for inflow to
+peak and *then decline while the valve is still open*, which is exactly what a real
+reed valve's own inertia/stiffness (NASA's dropped eq. 3-4) does: valve motion driven
+by its own mass-spring dynamics can begin closing well before the chamber-pressure
+differential alone would demand it, producing a true mid-cycle local maximum instead
+of a monotonic ramp cut short by the next event.
+
+**Conclusion**: this is a structural, understood, and -- given the decision already
+made not to re-add reed-valve dynamics (unmeasured hardware, dead end per this
+session's Task 2 investigation) -- an *accepted* limitation of the idealized-valve
+architecture, not an open mystery requiring further investigation. It should be
+treated as a known qualitative-shape gap when comparing this codebase's cycle timing
+against NASA's resonant-valve data, not evidence of a separate bug. It does not by
+itself explain the earlier low-Mach thrust-magnitude gap (that is dominated by cycle
+period/duty cycle, documented above) -- the two findings are related (both trace back
+to refill-phase modeling choices) but are not the same effect.
+
+## Cycle/time caps need the same tier-dependent treatment dt already got
+
+Found while chasing an unexplained test-suite hang (2026-08-08, same session as the dt
+tiers above): `test_evaluate_design_scores_packaging_failures_it_does_not_hide`
+(`chamber_volume_m3=0.012`, near this search's own upper bound, deliberately
+packaging-infeasible) hung indefinitely. Root cause: `run_pulsejet_to_converged_cycle_
+average`'s cycle cap (`_CYCLE_AVERAGE_MAXIMUM_CYCLES`) and simulated-time cap were a
+single global constant (100 cycles / 400s) applied to *every* caller, sized for
+`PULSEJET_FIDELITY_FULL`'s verification-grade "chase real convergence" needs. But
+`evaluate_design` builds an 11-point pulsejet table for each of 2 scenarios (nominal,
+adverse) -- if a pathological candidate (oversized chamber volume, in this case) hits
+the cap at every point, one `evaluate_design` call could cost up to ~2.4 hours
+(11 x 2 x the 400s per-point worst case). Confirmed directly: the isolated test alone
+ran past a 90s timeout without finishing.
+
+This is the identical problem dt itself already had (one setting can't serve both "the
+search needs bounded, predictable per-candidate cost across thousands of candidates"
+and "verification needs to actually chase convergence") -- it just hadn't been
+noticed yet because dense Mach-sweep plotting (which motivated raising the cap from
+30 to 100 cycles per user decision) doesn't hit a pathological *geometry* the way the
+search's full variable-bound exploration does.
+
+**Fix**: `propulsion_map.py`'s `pulsejet_cycle_bounds_for_fidelity` resolves the cap
+tier-dependently, same pattern as `pulsejet_time_step_s_for_fidelity`:
+- `PULSEJET_FIDELITY_FAST` (search): 30 cycles / 30s -- bounds worst-case search cost;
+  well above the 5-20 cycles most points actually need at this coarser dt.
+- `PULSEJET_FIDELITY_FULL` (verification): 50 cycles / 150s -- tightened from the
+  original 100/400, matching the values `find_converged_time_step`'s own solver
+  already used successfully (docs above) rather than the more generous but untested
+  100/400. Real re-run: the previously-hanging test now completes in 6.9s.
+
+`run_pulsejet_to_converged_cycle_average`'s two override parameters
+(`_maximum_cycles_override`/`_maximum_simulated_time_s_override`) now serve both the
+dt-solver's internal evaluations *and* the production tier system -- still not raw
+caller-adjustable floats; every real call site resolves them from one of the two named
+fidelity tiers, never an arbitrary value, so cycle_based_averaging_fix.md's original
+"no caller-adjustable knob two callers could disagree on" guarantee still holds.
+
+## design-optimize v9: real search run, and a real scoring bug it exposed
+
+With the cycle/time caps now tier-dependent (above), per-candidate cost at
+`PULSEJET_FIDELITY_FAST` dropped to ~1.4s cold / subsecond cached for a representative
+candidate -- a real, measured number, not the ~94-110 hour estimate that applied to
+the old fixed-window averaging. Ran a real, complete `design-optimize` search
+(population 20, generations 40, seed 0, `shared_nozzle_candidate_b.yaml` baseline,
+`configs/robustness_candidate_b.yaml` mass budget) -- `results/generated/
+design_optimize_v9/checkpoint.json` -- in ~93 minutes wall clock, 100% feasible
+population throughout.
+
+**Real result, verified by re-running the winning candidate through `simulate_mission`
+directly at full fidelity (`scripts/gate3_check_candidate.py`), not just trusted from
+the search's own fast-fidelity score:**
+
+- **Stall margin is solved.** `minimum_stall_margin_fraction` went from -0.3773
+  (nominal) / -1.0 (adverse) at baseline to **+0.8034 / +0.6790** -- both comfortably
+  positive. The search found this primarily by maxing out `sled_release_speed_m_per_s`
+  at its upper bound (121.0 m/s, from 39-42 m/s baseline) -- confirming
+  `docs/level0_feasibility_bounds.md`'s prediction that release speed was the cheap
+  lever, not by growing `wing_area_scale_factor` (which the search actually *shrank*
+  slightly, to 0.908 from 1.0 baseline -- the higher release speed alone more than
+  closed the ~3.6x gap, so growing wings further only cost mass for no benefit at this
+  point in the trade).
+- **Both scenarios now reach `ramjet_accel` phase** (`['pulsejet_climb', 'dive',
+  'ramjet_accel']`), a real improvement over baseline (nominal stalled out in `dive`
+  before baseline; adverse never left `pulsejet_climb`).
+- **New, clear blocker**: both scenarios terminate with
+  `ramjet_net_thrust_nonpositive_during_acceleration` at peak Mach ~0.59-0.60. The
+  search picked `minimum_lightoff_test_mach = 0.50` -- *exactly its own lower search
+  bound*.
+
+**That last number is not a coincidence -- it is a real scoring bug, found and fixed.**
+`evaluate_design`'s `_REACHED_RAMJET_IGNITION_REWARD` (a 300-point, `_SCENARIO_WEIGHTS`-
+weighted bonus for crossing into ramjet range, added in an earlier session -- see that
+constant's own comment) compared `result.peak_mach_reached` against `candidate_case.
+ramjet.minimum_lightoff_test_mach`. That threshold was a fixed config value when the
+reward was written, but a later session made `minimum_lightoff_test_mach` a 12th search
+variable -- turning the comparison self-referential: **a candidate is rewarded for
+picking a *low* threshold almost independent of real mission performance**, since a
+lower self-chosen bar is trivially easier to clear. This design-optimize v9 run
+confirms the failure mode directly: the search converged on the threshold's own lower
+bound for a candidate whose real mission run enters ramjet mode at that exact Mach and
+immediately fails to accelerate -- collecting the reward for reaching a threshold
+picked specifically because it was already there, not for reaching ramjet-useful
+flight.
+
+**Fix**: compare against `candidate_case.ramjet.minimum_self_sustaining_mach` instead
+-- fixed per `ReferenceCase` (1.10 in this config), not a search variable, so it cannot
+be gamed by choosing it. All 128 tests still pass (none exercised this specific
+comparison).
+
+## design-optimize v10: scoring fix confirmed working, but a new real blocker
+
+Re-ran the identical search (population 20, generations 40, seed 0) with the scoring
+fix in place -- `results/generated/design_optimize_v10/checkpoint.json`. Confirms the
+fix changed real search behavior, not just the code: `minimum_lightoff_test_mach` in
+the best-so-far candidate moved to 0.784, 0.753, 0.837, 0.987 (right against the
+search's *upper* bound) across the first several generations, a real, substantively
+different trajectory than v9's flat 0.50 -- the search is no longer collecting the
+reward for free. (v10's final best candidate did land back on 0.50, but -- see
+below -- for a different, real reason this time, not the same loophole: this
+candidate's actual failure mode happens before ramjet ignition timing is even
+reached, so the search had no signal left to push it away from 0.50 specifically.)
+
+v10's own final score (-5508.5) is *lower* than v9's (-4360.2) -- expected and correct,
+not a regression: v9's higher score was partly the ~300-point (weighted) reward
+collected for free by the loophole; closing it makes the honest score reflect the
+real, harder problem.
+
+**Real result, verified the same way (full-fidelity `simulate_mission` re-run via
+`scripts/gate3_check_candidate.py`, not trusted from the search's own fast-fidelity
+score):** stall margin still holds (+0.2507 nominal, +0.1617 adverse -- both positive,
+confirming that fix is robust across different candidates, not a fluke of v9's
+specific geometry). But this candidate never reaches `dive` or `ramjet_accel` at all --
+`phases: ['pulsejet_climb']`, terminating with `pulsejet_fuel_exhausted_before_top_of_
+climb`. Its `loaded_fuel_mass_kg = 2.540` sits right at the search's own lower bound
+(2.50) -- the search pushed fuel mass down (helping `_MASS_MARGIN_REWARD_PER_KG` and,
+indirectly, stall margin via lower vehicle mass) far enough that the vehicle
+structurally cannot carry enough fuel to finish climbing, let alone reach dive or
+ramjet transition.
+
+**Reading**: a real, third structural tension, distinct from both the stall-margin
+gap and the ramjet-transition-thrust trough already documented above. The scoring
+function currently has no term that distinguishes "ran out of fuel before finishing
+the climb phase" from any other way of falling short of peak Mach -- both just read as
+a lower `peak_mach_reached`, so the mass-margin reward's pull toward less fuel is not
+being offset by a strong enough signal that *some* minimum fuel load is a hard
+prerequisite, not a smooth tradeoff. Worth a genuine scoring-function look (e.g., an
+explicit penalty for terminating a phase specifically via fuel exhaustion, distinct
+from the smooth peak-Mach credit), not resolved in this session -- flagging clearly
+rather than guessing at a fix without evidence a specific change helps.
+
+## Gate 3 baseline (post all this session's propulsion fixes): still fails, real reasons
+
+Direct re-run (`scripts/gate3_check.py`, full fidelity, `shared_nozzle_candidate_b.yaml`,
+`simulate_mission`'s own default climb/dive/zoom parameters -- not a design-search
+result) after every propulsion fix in this document landed:
+
+**Nominal** (345.5s to compute): peak Mach 0.798 (target not met), never reaches Mach 1
+(0.00s time above Mach 1), phases only `['pulsejet_climb', 'dive']` --
+`dive_floor_reached_without_ramjet_lightoff_mach`: the dive burns through its altitude
+margin before ever reaching the ramjet's configured lightoff Mach, so ramjet_accel never
+starts. `minimum_stall_margin_fraction = -0.3773` -- **essentially identical to the
+-37.7% figure `docs/level0_feasibility_bounds.md` reported on 2026-08-07, before any of
+this session's propulsion work.** Confirms directly, not assumed: the stall-margin
+failure is a pure aero/lift-area problem, structurally untouched by everything this
+session did to pulsejet/ramjet thrust. `reference_area_m2` in
+`shared_nozzle_candidate_b.yaml` is still 0.0896 m^2, the exact value flagged there as
+~3.6x too small at the configured sled-release speed and max mass.
+
+**Adverse** (0.2s -- reused the nominal run's cached pulsejet-table points, scaled by
+the scenario's own multiplier, not a separately-run 11-point table): peak Mach only
+0.125, phase stays `pulsejet_climb` the whole run until
+`mission_time_cap_reached_before_landing` (900s simulated flight time with barely any
+climb). `minimum_stall_margin_fraction = -1.0` -- the vehicle spends the entire adverse
+run below its own 1g stall speed.
+
+**Reading**: two genuinely separate problems, not one. (1) Stall margin is an aero
+sizing problem -- `reference_area_m2` (or `wing_area_scale_factor` in a search context)
+and/or `sled_release_speed_m_per_s` need to move, not propulsion. (2) Even where thrust
+is adequate to climb (nominal reaches M=0.80), the *dive-to-ramjet-lightoff* strategy
+with `simulate_mission`'s default climb/dive/zoom angles doesn't thread the needle
+before running out of altitude -- a trajectory-shaping problem, distinct from both the
+aero sizing problem and from this session's already-documented ramjet-transition-thrust
+finding (which used a specific, non-default dive strategy). Closing Gate 3 needs both
+addressed, most practically through the existing `wing_area_scale_factor`/
+`sled_release_speed_m_per_s`/`climb_angle_deg`/`dive_angle_deg`/`dive_entry_mach` search
+variables `optimizer.py` already has -- not a new propulsion fix.
+
+## design-optimize v11: fuel-exhaustion penalty confirmed working, but a new, more severe blocker -- and it turns out to be architectural, not tunable
+
+Re-ran the identical search (population 20, generations 40, seed 0) with
+`_PREMATURE_FUEL_EXHAUSTION_PENALTY` in place --
+`results/generated/design_optimize_v11/checkpoint.json`. Verified the same way as
+v9/v10 (full-fidelity `simulate_mission` re-run via `scripts/gate3_check_candidate.py`,
+not trusted from the search's own fast-fidelity score):
+
+- **`loaded_fuel_mass_kg` is still pinned at its 2.50 kg lower bound**, yet this
+  candidate's mission does *not* exhaust fuel early -- the new penalty changed *which*
+  low-fuel candidate the search settles on, not the fact that it settles on minimal
+  fuel. Not a bug: this candidate's specific fuel split/profile apparently avoids the
+  v10 failure mode while still minimizing fuel for mass-margin points, which is exactly
+  what the penalty was supposed to allow (penalize the *failure*, not the low fuel load
+  itself).
+- **`minimum_lightoff_test_mach` moved to the *opposite* bound from v9/v10: 1.00, its
+  ceiling**, not a self-referential scoring artifact this time (`_REACHED_RAMJET_
+  IGNITION_REWARD` compares against the fixed `minimum_self_sustaining_mach`, not this
+  variable -- see v9's fix above). Both scenarios now terminate with
+  `dive_floor_reached_without_ramjet_lightoff_mach`: nominal peak Mach 0.7232, adverse
+  0.6448, neither ever entering `ramjet_accel`. **GATE 3: FAIL, both scenarios.**
+
+**Why does the search prefer never transitioning to ramjet at all, when Gate 3 requires
+peak Mach 1.10 and pulsejet alone has never once exceeded ~0.8 in any run this
+session?** Because `_PEAK_MACH_PROGRESS_REWARD_PER_MACH` and `_MISSED_PEAK_MACH_
+PENALTY`/`_DURATION_MISSED_PENALTY` are all identical whether a candidate stalls out
+via `dive_floor_reached_without_ramjet_lightoff_mach` at Mach 0.72 or via `ramjet_net_
+thrust_nonpositive_during_acceleration` after actually attempting the transition and
+decelerating back down. The only thing that differs between the two strategies is the
+*peak* Mach actually reached -- and a direct margin sweep (below) confirms staying
+pulsejet-only and never transitioning genuinely reaches a higher peak Mach than
+transitioning does, at this candidate's throat sizing. **The search is not confused or
+stuck; it is correctly finding that entering ramjet mode is net-harmful given the
+geometry it has to work with.**
+
+### Direct ramjet net-thrust-margin sweep confirms it, and finds the real lever: throat size
+
+Built a standalone diagnostic (`evaluate_ramjet` + `evaluate_total_drag`, scenario
+thrust/drag multipliers applied the same way `trajectory.py` does, altitude 4500 m) on
+v11's exact winning candidate (`throat_diameter_m=0.1113`, near its 0.110 m search
+floor):
+
+| Scenario | Positive-margin Mach points (0.55-1.10 sweep) |
+|---|---|
+| Nominal | only 0.75, 0.80 (+9.9 N, +3.9 N -- a razor-thin window) |
+| Adverse | **none** -- every point from -72 N (M=0.55) to -427 N (M=1.10) |
+
+Re-running the same sweep with only `throat_diameter_m` increased to 0.190 (the
+search's current ceiling), everything else held fixed:
+
+| Scenario | Result at throat=0.190 |
+|---|---|
+| Nominal | **positive margin at every tested point, 0.55-1.10** (+9.7 N to +610.7 N) |
+| Adverse | still negative everywhere, but the deficit shrinks by roughly an order of magnitude at the high-Mach end (-16.2 N at M=1.10, vs -426.8 N at the actual 0.111 m throat) |
+
+A finer throat sweep (0.110-0.230 m, nominal margin at M=0.80/0.90/1.10, adverse at
+M=0.80/1.10, plus a `feasibility.py` packaging check at each point) shows the
+transition is smooth, not a cliff -- margin turns positive around throat~0.13 m at
+mid-Mach and keeps improving monotonically with throat size in every column checked,
+with packaging only starting to fail beyond ~0.195-0.200 m at this candidate's current
+0.2145 m body diameter. Pushing throat and body diameter up together (0.220-0.250 m
+throat, 0.240-0.260 m body) closes the top of the adverse band (M=0.90-1.10 all turn
+positive) but **never closes M=0.65-0.70** -- the deficit there actually *worsens* as
+body diameter grows (-158 N at throat/body=0.220/0.240, -188 N at 0.250/0.260),
+because the larger body's drag penalty at that specific Mach outpaces the extra
+thrust the wider throat buys there. This is a real, separate finding from the
+high-Mach-margin one: **there is no single throat/body-diameter point that closes the
+entire adverse Mach band at once** -- the trough that opens right at the Mach where a
+transition would have to happen is structurally worse than either edge of it.
+
+### The throat lever is real for the static margin, but costs more on the pulsejet side than it buys -- confirmed by direct mission re-run, not assumed
+
+Constructing v11's winning candidate with `throat_diameter_m` forced to 0.190 (the
+value that made *nominal*'s static margin fully positive above) and sweeping
+`minimum_lightoff_test_mach` from 0.60-0.80 to try to actually use that window: **every
+one of these candidates scores *worse* at the full mission level than the original**,
+nominal peak Mach falling from 0.7232 to 0.436 and triggering a new
+`stall_margin_violated` failure that wasn't present before; adverse now exhausts fuel
+before even finishing the climb. The static ramjet-margin win is real, but it never
+gets used -- the vehicle can no longer climb far enough to reach the Mach range where
+it would apply.
+
+A finer throat sweep (0.111-0.150 m, same candidate otherwise unchanged) shows this is
+not a cliff either: nominal peak Mach falls steadily and substantially with even small
+throat increases (0.723 at 0.111 m -> 0.708 at 0.120 m -> 0.687 at 0.130 m -> 0.664 at
+0.140 m -> 0.616 at 0.150 m) -- there is no free increment of throat growth available;
+every millimeter is paid for immediately in pulsejet-phase reach, well before the
+ramjet-margin benefit becomes usable.
+
+**Isolated the mechanism directly**: re-ran the throat=0.150 m candidate with its
+`flight.initial_mass_kg` forcibly reset back to the throat=0.111 m baseline (18.433 kg)
+before calling `simulate_mission`, to separate "bigger throat costs more structural
+mass" from "bigger throat changes the pulsejet's own shared-exhaust efficiency."
+
+| Configuration | Mass | Nominal peak Mach |
+|---|---:|---:|
+| throat=0.111 m (baseline) | 18.433 kg | 0.7238 |
+| throat=0.150 m (real mass) | 19.902 kg | 0.6158 |
+| throat=0.150 m (mass forced back to baseline) | 18.433 kg | 0.6245 |
+
+Forcing mass back to baseline recovers almost none of the loss (0.6158 -> 0.6245,
+~0.009 Mach out of a ~0.10 Mach gap). **The pulsejet-phase degradation from growing the
+throat is overwhelmingly a shared-exhaust-geometry effect, not a mass-model
+artifact.** `pulsejet.py` and `ramjet.py` both consume the exact same `NozzleConfig`
+(`throat_area_m2`, `exit_area_m2`) -- this is a real, single physical nozzle shared
+between the two engine modes (matching the vehicle's own switchable-engine concept,
+`shared_nozzle_candidate_b.yaml`'s name, and `RamjetConfig`'s patent-lineage
+docstring), not an incidental modeling gap that a mass-calibration fix could paper
+over.
+
+Checked whether `exit_to_throat_area_ratio` (a free variable, 1.02-1.30, independent
+of `throat_diameter_m`) could buy ramjet margin without this pulsejet cost: it cannot
+-- sweeping it at fixed throat shows a much weaker effect on ramjet margin than throat
+itself (deficits stay in the -120 to -470 N range across the whole adverse sweep at
+every ratio tested) while *still* eroding nominal peak Mach as it rises (0.7278 at
+1.02 -> 0.6987 at 1.30), and mass is unaffected by this variable at all -- so it is
+strictly worse than doing nothing, not a hidden free lever.
+
+### Conclusion: this is the shared-nozzle compromise flagged at the start of this document, now confirmed structural at the full mission level
+
+The very first "Candidate B numerical balance" section of this document flagged "That
+shared-nozzle compromise is now explicit and must be tested in the coupled trajectory
+rather than optimized at one operating point." It has now been tested, directly and
+repeatedly, at the coupled mission level, across v7 through v11 and this section's own
+targeted diagnostics: **one shared throat cannot simultaneously give the pulsejet
+enough exhaust efficiency to climb/accelerate to a useful handoff Mach *and* give the
+ramjet enough capture/expansion area to hold positive net thrust once it gets there.**
+Every lever available to `optimizer.py`'s current 13 search variables (throat size,
+exit ratio, fuel split, lightoff threshold, release speed, climb/dive angles, wing
+area, body diameter) has now been swept, individually or in the combinations most
+likely to help, and none closes the gap:
+
+- Staying pulsejet-only (what v11's search rationally converged to) tops out at
+  Mach 0.72-0.80 -- far short of the 1.00 minimum / 1.10 target peak Mach, and cannot
+  reach it by construction, since pulsejet's own thrust curve (this document's earlier
+  sections) has no mechanism to exceed roughly this range.
+- Growing the shared throat enough to make ramjet's margin positive at the Mach range
+  where transition would need to happen costs more pulsejet-phase reach than it
+  recovers, and even at generous throat/body sizes the adverse scenario's
+  transition-Mach trough (~0.65-0.70) does not close.
+
+This is not a search-tuning gap, a scoring-function bug, or a bound picked too
+conservatively -- it is a genuine architectural conflict between the two engine modes'
+optimal nozzle sizing, now demonstrated with a controlled mass-vs-geometry isolation
+rather than inferred. Closing it for real would need one of: (a) a nozzle geometry that
+is no longer shared/fixed between modes (a real hardware architecture change, out of
+scope for a search-variable adjustment), (b) relaxing the Gate 3 peak-Mach/duration
+requirement itself, or (c) a substantially different climb/release strategy not yet
+tried that gets pulsejet-only performance close enough to the target that only a small,
+low-cost throat increment is needed to finish the job -- not yet found, and not
+guaranteed to exist given pulsejet's own thrust curve plateaus well below Mach 1
+regardless of release speed or climb angle in every case measured so far. Recommend
+treating Gate 3 closure under the current single-shared-nozzle architecture as blocked
+pending a user decision on which of these three to pursue, rather than continuing to
+launch further identical-shape `design-optimize` searches that are expected, on this
+evidence, to reconverge to the same avoid-ramjet local optimum.
+
+**Path (c) checked directly and found to have no accessible headroom.** Perturbed
+v11's winning candidate (throat held at its floor, i.e. staying in the pulsejet-only
+regime this search already found best) one variable at a time away from its converged
+value: `sled_release_speed_m_per_s` to its true 121.3 m/s ceiling (worse: nominal
+0.7238 -> 0.6173), climb angle to 5 deg and 30 deg (5 deg much worse; 30 deg
+essentially ties baseline at 0.7227), `wing_area_scale_factor` to 1.0 and 3.0 (both
+worse), `ramjet_fuel_fraction` down to 0.05 to give pulsejet nearly all the fuel (no
+better -- fuel was never the constraint here), `loaded_fuel_mass_kg` to its 9.0 kg
+ceiling (adverse improves slightly to 0.668, nominal drops to 0.639, a wash, not a
+net gain), and `dive_entry_mach` to 0.30 (much worse). None beats v11's own converged
+values; several confirm the search had already found a near-local-optimum for the
+pulsejet-only strategy. The gap to the 1.00-1.10 Mach target (0.28-0.38 Mach) is an
+order of magnitude larger than any single-variable perturbation moves the peak Mach
+achieved. This rules out "the search just didn't push some pulsejet-side lever hard
+enough" as an explanation -- reinforcing that (a) or (b) above are the only realistic
+ways forward, not further tuning within the current variable set.
+
+## minimum_lightoff_test_mach is now derived, not searched (2026-08-10)
+
+Following the NASA EngineSim comparison work (`docs/ramjet_enginesim_comparison.md`)
+and the resulting inlet-recovery/real-gas rework, `ramjet.py`'s raw (ungated)
+net-thrust-vs-Mach curve was found to have a real, physically-genuine negative
+trough right where the fixed nozzle first starts passing flow -- see
+`evaluate_ramjet`'s current docstring for the mechanism (momentum drag scales
+linearly in the vanishing exit flow, gross thrust scales quadratically). The
+first fix (same session) made `evaluate_ramjet` report zero thrust below
+`minimum_lightoff_test_mach` instead of that trough. The user's follow-up
+request: stop hand-picking `minimum_lightoff_test_mach` (0.80 in every config)
+and derive it instead -- specifically, as the Mach at which the engine's own
+net thrust first turns positive and stays positive (engine-only, not relative
+to vehicle drag -- confirmed by direct clarifying question, since the two
+readings produce very different numbers and this codebase's own prior research
+below is directly relevant to which one matters).
+
+`ramjet.py`'s new `derive_lightoff_mach` scans the ungated cycle solve
+(extracted into `_solve_ramjet_cycle`) from Mach 0 up to
+`minimum_self_sustaining_mach` (still hand-configured, unaffected), finds the
+*last* Mach with non-positive net thrust (correctly skipping past the trough
+rather than stopping at its first, spurious zero-crossing), then bisects to a
+precise root. For every config in this repo (propulsion-relevant fields are
+currently identical across `reference_case.yaml` and both
+`shared_nozzle_candidate_*.yaml`) this computes to **Mach ~0.494** -- well
+below the hand-picked 0.80, and below the 0.50 lower bound the search variable
+used to have.
+
+**Directly relevant tension, worth recording rather than glossing over:** the
+"Ramjet lightoff Mach" investigation above (optimizer.py's former search
+variable) found the *opposite* direction helped -- delaying the handoff
+(raising the threshold toward 0.87-1.00) improved adverse-scenario performance,
+because ramjet thrust stays below vehicle *drag* through most of Mach 0.5-1.1
+even where it's engine-net-positive. Deriving purely from engine-positive
+thrust (this change) does not reproduce that finding -- it's answering a
+different, narrower question (can the engine produce any net thrust at all)
+than the one that investigation was actually optimizing (can the vehicle
+usefully accelerate on ramjet power). This was surfaced to and confirmed by
+the user before implementing; it is an intentional scope choice, not an
+oversight, but a future full-mission re-run under this new derivation should
+be expected to show a real, different outcome than the search runs recorded
+above -- not treated as a regression to chase back toward 0.80-0.87.
+
+Also confirmed directly (probing `derive_lightoff_mach` across parameters):
+within `optimizer.py`'s actual search space, this derived value turns out to
+be **invariant** for the current bounds -- neither `throat_diameter_m` nor
+`exit_to_throat_area_ratio` (in its searched range, 1.02-1.30) shift the
+crossing point at all, since the unchoked-regime exit conditions right at that
+crossing are pressure-ratio-driven, not area-driven (mass flow and gross
+thrust both scale by the same area factor, so the *sign* of net thrust is
+area-independent; only its magnitude scales). What does move it --
+`selector.ramjet_total_pressure_recovery` (0.377 at 0.98 recovery vs. 1.09 at
+0.80 recovery), `target_combustor_exit_temperature_k`, `combustor_efficiency`
+-- are none of them current search variables. A sufficiently large
+`exit_to_throat_area_ratio` (~3.0+, well outside the current 1.02-1.30 bound)
+does make the derivation infeasible (`ValueError`, correctly propagated and
+caught by `evaluate_design`'s existing infeasibility handling) by eliminating
+the positive-thrust crossing entirely, rather than moving it.
+
+Consequence for the search: `minimum_lightoff_test_mach` dropped from a 13th
+search variable to zero -- it's derived per-candidate in
+`apply_design_variables` from that candidate's own nozzle/selector/ramjet/fuel,
+which also permanently closes the self-referential-gaming bug class documented
+above (the search converging on its own lower bound) at the root, since there
+is no longer a free choice here at all.
+
+## PULSEJET_MODE's guarded pulsejet-km-first dispatch, and a 4.1x search speedup (2026-08-11)
+
+Two independent pieces of work, same session, done in that order.
+
+**1. `PULSEJET_KM_MODE` (wired earlier today, additive-only) made
+architecturally primary for `PULSEJET_MODE` too, guarded.**
+`propulsion_map.py`'s new `_pulsejet_mode_point` tries pulsejet-km first
+whenever a candidate provides `pulsejet_km_engine_config`, falling back to
+the native `pulsejet.py` simulator only when pulsejet-km itself signals it
+cannot answer (not converged, outside its own validated Mach envelope, not
+a genuine `STABLE_LIMIT_CYCLE`, non-positive net thrust, or a raised
+exception -- zero-git-commit research code with no version pinning).
+Deliberately **not** a magnitude cross-check: pulsejet-km's own
+architecture.md documents its thrust reading ~8x low even for results that
+clear every one of those guards, and there is no principled way to correct
+for a systematic bias like that from inside a fallback heuristic -- that is
+real physics/calibration work (in progress in the sibling `pulsejet-fp`
+repo as of this session, not this repo). Every pulsejet-km-sourced point
+instead carries an explicit `pulsejet_km_thrust_known_low_bias_...`
+validity flag so the bias is visible, not silently absorbed. In practice
+this changes nothing about any real candidate today: none of
+`shared_nozzle_candidate_a/b.yaml`/`robustness_candidate_b.yaml` carry a
+`pulsejet_km:` section, so `_pulsejet_mode_point` resolves straight to the
+native path for every actual vehicle evaluation -- confirmed empirically,
+not just by inspection (`_run_pulsejet_km_query` made zero calls in the
+profiling run below). Full test suite green both before and after (two
+separate runs), plus three new regression tests
+(`PulsejetModeGuardedPrimaryDispatchTests`) pinning the trust/reject/
+no-config paths. See `docs/design_workflow.md`'s Gate 2 entry for the
+policy-level writeup.
+
+**2. Profiled `design-optimize` and found nearly all of its cost in one
+place.** `population=4, generations=2` (12 `evaluate_design` calls) took
+136s wall-clock under `cProfile`; 96% of that was
+`trajectory.py:_pulsejet_static_thrust_table` building the pulsejet Mach
+table via the unsteady simulator, and within *that*, 64% of
+`PulsejetSimulator.step()`'s own cost was `compressible.py`'s
+`fixed_cd_nozzle` -- specifically its Mach-from-area-ratio bisection
+solvers. Two fixes, both verified behavior-preserving by a full green test
+suite re-run (separate from the pulsejet-km re-run above):
+
+- `pulsejet.py`'s `_ignite_if_ready` was re-deriving `pressure_pa`/
+  `temperature_k` from state that `step()` had *already* computed
+  identically moments earlier (confirmed: nothing between the two reads
+  mutates `state.total_mass_kg`/`internal_energy_j`) -- now computed once
+  and passed in.
+- `compressible.py`'s three `range(50)`-iteration bisections (the two
+  named Mach-from-area-ratio solvers, plus `fixed_cd_nozzle`'s internal
+  shock-position solve, which nests calls to the first two with an
+  ever-different, non-cacheable midpoint each of its own 50 iterations --
+  up to 2,500 nested evaluations per `fixed_cd_nozzle()` call in that
+  regime) cut to 30. 50 iterations was already well past both this
+  model's own precision needs and, on these functions' bracket widths,
+  float64's own resolution floor (2^-50 ~ 1e-15) -- 30 still resolves to
+  roughly 1e-9, orders of magnitude past the model's own +/-17% reported
+  thrust uncertainty and every `assertAlmostEqual` tolerance in this
+  suite.
+
+Re-timed the identical `population=4, generations=2` workload cleanly
+(no other load on the machine) after both fixes: **33.1s, a 4.1x
+speedup**, i.e. ~2.76s/evaluation versus the original ~11.3s/evaluation.
+Two lower-value opportunities were identified and deliberately deferred
+rather than implemented tonight: hoisting `fixed_cd_nozzle`'s onset-Mach
+lookup (already effectively `@lru_cache`-covered for the truly-invariant
+outer call, so the residual win is only the cache-lookup overhead itself)
+into `PulsejetSimulator.__init__`, and replacing bisection with
+Newton-Raphson (a bigger win, but an algorithm change, not just a
+speed-tuning one) -- both real, both left for a future pass.
+
+**Consequence for search sizing**: a default `population=20,
+generations=30` run that previously needed on the order of 1.5-2 hours now
+completes in roughly 25-30 minutes. A much larger, `design_optimize_v12`
+search (`population=32, generations=300`, seed 0, on top of every physics
+fix landed today -- the MIL-E-5008B inlet correlation, real-gas cp/gamma,
+the derived (not searched) `minimum_lightoff_test_mach` above, and this
+section's speedup) was launched to use that headroom -- see its checkpoint
+under `results/generated/design_optimize_v12/` for the result; treat
+`design_optimize_v9`/`v10`/`v11` (2026-08-08/09) as stale for any
+conclusion touching lightoff Mach, inlet recovery, or real-gas effects,
+the same way this document has repeatedly flagged earlier runs stale
+after each physics correction.

@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from douglas_dart.config import load_reference_case
+from douglas_dart.propulsion_map import PULSEJET_FIDELITY_FAST
 from douglas_dart.trajectory import (
     ADVERSE_SCENARIO,
     MissionScenario,
@@ -33,7 +34,7 @@ class TrajectoryIntegrationTests(unittest.TestCase):
 
     def test_stall_margin_and_dynamic_pressure_are_reported(self):
         result = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         self.assertIsInstance(result.minimum_stall_margin_fraction, float)
         self.assertGreater(result.peak_dynamic_pressure_pa, 0.0)
@@ -47,14 +48,14 @@ class TrajectoryIntegrationTests(unittest.TestCase):
         # test documents that the trajectory-level check independently
         # surfaces the same finding, not that the finding is desirable.
         result = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         if result.stall_margin_violated:
             self.assertIn("stall_margin_violated_1g_level_flight_bound", result.final_status)
 
     def test_nominal_mission_produces_monotonic_time_and_bounded_fuel(self):
         result = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         self.assertTrue(result.points)
         times = [point.time_s for point in result.points]
@@ -69,7 +70,7 @@ class TrajectoryIntegrationTests(unittest.TestCase):
 
     def test_phases_are_contiguous_and_named(self):
         result = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         self.assertTrue(result.phases)
         for earlier, later in zip(result.phases, result.phases[1:]):
@@ -77,7 +78,7 @@ class TrajectoryIntegrationTests(unittest.TestCase):
 
     def test_time_above_mach_one_flag_matches_requirement(self):
         result = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         expected = (
             result.time_above_mach_one_s
@@ -87,10 +88,10 @@ class TrajectoryIntegrationTests(unittest.TestCase):
 
     def test_adverse_scenario_does_not_out_perform_nominal(self):
         nominal = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         adverse = simulate_mission(
-            self.case, ADVERSE_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, ADVERSE_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         self.assertLessEqual(
             adverse.peak_mach_reached, nominal.peak_mach_reached + 1e-6
@@ -99,7 +100,7 @@ class TrajectoryIntegrationTests(unittest.TestCase):
     def test_no_altitude_loss_during_transonic_regime(self):
         """Boom Supersonic Prize rule: level or climbing only from Mach 0.8+."""
         result = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         self.assertTrue(result.transonic_no_altitude_loss_rule_satisfied)
         self.assertNotIn(
@@ -126,7 +127,7 @@ class TrajectoryIntegrationTests(unittest.TestCase):
 
     def test_zoom_climb_never_descends(self):
         result = simulate_mission(
-            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, NOMINAL_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         zoom_points = [p for p in result.points if p.phase == "zoom_climb"]
         for earlier, later in zip(zoom_points, zoom_points[1:]):
@@ -134,7 +135,7 @@ class TrajectoryIntegrationTests(unittest.TestCase):
 
     def test_adverse_scenario_is_reported_not_hidden(self):
         result = simulate_mission(
-            self.case, ADVERSE_SCENARIO, time_step_s=0.05, max_time_s=120.0
+            self.case, ADVERSE_SCENARIO, time_step_s=0.05, max_time_s=120.0, pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST
         )
         self.assertTrue(result.numerical_reference_only)
         self.assertIn(

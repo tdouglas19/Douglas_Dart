@@ -36,6 +36,7 @@ from .atmosphere import standard_atmosphere
 from .config import ReferenceCase
 from .drag import evaluate_total_drag
 from .propulsion_map import (
+    PULSEJET_FIDELITY_FULL,
     PULSEJET_MODE,
     RAMJET_MODE,
     PropulsionScenario,
@@ -177,16 +178,18 @@ def _pulsejet_static_thrust_table(
     scenario: MissionScenario,
     mach_values: tuple[float, ...],
     *,
-    warmup_s: float = 0.25,
-    measurement_s: float = 0.25,
-    time_step_s: float = 0.00005,
+    pulsejet_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> list[tuple[float, float, float]]:
     """Return ``[(mach, mean_net_thrust_n, mean_fuel_flow_kg_per_s), ...]`` at sea level.
 
     Reads through the authoritative propulsion map (propulsion_map.py,
     docs/design_workflow.md Gate 2) instead of constructing PulsejetSimulator
     directly, so this table and every other propulsion-map consumer compute
-    net thrust and fuel flow the same way.
+    net thrust and fuel flow the same way. No warmup/measurement window
+    (cycle_based_averaging_fix.md, 2026-08-08) -- the propulsion map itself
+    now runs to a converged real-cycle-boundary average. No raw dt float
+    either (dt_convergence_solver_spec.md, 2026-08-08) -- ``pulsejet_fidelity``
+    selects one of the two fixed dt tiers.
     """
 
     map_scenario = PropulsionScenario(
@@ -200,9 +203,7 @@ def _pulsejet_static_thrust_table(
             0.0,
             PULSEJET_MODE,
             scenario=map_scenario,
-            pulsejet_warmup_s=warmup_s,
-            pulsejet_measurement_s=measurement_s,
-            pulsejet_time_step_s=time_step_s,
+            pulsejet_fidelity=pulsejet_fidelity,
         )
         table.append((mach, point.net_thrust_n, point.fuel_mass_flow_kg_per_s))
     return table
@@ -290,9 +291,7 @@ def simulate_mission(
     pull_out_load_factor_g: float = 4.0,
     max_time_s: float = 900.0,
     record_every_n_steps: int = 4,
-    pulsejet_table_warmup_s: float = 0.25,
-    pulsejet_table_measurement_s: float = 0.25,
-    pulsejet_table_time_step_s: float = 0.00005,
+    pulsejet_table_fidelity: str = PULSEJET_FIDELITY_FULL,
 ) -> TrajectoryResult:
     """Integrate one phase-based mission from sled release to landing.
 
@@ -331,9 +330,7 @@ def simulate_mission(
         case,
         scenario,
         _PULSEJET_TABLE_MACH_VALUES,
-        warmup_s=pulsejet_table_warmup_s,
-        measurement_s=pulsejet_table_measurement_s,
-        time_step_s=pulsejet_table_time_step_s,
+        pulsejet_fidelity=pulsejet_table_fidelity,
     )
 
     field_elevation_m = case.mission.field_elevation_msl_m

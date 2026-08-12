@@ -54,8 +54,17 @@ ramjet:
   mass_capture_coefficient: 0.90
   combustor_total_pressure_loss_fraction: 0.06
   combustor_efficiency: 0.96
-  target_combustor_exit_temperature_k: 1900.0
-  minimum_lightoff_test_mach: 0.80
+  # target_equivalence_ratio, not a target exit temperature (2026-08-10 session):
+  # mirrors PulsejetConfig.target_equivalence_ratio's input mechanism, but this is
+  # a genuinely different value (0.60 lean vs. pulsejet's stoichiometric 1.00),
+  # backed out of this vehicle's previous fixed-1900 K target -- confirmed by
+  # direct computation to reproduce ~1900 K combustor exit temperature (now a
+  # computed output, see ramjet.py's _solve_ramjet_cycle) across this vehicle's
+  # operating Mach range.
+  target_equivalence_ratio: 0.60
+  # minimum_lightoff_test_mach is no longer set here -- derived by
+  # ramjet.py's derive_lightoff_mach (config.py's load_reference_case),
+  # not hand-picked. See RamjetConfig's docstring.
   minimum_self_sustaining_mach: 1.10
 
 flight:

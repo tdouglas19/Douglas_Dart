@@ -43,18 +43,28 @@ config, not independently searched.
 
 ## Ramjet lightoff Mach
 
-`minimum_lightoff_test_mach` (`RamjetConfig`) is a search variable too. It
-is documented in `config.py` as an "open trade variable," not a value
-sourced from the switchable-engine patent lineage -- freely adjustable. A
-direct root-cause investigation (`docs/design_convergence.md`) found it
-matters a lot: under the adverse scenario, pulsejet's own level-flight
-thrust margin (no climb-gravity penalty) stays positive to about Mach 0.87,
-while ramjet's net thrust is *negative* relative to drag at every Mach from
-0.5-1.1 with typically-searched nozzle sizing -- so *delaying* the
-pulsejet-to-ramjet handoff, not advancing it, is usually the improvement
-available here. Bounded below `RamjetConfig`'s own
-`minimum_self_sustaining_mach` requirement with margin (see
-`DEFAULT_BOUNDS`'s inline comment).
+`minimum_lightoff_test_mach` (`RamjetConfig`) was a 13th search variable
+through 2026-08-10, bounded `(0.50, 1.00)`. `docs/design_convergence.md`
+records a direct root-cause investigation that found it mattered a lot:
+under the adverse scenario, pulsejet's own level-flight thrust margin (no
+climb-gravity penalty) stays positive to about Mach 0.87, while ramjet's net
+thrust is *negative* relative to drag at every Mach from 0.5-1.1 with
+typically-searched nozzle sizing -- so *delaying* the pulsejet-to-ramjet
+handoff, not advancing it, was usually the improvement available by tuning
+it. That same investigation also documents a self-referential-gaming bug
+this free-variable status caused (the search converging on its own lower
+search bound purely to trivially clear a threshold it was also choosing --
+see the comment above `_REACHED_RAMJET_IGNITION_REWARD` below).
+
+As of 2026-08-10 it is no longer a search variable at all: `ramjet.py`'s
+`derive_lightoff_mach` computes it directly from each candidate's own
+propulsion physics (the Mach at which that candidate's net thrust first
+turns positive and stays positive), so `apply_design_variables` derives it
+from the candidate's other search variables (throat diameter, exit/throat
+ratio, etc.) rather than sampling it independently. This removes the whole
+class of self-referential-gaming risk at the root, not just the specific
+instance the reward-comparison patch below worked around -- there is no
+longer a free choice here for a candidate to game.
 """
 
 from __future__ import annotations
@@ -70,6 +80,8 @@ from .atmosphere import G0_M_PER_S2
 from .config import ReferenceCase
 from .feasibility import packaging_bounds
 from .mass_model import MassModelCalibration, calibrate_mass_model, evaluate_parametric_mass
+from .propulsion_map import PULSEJET_FIDELITY_FAST
+from .ramjet import derive_lightoff_mach
 from .trajectory import (
     ADVERSE_SCENARIO,
     CONSERVATIVE_SCENARIO,
@@ -94,7 +106,6 @@ class DesignVariableBounds:
     dive_entry_mach: tuple[float, float]
     sled_release_speed_m_per_s: tuple[float, float]
     wing_area_scale_factor: tuple[float, float]
-    minimum_lightoff_test_mach: tuple[float, float]
     chamber_volume_m3: tuple[float, float]
 
     def names(self) -> tuple[str, ...]:
@@ -110,7 +121,6 @@ class DesignVariableBounds:
             "dive_entry_mach",
             "sled_release_speed_m_per_s",
             "wing_area_scale_factor",
-            "minimum_lightoff_test_mach",
             "chamber_volume_m3",
         )
 
@@ -181,22 +191,11 @@ DEFAULT_BOUNDS = DesignVariableBounds(
     # actually reach and cross that threshold rather than stopping just short
     # of it.
     wing_area_scale_factor=(0.5, 6.0),
-    # RamjetConfig's own docstring: this threshold is an explicit "open trade
-    # variable," not sourced from the switchable-engine patent lineage.
-    # docs/design_convergence.md's root-cause investigation found it matters
-    # a lot and in the opposite direction one might expect: under the
-    # adverse scenario, pulsejet's own level-flight thrust margin (no
-    # gravity penalty once leveled off) stays positive to about Mach 0.87,
-    # while ramjet's net thrust is *negative* relative to drag at every
-    # Mach from 0.5-1.1 with typically-searched nozzle sizing. Directly
-    # measured: raising this threshold from the configured 0.80 to 0.87 took
-    # one candidate's adverse peak Mach from 0.802 to 0.867, plateauing
-    # exactly where the pulsejet-margin crossover predicts. Lower bound
-    # (0.50) stays comfortably above where a mode switch would be premature;
-    # upper bound (1.00) stays below the fixed minimum_self_sustaining_mach
-    # (1.10) that ReferenceCase's own validation requires this to not
-    # exceed, with margin.
-    minimum_lightoff_test_mach=(0.50, 1.00),
+    # minimum_lightoff_test_mach was a search variable here through
+    # 2026-08-10 -- removed. It's now derived per-candidate from the
+    # candidate's own propulsion physics (ramjet.py's derive_lightoff_mach,
+    # called from apply_design_variables below), not independently searched.
+    # See this module's "## Ramjet lightoff Mach" docstring section.
     # mass_model.py's docstring "Pulsejet chamber-wall mass" section: at the
     # configured baseline (0.025 m^3, ~0.21 m body), the thin-shell mass
     # estimate for this volume alone (~5.7 kg) exceeds the entire $4.20 kg
@@ -230,7 +229,6 @@ class DesignVariables:
     dive_entry_mach: float
     sled_release_speed_m_per_s: float
     wing_area_scale_factor: float
-    minimum_lightoff_test_mach: float
     chamber_volume_m3: float
 
     def as_vector(self, bounds: DesignVariableBounds) -> list[float]:
@@ -321,8 +319,20 @@ def apply_design_variables(
         sled_release_speed_min_m_per_s=variables.sled_release_speed_m_per_s,
         sled_release_speed_max_m_per_s=variables.sled_release_speed_m_per_s,
     )
+    # Derived from this candidate's own nozzle (throat diameter and
+    # exit/throat ratio are search variables and shape the thrust curve),
+    # not sampled independently -- see this module's "## Ramjet lightoff
+    # Mach" docstring section. selector/fuel/altitude aren't search
+    # variables, so the baseline case's values are the candidate's too.
     ramjet = replace(
-        case.ramjet, minimum_lightoff_test_mach=variables.minimum_lightoff_test_mach
+        case.ramjet,
+        minimum_lightoff_test_mach=derive_lightoff_mach(
+            case.ramjet,
+            case.selector,
+            nozzle,
+            case.fuel,
+            case.mission.speed_run_altitude_msl_m,
+        ),
     )
     pulsejet = replace(case.pulsejet, chamber_volume_m3=variables.chamber_volume_m3)
     return replace(
@@ -394,21 +404,62 @@ _PEAK_MACH_PROGRESS_REWARD_PER_MACH = 150.0
 # buildable -- the search had no term telling it that shrinking body
 # diameter to save the tiebreak penalty could break packaging elsewhere.
 _PACKAGING_VIOLATION_PENALTY = 2000.0
-# Discrete reward for a scenario's peak Mach crossing ramjet.py's own
-# minimum_lightoff_test_mach -- a genuine, structurally meaningful threshold
-# (it unlocks the rest of the mission architecture), distinct from
-# _PEAK_MACH_PROGRESS_REWARD_PER_MACH's smooth per-Mach credit. Added because
-# a direct measurement (docs/design_convergence.md) found the search
-# rationally avoiding this crossing: giving pulsejet-phase fuel a bigger
-# share (via a lower ramjet_fuel_fraction) let one candidate's adverse
-# scenario cross exactly into ramjet range (Mach 0.595 -> 0.802) at zero cost
-# to nominal's own closure, yet the search's *score* went down -- nominal's
+# Same class of problem as _PEAK_MACH_PROGRESS_REWARD_PER_MACH's own
+# comment above -- `_MASS_MARGIN_REWARD_PER_KG` pulling toward less fuel
+# with nothing structurally counteracting it -- but a different, more severe
+# symptom. Confirmed directly (design-optimize v10, docs/design_convergence.md):
+# the search pushed `loaded_fuel_mass_kg` down to 2.540 kg, just above its
+# own 2.50 kg lower search bound, and the winning candidate ran out of
+# pulsejet fuel *before finishing the climb phase* -- never reaching dive,
+# let alone ramjet transition. A candidate stuck at a low peak Mach because
+# of a real physics limit (e.g. the ramjet-transition-thrust trough) and one
+# that structurally cannot carry enough fuel to fly the profile at all both
+# previously scored identically through `_MISSED_PEAK_MACH_PENALTY` alone --
+# no term distinguished "genuinely tried and fell short" from "aborted
+# early because the search starved it of fuel to save mass-margin points."
+# This penalty targets specifically the three `trajectory.py` status flags
+# that mean the mission was aborted mid-phase for running out of fuel, not
+# merely that a phase's own goal Mach wasn't reached.
+_PREMATURE_FUEL_EXHAUSTION_STATUS_FLAGS = frozenset(
+    {
+        "pulsejet_fuel_exhausted_before_top_of_climb",
+        "pulsejet_fuel_exhausted_during_acceleration",
+        "ramjet_fuel_exhausted_before_reaching_peak_mach",
+    }
+)
+_PREMATURE_FUEL_EXHAUSTION_PENALTY = 800.0
+# Discrete reward for a scenario's peak Mach crossing a genuine, structurally
+# meaningful ramjet threshold, distinct from _PEAK_MACH_PROGRESS_REWARD_PER_
+# MACH's smooth per-Mach credit. Added because a direct measurement
+# (docs/design_convergence.md) found the search rationally avoiding this
+# crossing: giving pulsejet-phase fuel a bigger share (via a lower
+# ramjet_fuel_fraction) let one candidate's adverse scenario cross exactly
+# into ramjet range (Mach 0.595 -> 0.802) at zero cost to nominal's own
+# closure, yet the search's *score* went down -- nominal's
 # `_TIME_ABOVE_MACH_ONE_REWARD_PER_S` term lost ~312 points (less ramjet fuel
 # shortened its Mach-1.10 hold by ~62s) against only ~93 points gained from
 # adverse's smooth peak-Mach credit (weight already applied). 300 (weighted
 # by _SCENARIO_WEIGHTS to 900 for adverse) is sized to comfortably outweigh
 # that measured trade, so crossing this threshold is no longer scored worse
 # than staying short of it.
+#
+# Compared against `minimum_self_sustaining_mach` (fixed, not a search
+# variable), NOT `minimum_lightoff_test_mach` (originally used here, but
+# `minimum_lightoff_test_mach` became a 12th search variable in a later
+# session, which turned this comparison into a self-referential loophole:
+# `peak_mach_reached >= candidate_case.ramjet.minimum_lightoff_test_mach`
+# rewards a candidate for picking a *low* threshold almost independent of
+# real mission performance, since a lower self-chosen threshold is trivially
+# easier to clear. Confirmed directly (2026-08-08, this design-optimize v9
+# run): the search converged on minimum_lightoff_test_mach=0.50 -- its own
+# lower search bound -- for a candidate whose actual mission run enters
+# ramjet_accel and then immediately fails with
+# `ramjet_net_thrust_nonpositive_during_acceleration` at that exact Mach, so
+# the reward was being collected for reaching a threshold the candidate
+# picked specifically because it was already there, not for genuinely
+# reaching ramjet-useful flight. `minimum_self_sustaining_mach` cannot be
+# gamed this way -- it is fixed per `ReferenceCase`, so crossing it is a real
+# achievement regardless of what the search does elsewhere.
 _REACHED_RAMJET_IGNITION_REWARD = 300.0
 
 
@@ -418,9 +469,6 @@ def evaluate_design(
     mass_calibration: MassModelCalibration,
     *,
     fast_time_step_s: float = 0.08,
-    fast_pulsejet_warmup_s: float = 0.10,
-    fast_pulsejet_measurement_s: float = 0.10,
-    fast_pulsejet_time_step_s: float = 0.0001,
     max_time_s: float = 200.0,
 ) -> CandidateEvaluation:
     """Score one design-variable vector against the nominal and adverse scenarios.
@@ -459,9 +507,7 @@ def evaluate_design(
                 climb_angle_deg=variables.climb_angle_deg,
                 dive_angle_deg=variables.dive_angle_deg,
                 dive_entry_mach=variables.dive_entry_mach,
-                pulsejet_table_warmup_s=fast_pulsejet_warmup_s,
-                pulsejet_table_measurement_s=fast_pulsejet_measurement_s,
-                pulsejet_table_time_step_s=fast_pulsejet_time_step_s,
+                pulsejet_table_fidelity=PULSEJET_FIDELITY_FAST,
             )
         except Exception as exc:  # noqa: BLE001 - a long unattended search must not die on one bad candidate
             return CandidateEvaluation(
@@ -495,8 +541,10 @@ def evaluate_design(
             score -= weight * _RULE_VIOLATION_PENALTY
         score += weight * result.time_above_mach_one_s * _TIME_ABOVE_MACH_ONE_REWARD_PER_S
         score += weight * result.peak_mach_reached * _PEAK_MACH_PROGRESS_REWARD_PER_MACH
-        if result.peak_mach_reached >= candidate_case.ramjet.minimum_lightoff_test_mach:
+        if result.peak_mach_reached >= candidate_case.ramjet.minimum_self_sustaining_mach:
             score += weight * _REACHED_RAMJET_IGNITION_REWARD
+        if any(flag in result.final_status for flag in _PREMATURE_FUEL_EXHAUSTION_STATUS_FLAGS):
+            score -= weight * _PREMATURE_FUEL_EXHAUSTION_PENALTY
 
     mass_margin_kg = (
         candidate_case.requirements.maximum_takeoff_mass_kg

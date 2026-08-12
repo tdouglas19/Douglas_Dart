@@ -101,6 +101,65 @@ reviewed -- **never** "the code executed" or "unit tests are green" alone.
   deliberately excludes from its common cross-mode schema, and none of them
   feed another design calculation that could silently drift from the
   authoritative map.)*
+
+  **A third, additive mode was wired in 2026-08-11**: `PULSEJET_KM_MODE`,
+  the sibling `pulsejet-km` repo's independent Khrulev & Muntyan pulsejet
+  model, installed as an editable dependency and queryable through the same
+  `evaluate_propulsion_map_point`/`build_propulsion_map` interface.
+  `docs/pulsejet_external_model_audit.md` documents why two structurally
+  different pulsejet models exist side by side, and pulsejet-km's own
+  thrust output is independently confirmed by that project's own
+  architecture.md to still read substantially low vs. validated engine data
+  (~8x, and unphysically negative above its own validated Mach 0.7
+  envelope). Requires `ReferenceCase.pulsejet_km_engine_config` (a
+  `pulsejet_km:` YAML section, currently only present in
+  `configs/reference_case.yaml`, using pulsejet-km's own validated Argus
+  As-014/V-1 reference geometry, not this vehicle's own design point).
+
+  **Later the same day, pulsejet-km became `PULSEJET_MODE`'s primary query
+  source**, guarded: `propulsion_map.py`'s `_pulsejet_mode_point` now tries
+  pulsejet-km first whenever a candidate provides
+  `pulsejet_km_engine_config`, and only falls back to the native
+  `pulsejet.py` simulator when pulsejet-km itself signals it cannot answer
+  (not converged, outside its own validated Mach envelope, not a genuine
+  `STABLE_LIMIT_CYCLE`, or non-positive net thrust -- the guard that
+  catches the -1571N runaway above). This is a structural guard only, not a
+  magnitude check: pulsejet-km's ~8x-low bias is present even in results
+  that clear every guard, so every pulsejet-km-sourced point carries an
+  explicit `pulsejet_km_thrust_known_low_bias_...` validity flag, and a
+  rejected/fallen-back point carries
+  `pulsejet_km_primary_rejected_fell_back_to_native`, so the source is
+  always visible in the output rather than silently substituted.
+  `PULSEJET_KM_MODE` itself is unchanged (still the unconditional,
+  no-fallback direct query, for comparison work).
+
+  In practice this does not yet change any live design-search result: none
+  of the actual vehicle candidate configs (`shared_nozzle_candidate_a/b.yaml`,
+  `robustness_candidate_b.yaml`) have a `pulsejet_km:` section, so
+  `case.pulsejet_km_engine_config` is `None` for every real candidate and
+  `_pulsejet_mode_point` resolves straight to the native path -- only
+  `reference_case.yaml`'s Argus reference case exercises the pulsejet-km
+  branch today. Populating real per-vehicle pulsejet-km geometry (mapping
+  this repo's valve/chamber/tailpipe design variables onto pulsejet-km's
+  `EngineGeometry`/`ValvePetalGeometry`) is separate, substantial
+  engineering work, tracked but not done here -- and shouldn't be started
+  until pulsejet-km's own thrust-magnitude bias is resolved (a third sibling
+  repo, `pulsejet-fp`, is an independent first-principles CFD cross-check
+  actively working that gap as of 2026-08-11).
+
+  Verified additive when first wired: full test suite re-run, **135
+  passed, 1 skipped (pre-existing), 0 failed** -- zero regressions; the
+  guarded-primary dispatch above adds three more passing regression tests
+  (`tests/test_propulsion_map.py`'s `PulsejetModeGuardedPrimaryDispatchTests`)
+  covering the trust/reject/no-config paths explicitly. The proof-of-
+  integration plot (`results/generated/thrust_plots/
+  thrust_vs_mach_gate3_query.png`) shows the pipeline running cleanly
+  end-to-end (every point `STABLE_LIMIT_CYCLE`, no crashes) but also makes
+  the known thrust deficit visually obvious: pulsejet-km's net thrust falls
+  from 415.6N (Mach 0) through zero near Mach 0.28 to -1571N by Mach 0.70,
+  because ram drag scales with Mach while its gross thrust (still ~8x low
+  per pulsejet-km's own architecture.md Section 50) does not keep pace --
+  expected given the known gap, not a new bug in this integration.
 - **Gate 3 -- Nominal fast-mission feasibility.** A candidate completes the
   mission in the point-mass solver without violating lift, stall, fuel,
   dynamic-pressure, mass, packaging, or rule constraints. *(Still not met --

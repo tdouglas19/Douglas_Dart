@@ -2,39 +2,35 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .atmosphere import G0_M_PER_S2, standard_atmosphere
 from .compressible import (
     fixed_cd_nozzle,
-    normal_shock_total_pressure_ratio,
     stagnation_pressure,
     stagnation_temperature,
 )
 from .config import Fuel, NozzleConfig, RamjetConfig, SelectorConfig
+from .gas_properties import real_gas_gamma, real_gas_specific_heat_j_per_kg_k
 
 
-def ideal_inlet_shock_recovery(mach: float, gamma: float) -> float:
-    """Return the idealized (loss-free duct) inlet total-pressure recovery.
+def ideal_inlet_shock_recovery(mach: float) -> float:
+    """Return the idealized inlet total-pressure recovery via the MIL-E-5008B correlation.
 
     docs/pulsejet_ramjet_governing_equations.md sec. 2.2 warns that a common early-stage-sizing-code
     oversimplification is a single flat pi_d across the whole Mach range. This is
-    already Mach-dependent (verified, not changed): a stationary normal shock
-    below/at Mach 1 is loss-free (1.0), and above Mach 1 the loss follows the
-    normal-shock stagnation-pressure-ratio relation. It is a single-normal-shock
-    model, not a multi-oblique-shock MIL-E-5008B-style correlation -- adequate at
-    this vehicle's transonic/low-supersonic design range (~Mach 1.0-1.2), but it
-    would need replacing with a real shock-train correlation before extending to
-    higher supersonic Mach numbers.
+    Mach-dependent: loss-free (1.0) at/below Mach 1, and above Mach 1 follows the
+    MIL-E-5008B empirical inlet-recovery schedule -- docs/ramjet_enginesim_comparison.md
+    "Difference 1", cross-checked against NASA Glenn Research Center's EngineSim
+    (`Turbo.java`'s default "Mil Spec Recovery" inlet option). This models a real
+    multi-oblique-shock inlet system rather than a single normal shock -- the prior
+    single-normal-shock treatment here matched this closely at this vehicle's
+    transonic/low-supersonic design range (~Mach 1.0-1.2) but diverged fast above it
+    (confirmed ~4 points low at Mach 1.5, ~20 points low at Mach 2.0), which is
+    exactly the replacement this function's own comment used to call for.
 
-    Below Mach 1 there is no shock, so an idealized inlet has no theoretical
-    stagnation-pressure loss (``1.0``); above Mach 1, the loss is exactly the
-    stationary normal-shock total-pressure ratio at the local freestream Mach
-    number, reusing this repository's own tested normal-shock relation
-    (``normal_shock_total_pressure_ratio``) rather than an empirical curve fit.
-
-    This captures only the idealized shock-system loss. It is deliberately NOT the
-    vehicle's actual installed recovery: duct friction, bends, boundary-layer
+    This captures only the idealized inlet-recovery schedule. It is deliberately NOT
+    the vehicle's actual installed recovery: duct friction, bends, boundary-layer
     bleed, and this vehicle's own pulsejet/ramjet selector losses are real
     additional losses, captured separately by the configured
     ``SelectorConfig.ramjet_total_pressure_recovery`` installed-efficiency factor
@@ -45,7 +41,7 @@ def ideal_inlet_shock_recovery(mach: float, gamma: float) -> float:
         raise ValueError("Mach cannot be negative")
     if mach <= 1.0:
         return 1.0
-    return normal_shock_total_pressure_ratio(mach, gamma)
+    return 1.0 - 0.075 * (mach - 1.0) ** 1.35
 
 
 @dataclass(frozen=True)
@@ -84,17 +80,85 @@ def evaluate_ramjet(
 ) -> RamjetResult:
     if mach < 0.0:
         raise ValueError("Mach cannot be negative")
+    result = _solve_ramjet_cycle(config, selector, nozzle, fuel, altitude_m, mach)
+    # Below the configured lightoff Mach, the vehicle's own selector logic
+    # (trajectory.py) never fires the ramjet at all -- it stays on pulsejet
+    # power until mach >= minimum_lightoff_test_mach (itself now derived by
+    # derive_lightoff_mach() below, not hand-picked). Solving the full
+    # combustion/nozzle cycle down here anyway produces a real but
+    # operationally meaningless negative-thrust trough right where the fixed
+    # nozzle first starts to pass any flow: momentum drag on that first
+    # trickle of throughflow is proportional to mass flow times the full
+    # (non-vanishing) freestream velocity, while gross thrust is proportional
+    # to mass flow times exit velocity -- and both mass flow and exit
+    # velocity are vanishing together, so gross thrust is second-order in the
+    # same small quantity that makes drag only first-order. Net thrust is
+    # therefore briefly, genuinely negative in an idealized 1D sense, purely
+    # from evaluating a condition the engine is never actually commanded to
+    # run at (confirmed by direct sweep, 2026-08-10 session). Report zero
+    # thrust and fuel flow instead, matching the operational reality that
+    # fuel simply isn't scheduled to an unlit engine below this threshold.
+    # Inlet aerodynamics (capture, recovery, duct pressure) are still real
+    # and reported -- only the combustion/nozzle/thrust fields are zeroed.
+    if mach < config.minimum_lightoff_test_mach:
+        return replace(
+            result,
+            air_mass_flow_kg_per_s=0.0,
+            fuel_mass_flow_kg_per_s=0.0,
+            fuel_air_ratio=0.0,
+            combustor_exit_total_temperature_k=result.combustor_inlet_total_temperature_k,
+            nozzle_capacity_kg_per_s=0.0,
+            nozzle_flow_regime="not_attempted_below_lightoff_mach",
+            nozzle_mass_flow_residual_fraction=0.0,
+            inlet_spillage_fraction=1.0,
+            inlet_momentum_drag_n=0.0,
+            gross_thrust_n=0.0,
+            net_thrust_n=0.0,
+            specific_thrust_n_s_per_kg_air=0.0,
+            specific_impulse_s=0.0,
+            self_sustaining_candidate=False,
+            status=(
+                "below_configured_lightoff_test_mach",
+                "below_configured_self_sustaining_mach",
+                "ramjet_not_attempted_below_lightoff_mach",
+            ),
+        )
+    return result
+
+
+def _solve_ramjet_cycle(
+    config: RamjetConfig,
+    selector: SelectorConfig,
+    nozzle: NozzleConfig,
+    fuel: Fuel,
+    altitude_m: float,
+    mach: float,
+) -> RamjetResult:
+    """Solve the full combustion/nozzle cycle at any Mach, ignoring lightoff gating.
+
+    Deliberately independent of ``config.minimum_lightoff_test_mach`` -- this is
+    the raw physics ``evaluate_ramjet`` gates and ``derive_lightoff_mach`` scans
+    to find that gate's value in the first place. A function that both used and
+    derived the same threshold would be circular.
+    """
+
     atmosphere = standard_atmosphere(altitude_m)
     velocity_m_per_s = mach * atmosphere.speed_of_sound_m_per_s
+    # Uses the full circular intake area, not selector.available_area_m2
+    # (open_fraction-scaled) -- the open_fraction/mutually-exclusive-half-
+    # intake rule is a pulsejet-only assumption now (config.py's
+    # SelectorConfig docstring, docs/assumptions.md). When the selector is in
+    # ramjet mode the pulsejet path is fully closed, so nothing requires
+    # capping the ramjet's captured area at half the intake.
     potential_air_mass_flow_kg_per_s = (
         atmosphere.density_kg_per_m3
         * velocity_m_per_s
-        * selector.available_area_m2
+        * selector.circular_area_m2
         * config.mass_capture_coefficient
     )
     inlet_total_temperature_k = stagnation_temperature(atmosphere.temperature_k, mach)
     ideal_total_pressure_pa = stagnation_pressure(atmosphere.pressure_pa, mach)
-    shock_recovery = ideal_inlet_shock_recovery(mach, config.gamma)
+    shock_recovery = ideal_inlet_shock_recovery(mach)
     installed_total_pressure_recovery = shock_recovery * selector.ramjet_total_pressure_recovery
     # docs/pulsejet_ramjet_governing_equations.md sec. 2.3: pi_b = combustor_total_pressure_loss_fraction
     # complement, a nonzero configured loss (not assumed = 1 / lossless).
@@ -102,30 +166,44 @@ def evaluate_ramjet(
     combustor_exit_pressure_pa = inlet_total_pressure_pa * (
         1.0 - config.combustor_total_pressure_loss_fraction
     )
-    # docs/pulsejet_ramjet_governing_equations.md sec. 2.3, Brayton-cycle combustor energy balance:
-    # f = cp*(Tt3 - Tt2) / (eta_b * h_PR - cp*Tt3). Already matches the reference
-    # exactly -- verified, not changed.
-    cp_j_per_kg_k = config.gamma * config.gas_constant_j_per_kg_k / (config.gamma - 1.0)
-    target_temperature_k = config.target_combustor_exit_temperature_k
-    numerator = cp_j_per_kg_k * max(target_temperature_k - inlet_total_temperature_k, 0.0)
-    denominator = (
-        config.combustor_efficiency * fuel.lower_heating_value_j_per_kg
-        - cp_j_per_kg_k * target_temperature_k
-    )
-    fuel_air_ratio = numerator / denominator if denominator > 0.0 else 0.0
+    # docs/pulsejet_ramjet_governing_equations.md sec. 2.3, Brayton-cycle combustor energy
+    # balance: f = cp*(Tt3 - Tt2) / (eta_b * h_PR - cp*Tt3), rearranged to solve for Tt3
+    # (combustor exit temperature) given f instead of f given Tt3 (2026-08-10 session) --
+    # same energy balance, same reference, opposite unknown. fuel_air_ratio is now the
+    # input, computed the same way pulsejet.py already computes its own fuel metering
+    # (pulsejet.py's PulsejetSimulator.step(): fuel = air * equivalence_ratio /
+    # stoichiometric_air_fuel_ratio) rather than backed out of a fixed target
+    # temperature -- RamjetConfig.target_equivalence_ratio mirrors
+    # PulsejetConfig.target_equivalence_ratio in mechanism, though not in value (0.60
+    # lean vs. pulsejet's stoichiometric 1.00; see RamjetConfig's docstring). cp is
+    # still evaluated at the combustor-inlet temperature via the real-gas curve fit
+    # (docs/ramjet_enginesim_comparison.md "Difference 2") rather than held fixed --
+    # unchanged by this rearrangement.
+    fuel_air_ratio = config.target_equivalence_ratio / fuel.stoichiometric_air_fuel_ratio
+    combustor_inlet_cp_j_per_kg_k = real_gas_specific_heat_j_per_kg_k(inlet_total_temperature_k)
+    combustor_exit_temperature_k = (
+        fuel_air_ratio * config.combustor_efficiency * fuel.lower_heating_value_j_per_kg
+        + combustor_inlet_cp_j_per_kg_k * inlet_total_temperature_k
+    ) / (combustor_inlet_cp_j_per_kg_k * (1.0 + fuel_air_ratio))
     potential_fuel_mass_flow_kg_per_s = potential_air_mass_flow_kg_per_s * fuel_air_ratio
     demanded_nozzle_mass_flow_kg_per_s = (
         potential_air_mass_flow_kg_per_s + potential_fuel_mass_flow_kg_per_s
     )
 
+    # docs/ramjet_enginesim_comparison.md "Difference 2": the nozzle expansion uses
+    # gamma evaluated at the hot combustor-exit/nozzle-inlet temperature (matching
+    # EngineSim's game = getGama(tt[5])), not the same constant gamma used for the
+    # cold freestream/inlet above -- combustion products have a meaningfully lower
+    # gamma than cold air (~1.30 vs. ~1.40 at this vehicle's combustor temperatures).
+    exhaust_gamma = real_gas_gamma(combustor_exit_temperature_k)
     nozzle_result = fixed_cd_nozzle(
         combustor_exit_pressure_pa,
-        target_temperature_k,
+        combustor_exit_temperature_k,
         atmosphere.pressure_pa,
         nozzle.throat_area_m2,
         nozzle.exit_area_m2,
         nozzle.discharge_coefficient,
-        config.gamma,
+        exhaust_gamma,
         config.gas_constant_j_per_kg_k,
     )
 
@@ -170,12 +248,12 @@ def evaluate_ramjet(
             )
             nozzle_result = fixed_cd_nozzle(
                 combustor_exit_pressure_pa,
-                target_temperature_k,
+                combustor_exit_temperature_k,
                 atmosphere.pressure_pa,
                 nozzle.throat_area_m2,
                 nozzle.exit_area_m2,
                 nozzle.discharge_coefficient,
-                config.gamma,
+                exhaust_gamma,
                 config.gas_constant_j_per_kg_k,
             )
             new_oversupply_ratio = max(
@@ -226,12 +304,13 @@ def evaluate_ramjet(
         else 0.0
     )
 
+    # No lightoff gating here by design -- see this function's docstring.
+    # evaluate_ramjet() applies that gate on top of this result; the "below
+    # self-sustaining Mach" flag below is a separate, always-computed
+    # comparison against a still-configured (not derived) threshold.
     status: list[str] = []
-    if mach < config.minimum_lightoff_test_mach:
-        status.append("below_configured_lightoff_test_mach")
-    elif mach < config.minimum_self_sustaining_mach:
-        status.append("lightoff_test_only_below_self_sustaining_mach")
     if mach < config.minimum_self_sustaining_mach:
+        status.append("lightoff_test_only_below_self_sustaining_mach")
         status.append("below_configured_self_sustaining_mach")
     if combustor_exit_pressure_pa <= atmosphere.pressure_pa:
         status.append("insufficient_nozzle_pressure_ratio")
@@ -265,7 +344,7 @@ def evaluate_ramjet(
         combustor_inlet_total_pressure_pa=inlet_total_pressure_pa,
         combustor_exit_total_pressure_pa=combustor_exit_pressure_pa,
         combustor_inlet_total_temperature_k=inlet_total_temperature_k,
-        combustor_exit_total_temperature_k=target_temperature_k,
+        combustor_exit_total_temperature_k=combustor_exit_temperature_k,
         nozzle_capacity_kg_per_s=nozzle_result.mass_flow_kg_per_s,
         nozzle_flow_regime=nozzle_result.regime,
         nozzle_mass_flow_residual_fraction=residual_fraction,
@@ -278,3 +357,74 @@ def evaluate_ramjet(
         self_sustaining_candidate=self_sustaining_candidate,
         status=tuple(status),
     )
+
+
+def derive_lightoff_mach(
+    config: RamjetConfig,
+    selector: SelectorConfig,
+    nozzle: NozzleConfig,
+    fuel: Fuel,
+    altitude_m: float,
+    *,
+    coarse_step_mach: float = 0.005,
+) -> float:
+    """Derive the Mach at which this engine's own net thrust first sustains positive.
+
+    Replaces what used to be a hand-picked ``minimum_lightoff_test_mach`` YAML
+    constant (its own former docstring: "no patent in the switchable-engine
+    lineage gives a quantitative transition law... an engineering assumption,
+    not a sourced value") with a number read directly off the physics: the
+    Mach above which ``_solve_ramjet_cycle``'s net thrust never goes
+    non-positive again, up to ``config.minimum_self_sustaining_mach`` (still a
+    separate, hand-configured value -- unaffected by this function, and used
+    here only as the natural upper search bound).
+
+    This is engine-only: net thrust crossing zero, not net thrust exceeding
+    the vehicle's drag. A fixed nozzle's thrust curve typically has a
+    negative trough right where it first starts passing flow (see
+    ``evaluate_ramjet``'s docstring) before climbing through zero and staying
+    positive -- a coarse forward scan finds the *last* non-positive sample in
+    range (correctly skipping past that trough, not stopping at its first,
+    spurious zero-crossing), then bisects to a precise root just above it.
+
+    Raises ``ValueError`` if net thrust is already positive at Mach 0 (nothing
+    to derive) or never sustains positive within
+    ``[0, minimum_self_sustaining_mach]`` (an infeasible configuration --
+    surfaced here rather than silently returning a meaningless number).
+    """
+
+    if coarse_step_mach <= 0.0:
+        raise ValueError("coarse_step_mach must be positive")
+    upper_bound_mach = config.minimum_self_sustaining_mach
+
+    def net_thrust_at(mach: float) -> float:
+        return _solve_ramjet_cycle(config, selector, nozzle, fuel, altitude_m, mach).net_thrust_n
+
+    last_nonpositive_mach: float | None = 0.0 if net_thrust_at(0.0) <= 0.0 else None
+    mach = 0.0
+    while mach < upper_bound_mach:
+        mach = min(mach + coarse_step_mach, upper_bound_mach)
+        if net_thrust_at(mach) <= 0.0:
+            last_nonpositive_mach = mach
+
+    if last_nonpositive_mach is None:
+        raise ValueError(
+            "ramjet net thrust is already positive at Mach 0 -- no lightoff crossing to derive"
+        )
+    if last_nonpositive_mach >= upper_bound_mach:
+        raise ValueError(
+            "ramjet net thrust never sustains positive within "
+            f"[0, minimum_self_sustaining_mach={upper_bound_mach}] -- infeasible configuration"
+        )
+
+    low_mach = last_nonpositive_mach
+    high_mach = min(low_mach + coarse_step_mach, upper_bound_mach)
+    for _ in range(60):
+        if high_mach - low_mach < 1e-9:
+            break
+        mid_mach = 0.5 * (low_mach + high_mach)
+        if net_thrust_at(mid_mach) <= 0.0:
+            low_mach = mid_mach
+        else:
+            high_mach = mid_mach
+    return high_mach

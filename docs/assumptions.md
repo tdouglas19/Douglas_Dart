@@ -14,7 +14,8 @@ resolves.
 | Item | Current value | Status |
 |---|---:|---|
 | Intake modes | Pulsejet or ramjet, never both open | User requirement |
-| Available geometric intake area | 50% of the 195 mm circular intake | User requirement / prior intake diameter |
+| Available geometric intake area (pulsejet) | 50% of the 195 mm circular intake | User requirement / prior intake diameter |
+| Available geometric intake area (ramjet) | 100% of the 195 mm circular intake | User direction, 2026-08-07: the switchable selector fully closes the pulsejet path when ramjet is active, so nothing requires halving the ramjet's captured area (previously also capped at 50%, `ramjet.py`'s `potential_air_mass_flow_kg_per_s`) |
 | Peak Mach | 1.10 | User requirement (exceeds the sonic minimum below) |
 | Speed-run termination | Fuel depletion; no prescribed duration | User requirement |
 | Body diameter | No hard maximum; trade against drag and flow | User direction |
@@ -69,7 +70,7 @@ data — same status as `lift_curve_slope_per_rad`.
 
 | Item | Current value | Status and closure path |
 |---|---:|---|
-| Pulsejet / ramjet installed-efficiency recovery factor | 0.99 / 0.92 | Multiplies the idealized Mach-dependent normal-shock recovery (`ideal_inlet_shock_recovery`, 1.0 below Mach 1); both factors are still provisional |
+| Pulsejet / ramjet installed-efficiency recovery factor | 0.99 / 0.92 | Multiplies the idealized Mach-dependent MIL-E-5008B recovery (`ideal_inlet_shock_recovery`, 1.0 below Mach 1); both factors are still provisional |
 | Selector discharge coefficient | 0.78 | Effective-area placeholder |
 | Chamber volume | 0.025 m³ | Packaging and acoustic-length closure required |
 | Fuel LHV / stoichiometric AFR | 43 MJ/kg / 14.7 | Representative Jet-A values |
@@ -77,7 +78,7 @@ data — same status as `lift_curve_slope_per_rad`.
 | Target equivalence ratio | 0.90 | Operability bounds required |
 | Burn duration / minimum period | 4 / 18 ms | Calibrate to pressure histories |
 | Ramjet combustor pressure loss | 6% | Placeholder |
-| Ramjet target combustor exit | 1,900 K | Close with fuel schedule and material limits |
+| Ramjet target equivalence ratio | 0.60 | Backed out of this vehicle's previous fixed-1,900 K combustor-exit target so the two models stay comparable; combustor exit temperature (T4) is now a computed output that varies with Mach (~1,884-1,950 K over the operating range) rather than a fixed input -- close with fuel schedule and material limits |
 | Light-off experiment / self-sustaining gate | Mach 0.80 / 1.10 | Separate concepts, not demonstrated operability |
 
 Total-pressure recovery now means exactly

@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from douglas_dart.config import load_reference_case
+from douglas_dart.propulsion_map import PULSEJET_FIDELITY_FAST
 from douglas_dart.robustness import run_robustness_trade, summarize_mass_budget
 
 
@@ -23,14 +24,26 @@ class RobustnessTests(unittest.TestCase):
         self.assertAlmostEqual(summary.high_mass_margin_to_requirement_kg, 1.1)
 
     def test_trade_selects_candidate_b_and_does_not_hide_adverse_failure(self):
-        # 170 mm, not 160 mm: decomposing the flat ramjet recovery into an idealized
-        # Mach-dependent shock term times an installed-efficiency factor reduces
-        # recovery at Mach 1.10 by ~0.1%, which is enough to flip the 160 mm
-        # candidate's conservative-scenario excess thrust negative (it was a 1.5 N
-        # razor's-edge pass under the old flat-recovery model). See
-        # docs/design_convergence.md, "Model correction that moved the throat from
-        # 160 to 170 mm".
-        result = run_robustness_trade(self.case, self.robustness_path)
+        # 210/170 mm: the ramjet capture-area fix (ramjet.py reading the full
+        # circular intake instead of selector.available_area_m2's 50% split
+        # -- docs/assumptions.md) moved this to 205/160 mm by itself. The
+        # pulsejet fluid-inertance inlet model added afterward (pulsejet.py,
+        # replacing the instantaneous compressible_orifice_mass_flow inlet
+        # calculation) substantially raised pulsejet thrust in the
+        # M=0.35-0.75 band too, shifting the minimum-feasible trade search's
+        # balance back to the larger throat/body (210/170 mm). The ramjet
+        # nozzle near-critical onset smoothing fix
+        # (compressible.py's _NOZZLE_ONSET_SMOOTHING_PRESSURE_RATIO_MARGIN,
+        # docs/design_convergence.md) moved this back down to 205/160 mm on
+        # its own -- but the side-inlet ram-recovery fix (pulsejet.py's
+        # side_inlet_ram_recovery_ratio, replacing the flat 0.15 credit with
+        # Hall & Frank's mass-flow-coefficient correlation whose *floor* is
+        # 0.50, over 3x the old flat value) raised pulsejet thrust broadly
+        # enough to move this back to 210/170 mm again -- confirmed by direct
+        # re-run, not assumed.
+        result = run_robustness_trade(
+            self.case, self.robustness_path, pulsejet_fidelity=PULSEJET_FIDELITY_FAST
+        )
         selected = result.selected_candidate
         self.assertIsNotNone(selected)
         self.assertAlmostEqual(selected.body_diameter_m, 0.210)

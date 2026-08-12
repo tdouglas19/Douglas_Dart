@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from douglas_dart.config import load_reference_case
+from douglas_dart.propulsion_map import PULSEJET_FIDELITY_FAST
 from douglas_dart.sensitivity import (
     pulsejet_local_sensitivities,
     ramjet_local_sensitivities,
@@ -22,9 +23,7 @@ class SensitivityTests(unittest.TestCase):
         point = pulsejet_local_sensitivities(
             self.case,
             variables=("throat_diameter_m",),
-            warmup_s=0.05,
-            measurement_s=0.05,
-            time_step_s=0.00004,
+            pulsejet_fidelity=PULSEJET_FIDELITY_FAST,
         )[0]
         self.assertLess(point.low_input, point.baseline_input)
         self.assertLess(point.baseline_input, point.high_input)

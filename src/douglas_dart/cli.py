@@ -14,6 +14,8 @@ from .fuel_trade import fuel_performance_trade
 from .mass_model import calibrate_mass_model, evaluate_parametric_mass
 from .propulsion_map import (
     NOMINAL,
+    PULSEJET_FIDELITY_FAST,
+    PULSEJET_FIDELITY_FULL,
     PULSEJET_MODE,
     RAMJET_MODE,
     build_propulsion_map,
@@ -162,9 +164,7 @@ def _shared_nozzle_trade(args: argparse.Namespace) -> int:
         throat_diameters_m=args.throat_diameters,
         exit_to_throat_area_ratios=args.area_ratios,
         propulsion_derate_fraction=args.propulsion_derate,
-        pulsejet_warmup_s=args.pulsejet_warmup,
-        pulsejet_measurement_s=args.pulsejet_measurement,
-        pulsejet_time_step_s=args.pulsejet_dt,
+        pulsejet_fidelity=args.pulsejet_fidelity,
     )
     selected = select_minimum_feasible_shared_nozzle(points)
     if args.csv:
@@ -272,30 +272,13 @@ def _robustness_trade(args: argparse.Namespace) -> int:
 
 def _key_variables(args: argparse.Namespace) -> int:
     case = load_reference_case(args.config, args.fuels)
-    pulsejet_warmup_s = (
-        case.simulation.pulsejet_steady_warmup_s
-        if args.pulsejet_warmup is None
-        else args.pulsejet_warmup
-    )
-    pulsejet_measurement_s = (
-        case.simulation.pulsejet_steady_measurement_s
-        if args.pulsejet_measurement is None
-        else args.pulsejet_measurement
-    )
-    pulsejet_time_step_s = (
-        case.simulation.time_step_s
-        if args.pulsejet_dt is None
-        else args.pulsejet_dt
-    )
     points = []
     if args.engine in {"pulsejet", "both"}:
         points.extend(
             pulsejet_local_sensitivities(
                 case,
                 perturbation_fraction=args.perturbation,
-                warmup_s=pulsejet_warmup_s,
-                measurement_s=pulsejet_measurement_s,
-                time_step_s=pulsejet_time_step_s,
+                pulsejet_fidelity=args.pulsejet_fidelity,
             )
         )
     if args.engine in {"ramjet", "both"}:
@@ -482,9 +465,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated exit-to-throat area ratios",
     )
     shared_nozzle.add_argument("--propulsion-derate", type=float, default=0.15)
-    shared_nozzle.add_argument("--pulsejet-warmup", type=float, default=None)
-    shared_nozzle.add_argument("--pulsejet-measurement", type=float, default=None)
-    shared_nozzle.add_argument("--pulsejet-dt", type=float, default=None)
+    shared_nozzle.add_argument(
+        "--pulsejet-fidelity",
+        choices=(PULSEJET_FIDELITY_FAST, PULSEJET_FIDELITY_FULL),
+        default=PULSEJET_FIDELITY_FULL,
+    )
     shared_nozzle.add_argument("--csv", default=None)
     shared_nozzle.set_defaults(func=_shared_nozzle_trade)
 
@@ -659,9 +644,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="both",
     )
     key_variables.add_argument("--perturbation", type=float, default=0.10)
-    key_variables.add_argument("--pulsejet-warmup", type=float, default=None)
-    key_variables.add_argument("--pulsejet-measurement", type=float, default=None)
-    key_variables.add_argument("--pulsejet-dt", type=float, default=None)
+    key_variables.add_argument(
+        "--pulsejet-fidelity",
+        choices=(PULSEJET_FIDELITY_FAST, PULSEJET_FIDELITY_FULL),
+        default=PULSEJET_FIDELITY_FULL,
+    )
     key_variables.add_argument("--csv", default=None)
     key_variables.set_defaults(func=_key_variables)
 
