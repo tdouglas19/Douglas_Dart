@@ -207,3 +207,58 @@ engine.snapshot/restore; scripts/mach_continuation.py, N=200 sequential);
 (b) cold-start branch (scripts/thrust_vs_mach.py, N=300 parallel, every
 point from the static start condition). Their divergence IS the
 start/quench hysteresis diagram.
+
+## 8. Adversarial audit round; side-inlet requirement (2026-08-11)
+
+**14-agent audit (6 lenses + verify) ran once quota returned; the verify
+phase hit the quota again, so each finding was verified solo before
+acting.** Triage of ~25 unique findings:
+
+*Real code defects, fixed (each verified by re-derivation or the finder's
+own quantitative repro):* (1) **interdiffusion enthalpy flux missing** --
+Y-diffusion at uniform T manufactured ~±33 K at fresh/burned contacts
+(cv_R != cv_P), biasing Arrhenius ignition ~35%; added the
+(cp_R - cp_P) T dY/dx term to the energy diffusion + a uniform-T regression
+test (32nd test). (2) **back-spit Bernoulli relief on the wrong face** --
+relief now reduces the driving |dP| in whichever direction the jet flows
+(copysign form). (3) **turbulence budget advection** -- intensive form
+requires dilution by valve INFLOW (outflow cancels); was decaying by
+outflow. (4) **swept volume lumped into one grid cell** -- grid-dependent,
+unbounded under refinement; now distributed over the physical petal zone.
+(5) **diffusive dt bound missing the gamma factor** (effective diffusivity
+is gamma*nu); coefficient 0.4 -> 0.28. (6) **rich-mixture product molar
+mass** ignored unburned fuel vapor (phi>1 only).
+
+*Doc corrected to match the (correct) code:* eq. 25 rewritten as the exact
+discrete momentum-closure identity (the printed cone-integral sign was
+wrong AND the old check was partly coincidental -- now it is exact by
+construction, using the wall-star pressure and +|mdot|u_j, with the ram
+term made explicit); eq. 9 gains the shear-work and interdiffusion terms;
+eq. 23b gains the Borda dump loss + clamp note; valve integrator stated as
+symplectic Euler (not RK2); Rayleigh index documented as the unweighted
+head-p'/global-q' proxy it is; convergence criterion text aligned;
+head-plane flux documented as using the mirror-Riemann star pressure.
+
+*Honest-limitation findings, documented not "fixed":* A6 adiabatic walls is
+NOT a few-percent effect at this engine size (real losses ~10-30% of heat
+release) -- thrust/TSFC are optimistic by a corresponding margin; the
+near-threshold oscillator amplifies parameter changes (a +3.4% q_0 shift
+moved thrust +34%), so headline thrust carries the closure uncertainty
+(factor ~2 on burn-rate constants) while curve SHAPES and mechanisms are
+the robust outputs; my earlier architecture.md "real-class" anchors
+(1-3 g/cycle vs TSFC ~3) were mutually inconsistent -- retracted; class
+data itself spans TSFC ~0.5 (Dynajet-type claims) to ~3.4 (pulsejet-sim),
+so class-anchoring is loose at best.
+
+**New requirement from the user (mid-session): side-mounted valve inlets,
+perpendicular to vehicle velocity, ingesting boundary-layer air at ~static
+pressure** (the Douglas Dart configuration). Implemented as derivation.md
+#8c + A26/A27: p_plen feed = p_a (wall-normal momentum equation), intake
+T = recovery temperature (Crocco-Busemann, r=0.9), momentum drag charged at
+k_bl*u_inf (BL momentum-integral bracket 0.4-0.9, default 0.6).
+IntakeDesign.orientation="side"; all scripts take --side-inlet.
+**Smoke-verified: at M=0.3 the side-inlet engine COLD-STARTS and runs at
+~13 N where the forward inlet was dying** -- the ram-bias valve-dwell
+mechanism is absent exactly as the physics says. Final campaign running:
+frozen-config grid study, M=0 production plots, side-inlet operating +
+cold-start branches, forward-inlet operating branch for comparison.
