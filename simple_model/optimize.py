@@ -287,6 +287,7 @@ def optimize(
     log=print,
     max_workers: int = DEFAULT_WORKERS,
     refine_batch_size: int = REFINE_BATCH_SIZE,
+    seed_candidates: list[Candidate] | None = None,
 ) -> EvaluatedCandidate:
     """Broad coarse-dt random search (parallel across max_workers processes)
     to find the feasible region cheaply, then re-validate the best
@@ -307,7 +308,15 @@ def optimize(
     """
 
     rng = random.Random(seed)
-    candidates = [_random_candidate(rng) for _ in range(n_random)]
+    # Warm-start seeds evaluated alongside the random pool (2026-08-12):
+    # under calibrated physics the feasible region is a corner occupying
+    # ~4e-6 of the 7-D search volume (large diameter x max operable throat
+    # x narrow span band x near-level climb) -- random draws alone expect
+    # ~0.1 hits per 20k evaluations, so hand-derived seeds near the known
+    # feasible corner give the refinement stage something to walk from.
+    candidates = list(seed_candidates or []) + [
+        _random_candidate(rng) for _ in range(n_random)
+    ]
     tasks = [(c, SEARCH_DT_S, SEARCH_MAX_TIME_S) for c in candidates]
 
     feasible_candidates: list[EvaluatedCandidate] = []
