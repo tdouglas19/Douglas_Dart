@@ -142,6 +142,12 @@ FLARE_SPEED_MARGIN = 1.2
 # runway" to be a sensible description of what's happening.
 FLARE_ALTITUDE_M = 50.0
 
+# Speed multiple of stall below which the unpowered vehicle stops holding
+# altitude and starts the descending glide (see the "decel" mode branch).
+# Held just above FLARE_SPEED_MARGIN so the glide phase only needs to bleed
+# the last few m/s (plus altitude) before the flare window opens.
+DECEL_SPEED_FACTOR = 1.25
+
 
 @dataclass(frozen=True)
 class VehicleGeometry:
@@ -241,45 +247,58 @@ def run_flight(
             if v <= flare_speed_margin * stall_speed and h <= flare_altitude_m:
                 mode = "flare"
                 gamma_rad, sin_gamma, cos_gamma = 0.0, 0.0, 1.0
+            elif v > DECEL_SPEED_FACTOR * stall_speed and h > flare_altitude_m:
+                # Level deceleration segment (2026-08-12): a fixed -5 deg
+                # glide from supersonic cutoff reaches the ground at ~200 m/s
+                # -- gravity feeds back most of what drag removes (the
+                # already-documented "glide angle doesn't decelerate"
+                # limitation). Holding altitude until speed decays below
+                # DECEL_SPEED_FACTOR x stall lets drag do the work first
+                # (kinematically standing in for S-turns / speed brakes),
+                # then the normal descending glide + flare take over. Same
+                # closed-form force evaluations, one extra branch.
+                mode = "decel"
+                gamma_rad, sin_gamma, cos_gamma = 0.0, 0.0, 1.0
             else:
                 mode = "glide"
                 gamma_rad, sin_gamma, cos_gamma = glide_angle_rad, sin_glide, cos_glide
             drag_result = total_drag_n(
                 diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
-                gamma_rad, G0_M_PER_S2,
+                gamma_rad, G0_M_PER_S2, mach=mach,
             )
         else:
-            # Once switched to ramjet the switch never reverts (see the
-            # crossover check below), so pulsejet_thrust's result is never
-            # looked at again after that point -- skip computing it rather
-            # than throwing away a full closed-form evaluation every step
-            # for the rest of the climb.
+            # BOTH engines run through the transition (2026-08-12): the
+            # pulsejet keeps pulsing while the ramjet duct lights -- the
+            # first-principles model shows the side-inlet pulsejet operating
+            # (declining) all the way to M 0.9, and the ramjet lightoff gate
+            # (ramjet_simple.RAMJET_MIN_LIGHTOFF_MACH) already zeroes the
+            # ramjet below its viable speed. The old either/or switch made
+            # the transition gap artificially lethal: total thrust dipped to
+            # a single engine exactly where drag peaks. Total = simple sum;
+            # crossover_mach still reports where the ramjet first dominates.
             ramjet_result = ramjet_thrust(
                 diameter_m, throat_diameter_m, mach, h, fuel, atmosphere=atmosphere
             )
-            if not on_ramjet:
-                pulsejet_result = pulsejet_thrust(
-                    diameter_m, chamber_length_m, throat_diameter_m, throat_length_m, mach, h, fuel,
-                    atmosphere=atmosphere,
-                )
-                if ramjet_result.net_thrust_n > pulsejet_result.average_thrust_n:
-                    on_ramjet = True
-                    crossover_mach = mach
+            pulsejet_result = pulsejet_thrust(
+                diameter_m, chamber_length_m, throat_diameter_m, throat_length_m, mach, h, fuel,
+                atmosphere=atmosphere,
+            )
+            if not on_ramjet and ramjet_result.net_thrust_n > pulsejet_result.average_thrust_n:
+                on_ramjet = True
+                crossover_mach = mach
 
-            if on_ramjet:
-                thrust_n = ramjet_result.net_thrust_n
-                fuel_mdot_kg_per_s = ramjet_result.fuel_mass_flow_kg_per_s
-                specific_impulse_s = ramjet_result.specific_impulse_s
-                mode = "ramjet"
-            else:
-                thrust_n = pulsejet_result.average_thrust_n
-                fuel_mdot_kg_per_s = pulsejet_result.fuel_mass_flow_kg_per_s
-                specific_impulse_s = pulsejet_result.specific_impulse_s
-                mode = "pulsejet"
+            thrust_n = pulsejet_result.average_thrust_n + ramjet_result.net_thrust_n
+            fuel_mdot_kg_per_s = (
+                pulsejet_result.fuel_mass_flow_kg_per_s
+                + ramjet_result.fuel_mass_flow_kg_per_s
+            )
+            weight_flow = fuel_mdot_kg_per_s * G0_M_PER_S2
+            specific_impulse_s = thrust_n / weight_flow if weight_flow > 0.0 else 0.0
+            mode = "ramjet" if on_ramjet else "pulsejet"
             sin_gamma, cos_gamma = sin_climb, cos_climb
             drag_result = total_drag_n(
                 diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
-                climb_angle_rad, G0_M_PER_S2,
+                climb_angle_rad, G0_M_PER_S2, mach=mach,
             )
 
         weight_n = m * G0_M_PER_S2

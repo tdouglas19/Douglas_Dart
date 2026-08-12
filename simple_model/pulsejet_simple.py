@@ -33,17 +33,25 @@ from .constants import (
     GAMMA_COMB,
     COMBUSTION_EFFICIENCY,
     MAX_CHAMBER_TEMPERATURE_K,
+    HELMHOLTZ_FREQUENCY_CALIBRATION,
+    PULSEJET_ALTITUDE_DENSITY_EXPONENT,
+    PULSEJET_CHAMBER_FILL_FRACTION,
+    PULSEJET_MACH_THRUST_SLOPE,
+    PULSEJET_MAX_FREQUENCY_HZ,
+    PULSEJET_MAX_THROAT_AREA_FRACTION,
     PULSEJET_PEAK_PRESSURE_RATIO,
     R_COMB_J_PER_KG_K,
     Fuel,
 )
 
-# Average thrust over a cycle is approximated as peak_thrust / 3: the pulse
-# is roughly "on" (near peak blowdown) for about a third of its period, with
-# the rest spent on the comparatively low-thrust intake/scavenge portion of
-# the cycle. This is the crude, deliberately-simple approximation the user
-# asked for -- not a fitted or sourced duty-cycle number.
-AVERAGE_THRUST_DUTY_CYCLE_FACTOR = 1.0 / 3.0
+# Average thrust over a cycle as a fraction of the closed-form peak.
+# CALIBRATED (2026-08-12): fitted jointly with PULSEJET_PEAK_PRESSURE_RATIO
+# to three first-principles pulsejet-fp operating points spanning 8x thrust
+# and 2.8x scale (residual +/-9%; see constants.py's calibration block).
+# The old value, a 1/3 duty-cycle guess, made the whole model overpredict
+# thrust by a consistent 4.0-4.7x across every scale tested -- the real
+# pulse is far more intermittent than a third of the cycle.
+AVERAGE_THRUST_DUTY_CYCLE_FACTOR = 0.08
 
 
 class PulsejetResult(NamedTuple):
@@ -57,6 +65,11 @@ class PulsejetResult(NamedTuple):
     peak_temperature_k: float
     specific_impulse_s: float
     choked: bool
+    operable: bool = True
+    """False when a closed-form operability gate fails (throat/chamber area
+    fraction or cycle-frequency ceiling -- see constants.py's calibration
+    block): the resonant cycle cannot self-sustain, so average thrust and
+    fuel flow are zeroed. Peak/frequency diagnostics are still reported."""
 
 
 def _choked_mass_flow_coefficient(gamma: float, gas_constant_j_per_kg_k: float) -> float:
@@ -97,7 +110,7 @@ def pulsejet_thrust(
     chamber_length_m: float,
     throat_diameter_m: float,
     throat_length_m: float,
-    mach: float,  # noqa: ARG001 -- accepted for API symmetry with ramjet_thrust; unused (see module docstring)
+    mach: float,
     altitude_m: float,
     fuel: Fuel,
     atmosphere: Atmosphere | None = None,
@@ -114,8 +127,14 @@ def pulsejet_thrust(
     chamber_volume_m3 = (pi * diameter_m**2 / 4.0) * chamber_length_m
     neck_area_m2 = pi * throat_diameter_m**2 / 4.0
 
-    # One fresh, ambient-static charge fills the whole chamber each cycle.
-    air_mass_per_cycle_kg = atmosphere.density_kg_per_m3 * chamber_volume_m3
+    # Fresh ambient-static charge each cycle; the calibrated fill fraction
+    # (constants.py, from pulsejet-fp) replaces the original full-chamber
+    # assumption, which overfed air/fuel ~6-7x at every scale tested.
+    air_mass_per_cycle_kg = (
+        PULSEJET_CHAMBER_FILL_FRACTION
+        * atmosphere.density_kg_per_m3
+        * chamber_volume_m3
+    )
     fuel_mass_per_cycle_kg = air_mass_per_cycle_kg / fuel.stoichiometric_air_fuel_ratio
     total_mass_per_cycle_kg = air_mass_per_cycle_kg + fuel_mass_per_cycle_kg
 
@@ -136,14 +155,26 @@ def pulsejet_thrust(
     # Helmholtz frequency, using the hot post-combustion gas's speed of
     # sound (this is the gas actually oscillating through the neck).
     speed_of_sound_hot_m_per_s = sqrt(GAMMA_COMB * R_COMB_J_PER_KG_K * peak_temperature_k)
-    frequency_hz = helmholtz_frequency_hz(
+    frequency_hz = HELMHOLTZ_FREQUENCY_CALIBRATION * helmholtz_frequency_hz(
         chamber_volume_m3, neck_area_m2, throat_length_m, speed_of_sound_hot_m_per_s
     )
 
+    # --- Operability gates (calibrated against pulsejet-fp; constants.py) ---
+    # (1) throat/chamber AREA fraction: a too-open throat vents the resonator
+    #     faster than combustion can pressurize it (0.29 sustains, 0.43 dead).
+    # (2) cycle frequency: above ~220 Hz the ~1 ms absolute mixing/ignition
+    #     lag cannot phase-lock with the pressure wave (Rayleigh criterion).
+    throat_area_fraction = (throat_diameter_m / diameter_m) ** 2
+    operable = (
+        throat_area_fraction <= PULSEJET_MAX_THROAT_AREA_FRACTION
+        and frequency_hz <= PULSEJET_MAX_FREQUENCY_HZ
+    )
+
     choked = peak_pressure_pa * _CRITICAL_PRESSURE_RATIO >= atmosphere.pressure_pa
-    if not choked:
+    if not choked or not operable:
         return PulsejetResult(
-            0.0, 0.0, frequency_hz, 0.0, 0.0, chamber_volume_m3, peak_pressure_pa, peak_temperature_k, 0.0, False,
+            0.0, 0.0, frequency_hz, 0.0, 0.0, chamber_volume_m3,
+            peak_pressure_pa, peak_temperature_k, 0.0, choked, operable,
         )
 
     peak_mass_flow_kg_per_s = _CHOKED_MASS_FLOW_COEFFICIENT * neck_area_m2 * peak_pressure_pa / sqrt(peak_temperature_k)
@@ -160,6 +191,18 @@ def pulsejet_thrust(
     )
     peak_thrust_n = peak_mass_flow_kg_per_s * exit_velocity_m_per_s
     average_thrust_n = peak_thrust_n * AVERAGE_THRUST_DUTY_CYCLE_FACTOR
+
+    # Side-inlet Mach lapse (calibrated: F(M)/F(0) ~= 1 - 0.43 M, pulsejet-fp
+    # FP-1S operating branch -- boundary-layer momentum drag + recovery
+    # heating of the ingested charge). Supersedes the original no-Mach-
+    # dependence assumption; see constants.py.
+    average_thrust_n *= max(0.0, 1.0 - PULSEJET_MACH_THRUST_SLOPE * mach)
+
+    # Altitude amplitude feedback beyond the rho^1 already in the charge
+    # mass: total scaling ~ (rho/rho_SL)^3 (single-point calibration).
+    density_ratio = atmosphere.density_kg_per_m3 / 1.225
+    if density_ratio < 1.0:
+        average_thrust_n *= density_ratio ** (PULSEJET_ALTITUDE_DENSITY_EXPONENT - 1.0)
 
     fuel_mass_flow_kg_per_s = fuel_mass_per_cycle_kg * frequency_hz
     air_mass_flow_kg_per_s = air_mass_per_cycle_kg * frequency_hz

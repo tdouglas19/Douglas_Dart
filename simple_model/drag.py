@@ -8,7 +8,31 @@ from __future__ import annotations
 from math import cos, pi, sqrt
 from typing import NamedTuple
 
-from .constants import CD0_FRONTAL, CD0_WING, CL_MAX, OSWALD_EFFICIENCY, WING_ASPECT_RATIO
+from .constants import (
+    CD0_FRONTAL,
+    CD0_WING,
+    CL_MAX,
+    OSWALD_EFFICIENCY,
+    TRANSONIC_ONSET_MACH,
+    TRANSONIC_PEAK_CD0_MULTIPLIER,
+    TRANSONIC_PEAK_MACH,
+    WING_ASPECT_RATIO,
+)
+
+
+def cd0_transonic_multiplier(mach: float) -> float:
+    """Mach-dependent multiplier on the body CD0: flat subsonic, quadratic
+    transonic rise to a peak at TRANSONIC_PEAK_MACH, then a decaying
+    supersonic wave-drag tail ~ (M_peak/M)^2. Continuous at both joints,
+    three float branches -- no lookup table, no iteration."""
+
+    if mach <= TRANSONIC_ONSET_MACH:
+        return 1.0
+    rise = TRANSONIC_PEAK_CD0_MULTIPLIER - 1.0
+    if mach < TRANSONIC_PEAK_MACH:
+        s = (mach - TRANSONIC_ONSET_MACH) / (TRANSONIC_PEAK_MACH - TRANSONIC_ONSET_MACH)
+        return 1.0 + rise * s * s
+    return 1.0 + rise * (TRANSONIC_PEAK_MACH / mach) ** 2
 
 
 class DragResult(NamedTuple):
@@ -76,17 +100,23 @@ def total_drag_n(
     oswald_efficiency: float = OSWALD_EFFICIENCY,
     aspect_ratio: float = WING_ASPECT_RATIO,
     cd0_wing: float = CD0_WING,
+    mach: float | None = None,
 ) -> DragResult:
     """Total drag at one flight state.
 
     Required lift assumes quasi-steady flight: lift balances the weight
     component perpendicular to the velocity vector (thrust taken as aligned
     with velocity), i.e. L = m*g*cos(flight_path_angle).
+
+    `mach`, when given, applies the transonic/supersonic wave-drag rise to
+    the body CD0 (cd0_transonic_multiplier). Wings are left un-multiplied
+    (thin surfaces; body wave drag dominates for this layout).
     """
 
     dynamic_pressure_pa = 0.5 * air_density_kg_per_m3 * velocity_m_per_s**2
     required_lift_n = mass_kg * gravity_m_per_s2 * cos(flight_path_angle_rad)
-    parasitic_n = parasitic_drag_n(diameter_m, dynamic_pressure_pa, cd0)
+    effective_cd0 = cd0 if mach is None else cd0 * cd0_transonic_multiplier(mach)
+    parasitic_n = parasitic_drag_n(diameter_m, dynamic_pressure_pa, effective_cd0)
     wing_parasitic_n = wing_parasitic_drag_n(wingspan_m, dynamic_pressure_pa, aspect_ratio, cd0_wing)
     induced_n = induced_drag_n(required_lift_n, dynamic_pressure_pa, wingspan_m, oswald_efficiency)
     return DragResult(

@@ -73,7 +73,16 @@ MOTOR_CUTOFF_MACH = 1.1
 # satisfied by construction, per the user's explicit constraint, rather
 # than sampled independently and rejected/clipped after the fact.
 DIAMETER_BOUNDS_M = (0.08, 0.30)
-THROAT_FRACTION_BOUNDS = (0.30, 0.85)
+# Upper bound capped at the pulsejet operability boundary (2026-08-12):
+# diameter fraction 0.54 = throat/chamber AREA fraction 0.29, the largest
+# ratio the first-principles pulsejet-fp model sustains (0.43 is stone
+# dead -- the previous (0.30, 0.85) bounds let the optimizer pick exactly
+# such a dead engine: the 81/123 mm "T/W optimum"). Keeps every sampled
+# candidate inside the operable resonator regime instead of wasting
+# evaluations on designs the operability gate now zeroes anyway. Note the
+# honest design tension this exposes: the ramjet WANTS a bigger shared
+# throat -- the optimizer now has to trade that against pulsejet viability.
+THROAT_FRACTION_BOUNDS = (0.30, 0.54)
 CHAMBER_LENGTH_BOUNDS_M = (0.15, 0.70)
 THROAT_LENGTH_BOUNDS_M = (0.08, 1.00)  # widened after adding the fuel-volume-fits-in-the-annulus constraint: longer throat_length gives more annular volume *and* a lower pulsejet cycle frequency (so less fuel burned per unit thrust -- see pulsejet_simple.py), so the search kept pushing against the old 0.60 m bound
 WINGSPAN_BOUNDS_M = (0.50, 3.00)  # see MAX_ACCEPTABLE_STALL_SPEED_M_PER_S: below ~0.7 m, stall speed can't reach the (45 m/s) cap for this mass class regardless of anything else, so sampling well below that just wastes search budget
@@ -85,8 +94,13 @@ WINGSPAN_BOUNDS_M = (0.50, 3.00)  # see MAX_ACCEPTABLE_STALL_SPEED_M_PER_S: belo
 # weight-along-path term (m*g*sin(gamma)) working directly against thrust.
 # Bounded well short of vertical (90 deg) -- the quasi-steady-lift drag
 # model this module relies on throughout is not meant to cover a
-# near-vertical launch.
-CLIMB_ANGLE_BOUNDS_DEG = (5.0, 45.0)
+# near-vertical launch. Lower bound dropped 5 -> 1 deg (2026-08-12): with
+# the calibrated pulsejet thrust (T/W ~ 0.2 at release), only near-level
+# acceleration can gain speed at all -- the old 5-deg floor excluded the
+# entire remaining feasible corner (diagnosed: 250/250 random candidates
+# failed to reach cutoff, best max-Mach 0.44, all bleeding energy into
+# climb they could not afford).
+CLIMB_ANGLE_BOUNDS_DEG = (1.0, 45.0)
 
 # A real safety requirement, not just a search knob -- see this module's
 # docstring for why "lands at stall speed" is only actually safe once

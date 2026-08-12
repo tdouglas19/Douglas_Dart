@@ -99,3 +99,84 @@ CL_MAX = 1.0
 # a thin, unoptimized flat-plate-ish lifting surface at this Reynolds number
 # -- a simple, tunable placeholder like CD0_FRONTAL, not a sourced value.
 CD0_WING = 0.02
+
+
+# --- Calibration against the first-principles pulsejet model (2026-08-12) --
+# The constants below were fitted/derived from pulsejet-fp (this repo,
+# `pulsejet-fp/` -- quasi-1D transient wave dynamics + reed-valve ODE +
+# Arrhenius kinetics), using three validated operating points spanning 8x in
+# thrust and 2.8x in linear scale (FP-1 18.6 N, 25 L vehicle-scale ~146 N,
+# T/W-66mm 52.2 N). Provenance: pulsejet-fp/architecture.md sections 9-11.
+# Caveat inherited from the truth model: adiabatic walls make it optimistic,
+# so these calibrated numbers are best-estimates, not conservative bounds.
+
+# Fitted jointly with the duty-cycle factor (log-least-squares over the three
+# anchors, residual +/-9%): the old hardware-anchored 2.25 was nearly right.
+# (This REPLACES the 2.25 definition above at import time.)
+PULSEJET_PEAK_PRESSURE_RATIO = 2.16
+
+# Side-inlet pulsejet thrust DOES fall with Mach (boundary-layer momentum
+# drag + viscous recovery heating of the ingested charge): linear fit to the
+# pulsejet-fp FP-1S operating branch, F(M)/F(0) ~= 1 - 0.43*M over M 0-0.9.
+# Supersedes this model's original "no Mach dependence" assumption.
+PULSEJET_MACH_THRUST_SLOPE = 0.43
+
+# Altitude: the near-threshold oscillator amplifies density loss -- measured
+# -18% thrust for -5.7% charge density at 2000 ft (single-point calibration,
+# uncertainty ~+/-1 on the exponent). Total scaling ~ (rho/rho_SL)^3;
+# the charge mass already contributes rho^1, the rest is applied explicitly.
+PULSEJET_ALTITUDE_DENSITY_EXPONENT = 3.0
+
+# Operability gates (closed-form inequalities, zero runtime cost):
+# (1) Throat/chamber AREA ratio: the resonator cannot sustain combustion if
+#     the throat vents too freely. Bracketed empirically with pulsejet-fp:
+#     0.29 sustains strongly, 0.43 is stone dead (the un-constrained
+#     optimizer's own "T/W-optimized" 81/123 mm pick landed exactly there).
+PULSEJET_MAX_THROAT_AREA_FRACTION = 0.30
+# (2) Cycle frequency ceiling: charge transport/mixing/ignition needs ~1 ms
+#     absolute, so above roughly 220-250 Hz the heat release physically
+#     cannot phase-lock with the pressure wave (pulsejet-fp demonstrated a
+#     ~350 Hz compact design as unconditionally dead). Real valved engines
+#     cluster below ~250 Hz at ANY scale.
+PULSEJET_MAX_FREQUENCY_HZ = 220.0
+
+# Ramjet minimum viable speed: below this the flameholder cannot stabilize /
+# net thrust is not positive. Constant borrowed from douglas_dart's own
+# RamjetConfig lightoff machinery (vehicle configs use ~0.49); a proper
+# first-principles number is the planned ramjet-fp effort's headline output.
+RAMJET_MIN_LIGHTOFF_MACH = 0.45
+RAMJET_LIGHTOFF_RAMP_MACH = 0.10  # linear ramp width above the minimum
+
+# Transonic drag rise on the body CD0 (flat CD0 badly underestimates drag
+# right where a supersonic dart works hardest). Simple continuous blend:
+# flat to M=0.8, quadratic rise to a peak multiplier at M=1.1, then decaying
+# supersonic wave-drag tail ~ (1.1/M)^2. Representative slender-body values,
+# not fitted to this vehicle.
+TRANSONIC_ONSET_MACH = 0.8
+TRANSONIC_PEAK_MACH = 1.1
+TRANSONIC_PEAK_CD0_MULTIPLIER = 2.2
+
+# Helmholtz frequency correction: the idealized no-end-correction, hot-gas
+# formula overpredicts the real cycle frequency by a consistent 1.65-1.8x
+# across all three pulsejet-fp anchors (model 277/98/147 Hz vs true
+# 150.5/59.2/88.7 Hz -> ratios 0.56/0.60/0.60). Physically: neck end
+# corrections plus the cold fresh-charge fraction of the oscillating gas
+# column. One multiplicative constant, fitted 2026-08-12.
+HELMHOLTZ_FREQUENCY_CALIBRATION = 0.59
+
+# Chamber fill fraction per cycle: the "one full ambient chamber volume per
+# cycle" assumption overfeeds the engine ~6-7x. pulsejet-fp charge-per-cycle
+# vs rho*V_chamber: 0.16 (FP-1), 0.13 (25L), 0.18 (TW66) -> 0.15 fitted.
+# Affects air/fuel flow and Isp only -- peak thrust is choked-flow-based and
+# unaffected, so the thrust calibration above stands independently.
+PULSEJET_CHAMBER_FILL_FRACTION = 0.15
+
+# Sensitivity hook: the flat CD0_FRONTAL=0.30 placeholder is now the single
+# constant deciding overall feasibility (calibrated pulsejet thrust tops out
+# at M~0.40 level-flight against it -- below ramjet lightoff -- while a
+# realistic clean slender body at 0.10-0.20 closes the transition gap).
+# Overridable via environment for sensitivity campaigns, without touching
+# call sites; import-time only, so the hot loop cost is zero.
+import os as _os
+
+CD0_FRONTAL = float(_os.environ.get("SIMPLE_MODEL_CD0_FRONTAL", CD0_FRONTAL))

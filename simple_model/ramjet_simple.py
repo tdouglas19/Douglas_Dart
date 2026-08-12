@@ -49,6 +49,8 @@ from .constants import (
     COMBUSTION_EFFICIENCY,
     MAX_CHAMBER_TEMPERATURE_K,
     R_COMB_J_PER_KG_K,
+    RAMJET_LIGHTOFF_RAMP_MACH,
+    RAMJET_MIN_LIGHTOFF_MACH,
     Fuel,
 )
 
@@ -65,6 +67,12 @@ class RamjetResult(NamedTuple):
     exit_velocity_m_per_s: float
     specific_impulse_s: float
     choked: bool
+    lit: bool = True
+    """False below RAMJET_MIN_LIGHTOFF_MACH (constants.py): flameholding is
+    not viable, so thrust and fuel flow are gated to zero (with a narrow
+    linear ramp just above the minimum to keep the closed form continuous).
+    Placeholder constant from douglas_dart's RamjetConfig until the planned
+    first-principles ramjet-fp model derives the real minimum viable speed."""
 
 
 def ramjet_thrust(
@@ -155,9 +163,24 @@ def ramjet_thrust(
     # never enters the engine. Additive drag on the spilled stream itself is
     # not modeled (see module docstring, step 4).
     net_thrust_n = gross_thrust_n - air_mass_flow_kg_per_s * velocity_m_per_s
+
+    # Minimum-viable-speed gate (see RamjetResult.lit): zero below the
+    # lightoff Mach, linear ramp over RAMJET_LIGHTOFF_RAMP_MACH above it so
+    # the closed form stays continuous. One comparison + one multiply.
+    lightoff_factor = (mach - RAMJET_MIN_LIGHTOFF_MACH) / RAMJET_LIGHTOFF_RAMP_MACH
+    lightoff_factor = min(max(lightoff_factor, 0.0), 1.0)
+    lit = lightoff_factor > 0.0
+    net_thrust_n *= lightoff_factor
+    gross_thrust_n *= lightoff_factor
+    fuel_mass_flow_kg_per_s *= lightoff_factor
+
     # Air-breathing convention: Isp = net thrust / (fuel weight flow), since
     # only the fuel is carried onboard (the oxidizer is ambient air).
-    specific_impulse_s = max(net_thrust_n, 0.0) / (fuel_mass_flow_kg_per_s * G0_M_PER_S2)
+    specific_impulse_s = (
+        max(net_thrust_n, 0.0) / (fuel_mass_flow_kg_per_s * G0_M_PER_S2)
+        if fuel_mass_flow_kg_per_s > 0.0
+        else 0.0
+    )
 
     return RamjetResult(
         net_thrust_n=net_thrust_n,
@@ -171,4 +194,5 @@ def ramjet_thrust(
         exit_velocity_m_per_s=exit_velocity_m_per_s,
         specific_impulse_s=specific_impulse_s,
         choked=choked,
+        lit=lit,
     )
