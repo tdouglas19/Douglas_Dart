@@ -66,7 +66,6 @@ from .flight_sim import VehicleGeometry, run_flight
 
 MAX_WET_MASS_KG = 50.0 * KG_PER_LB
 FUEL_RESERVE_MARGIN = 0.25
-CLIMB_ANGLE_DEG = 15.0
 MOTOR_CUTOFF_MACH = 1.1
 
 # Search bounds. throat_diameter is sampled as a *fraction* of vehicle
@@ -78,6 +77,16 @@ THROAT_FRACTION_BOUNDS = (0.30, 0.85)
 CHAMBER_LENGTH_BOUNDS_M = (0.15, 0.70)
 THROAT_LENGTH_BOUNDS_M = (0.08, 1.00)  # widened after adding the fuel-volume-fits-in-the-annulus constraint: longer throat_length gives more annular volume *and* a lower pulsejet cycle frequency (so less fuel burned per unit thrust -- see pulsejet_simple.py), so the search kept pushing against the old 0.60 m bound
 WINGSPAN_BOUNDS_M = (0.50, 3.00)  # see MAX_ACCEPTABLE_STALL_SPEED_M_PER_S: below ~0.7 m, stall speed can't reach the (45 m/s) cap for this mass class regardless of anything else, so sampling well below that just wastes search budget
+# Powered-climb flight path angle, per the user's explicit request to let
+# the optimizer choose this rather than holding it at the old fixed 15
+# degrees. There's a genuine trade-off it can search over: total_drag_n
+# uses required_lift_n = m*g*cos(gamma) even during the climb, so a
+# steeper angle lowers the induced-drag penalty but raises the
+# weight-along-path term (m*g*sin(gamma)) working directly against thrust.
+# Bounded well short of vertical (90 deg) -- the quasi-steady-lift drag
+# model this module relies on throughout is not meant to cover a
+# near-vertical launch.
+CLIMB_ANGLE_BOUNDS_DEG = (5.0, 45.0)
 
 # A real safety requirement, not just a search knob -- see this module's
 # docstring for why "lands at stall speed" is only actually safe once
@@ -149,6 +158,7 @@ class Candidate:
     chamber_length_m: float
     throat_length_m: float
     wingspan_m: float
+    climb_angle_deg: float
     fuel_key: str
 
     def to_geometry(self) -> VehicleGeometry:
@@ -180,6 +190,7 @@ def _random_candidate(rng: random.Random) -> Candidate:
         chamber_length_m=rng.uniform(*CHAMBER_LENGTH_BOUNDS_M),
         throat_length_m=rng.uniform(*THROAT_LENGTH_BOUNDS_M),
         wingspan_m=rng.uniform(*WINGSPAN_BOUNDS_M),
+        climb_angle_deg=rng.uniform(*CLIMB_ANGLE_BOUNDS_DEG),
         fuel_key=rng.choice(list(FUELS.keys())),
     )
 
@@ -203,7 +214,7 @@ def evaluate(
     result = run_flight(
         candidate.to_geometry(),
         MAX_WET_MASS_KG,
-        climb_angle_deg=CLIMB_ANGLE_DEG,
+        climb_angle_deg=candidate.climb_angle_deg,
         motor_cutoff_mach=MOTOR_CUTOFF_MACH,
         dt_s=dt_s,
         max_time_s=max_time_s,
@@ -250,6 +261,7 @@ def _perturb(candidate: Candidate, rng: random.Random) -> Candidate:
         chamber_length_m=step(candidate.chamber_length_m, CHAMBER_LENGTH_BOUNDS_M),
         throat_length_m=step(candidate.throat_length_m, THROAT_LENGTH_BOUNDS_M),
         wingspan_m=step(candidate.wingspan_m, WINGSPAN_BOUNDS_M),
+        climb_angle_deg=step(candidate.climb_angle_deg, CLIMB_ANGLE_BOUNDS_DEG),
         fuel_key=fuel_key,
     )
 
@@ -363,6 +375,6 @@ if __name__ == "__main__":
     print("--- Optimized design ---")
     print(f"diameter_m={c.diameter_m:.4f}  throat_diameter_m={c.throat_diameter_m:.4f}  "
           f"chamber_length_m={c.chamber_length_m:.4f}  throat_length_m={c.throat_length_m:.4f}  "
-          f"wingspan_m={c.wingspan_m:.4f}  fuel={c.fuel_key}")
+          f"wingspan_m={c.wingspan_m:.4f}  climb_angle_deg={c.climb_angle_deg:.4f}  fuel={c.fuel_key}")
     print(f"max_thrust_to_weight={result.max_thrust_to_weight:.3f}")
     print(f"fuel_loaded_kg={result.fuel_loaded_kg:.3f} ({result.fuel_loaded_kg / KG_PER_LB:.2f} lb)")

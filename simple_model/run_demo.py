@@ -38,21 +38,31 @@ OUT_DIR = Path("results/generated/simple_model")
 # true light-aircraft stall speed), and the fuel actually fitting: its
 # volume must be <= 50% of the annular volume between the vehicle OD and
 # the throat OD over the throat/nozzle section's length (see optimize.py's
-# FUEL_VOLUME_FRACTION_OF_ANNULUS) -- this design uses ~34% of that space.
-# max T/W ~4.2 here (higher than an earlier, fuel-tank-unconstrained
-# version of this same search found -- fitting the tank costs some of the
-# T/W headroom that version was spending on a smaller vehicle).
+# FUEL_VOLUME_FRACTION_OF_ANNULUS).
+#
+# This is the result of the re-run after adding wing parasitic drag
+# (drag.py's wing_parasitic_drag_n) and promoting climb angle from a fixed
+# 15 degrees to its own search variable (optimize.py's
+# CLIMB_ANGLE_BOUNDS_DEG) -- both change the physics/search space enough
+# that the old fuel-volume-constrained winner (max T/W ~4.2, jet_a) no
+# longer even reaches motor cutoff before hitting the altitude ceiling
+# (confirmed by direct re-run, not assumed). max T/W ~6.9 here is higher
+# than that old number, but it's the honest cost of a strictly more
+# complete drag model (wing parasitic drag was previously entirely
+# missing) plus an independently re-optimized climb angle, not a
+# regression in the search itself. Uses propane this time, ~24% of the
+# available annular fuel-tank volume.
 GEOMETRY = VehicleGeometry(
-    diameter_m=0.17084211946682157,
-    throat_diameter_m=0.10568979495538257,
-    chamber_length_m=0.5491118290154582,
-    throat_length_m=0.929042838305439,
-    wingspan_m=0.8983266008711583,
-    fuel=FUELS["jet_a"],
+    diameter_m=0.17816917417736486,
+    throat_diameter_m=0.13287763705797825,
+    chamber_length_m=0.38736667101493366,
+    throat_length_m=0.9809150845225322,
+    wingspan_m=0.7394075790852311,
+    fuel=FUELS["propane"],
 )
 REFERENCE_ALTITUDE_M = 0.0  # sea level, for the thrust-vs-Mach verification plot
 MAX_WET_MASS_KG = 50.0 * KG_PER_LB
-CLIMB_ANGLE_DEG = 15.0
+CLIMB_ANGLE_DEG = 12.243346555293243
 # Fuel/thrust cut off here; the sim then glides unpowered to the ground (see
 # flight_sim.py's module docstring for how the glide angle is found).
 MOTOR_CUTOFF_MACH = 1.1
@@ -446,6 +456,13 @@ def main() -> None:
 
     cutoff_state = next((s for s in result.states if s.mode in ("glide", "flare")), None)
     flare_state = next((s for s in result.states if s.mode == "flare"), None)
+    # Stall speed falls throughout the climb (mass drops as fuel burns) while
+    # velocity rises (thrust), so this is the first point where the vehicle
+    # is going fast enough to fly on its own -- not necessarily t=0, since
+    # release velocity (DEFAULT_RELEASE_VELOCITY_M_PER_S) is fixed while the
+    # release-instant stall speed (full wet mass, the heaviest the vehicle
+    # ever is) can be well above it.
+    takeoff_stall_state = next((s for s in result.states if s.velocity_m_per_s >= s.stall_speed_m_per_s), None)
     final = result.states[-1]
 
     total_fuel_consumed_kg = final.fuel_burned_kg
@@ -472,6 +489,14 @@ def main() -> None:
             f"Flare begins at t={flare_state.time_s:.2f}s, altitude={flare_state.altitude_m / 0.3048:.0f} ft, "
             f"V={flare_state.velocity_m_per_s:.0f} m/s (stall speed there: {flare_state.stall_speed_m_per_s:.0f} m/s)"
         )
+    if takeoff_stall_state is not None:
+        print(
+            f"Reaches its own stall speed ({takeoff_stall_state.stall_speed_m_per_s:.0f} m/s) at "
+            f"t={takeoff_stall_state.time_s:.2f}s, {takeoff_stall_state.distance_m:.0f} m "
+            f"({takeoff_stall_state.distance_m / 0.3048:.0f} ft) downrange from release"
+        )
+    else:
+        print("Never reaches its own stall speed during the tracked flight")
     print(
         f"Landed: {result.landed}  |  Safe landing (at stall speed): {result.safe_landing}  |  "
         f"Stalled: {result.stalled}  |  Hit mass floor: {result.hit_mass_floor}"

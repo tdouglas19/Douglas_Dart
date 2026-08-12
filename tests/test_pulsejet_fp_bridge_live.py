@@ -7,6 +7,13 @@ from __future__ import annotations
 
 import math
 
+try:
+    import pytest  # noqa: F401  (monkeypatch fixture)
+except ImportError:  # CI runs unittest discover without pytest installed
+    import unittest
+
+    raise unittest.SkipTest("live bridge test requires pytest (run locally via pytest)")
+
 from douglas_dart.config import load_reference_case
 from douglas_dart.propulsion_map import NOMINAL, _pulsejet_mode_point
 

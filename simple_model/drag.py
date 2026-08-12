@@ -8,11 +8,12 @@ from __future__ import annotations
 from math import cos, pi, sqrt
 from typing import NamedTuple
 
-from .constants import CD0_FRONTAL, CL_MAX, OSWALD_EFFICIENCY, WING_ASPECT_RATIO
+from .constants import CD0_FRONTAL, CD0_WING, CL_MAX, OSWALD_EFFICIENCY, WING_ASPECT_RATIO
 
 
 class DragResult(NamedTuple):
     parasitic_n: float
+    wing_parasitic_n: float
     induced_n: float
     total_n: float
     required_lift_n: float
@@ -27,6 +28,22 @@ def parasitic_drag_n(
 
     frontal_area_m2 = pi * diameter_m**2 / 4.0
     return cd0 * dynamic_pressure_pa * frontal_area_m2
+
+
+def wing_parasitic_drag_n(
+    wingspan_m: float,
+    dynamic_pressure_pa: float,
+    aspect_ratio: float = WING_ASPECT_RATIO,
+    cd0_wing: float = CD0_WING,
+) -> float:
+    """Zero-lift wing drag: D0_wing = CD0_wing * q * S, S = b^2/AR.
+
+    Same backed-out reference area as stall_speed_m_per_s (see its docstring
+    for why this model has no reference area of its own).
+    """
+
+    reference_area_m2 = wingspan_m**2 / aspect_ratio
+    return cd0_wing * dynamic_pressure_pa * reference_area_m2
 
 
 def induced_drag_n(
@@ -57,6 +74,8 @@ def total_drag_n(
     gravity_m_per_s2: float,
     cd0: float = CD0_FRONTAL,
     oswald_efficiency: float = OSWALD_EFFICIENCY,
+    aspect_ratio: float = WING_ASPECT_RATIO,
+    cd0_wing: float = CD0_WING,
 ) -> DragResult:
     """Total drag at one flight state.
 
@@ -68,11 +87,13 @@ def total_drag_n(
     dynamic_pressure_pa = 0.5 * air_density_kg_per_m3 * velocity_m_per_s**2
     required_lift_n = mass_kg * gravity_m_per_s2 * cos(flight_path_angle_rad)
     parasitic_n = parasitic_drag_n(diameter_m, dynamic_pressure_pa, cd0)
+    wing_parasitic_n = wing_parasitic_drag_n(wingspan_m, dynamic_pressure_pa, aspect_ratio, cd0_wing)
     induced_n = induced_drag_n(required_lift_n, dynamic_pressure_pa, wingspan_m, oswald_efficiency)
     return DragResult(
         parasitic_n=parasitic_n,
+        wing_parasitic_n=wing_parasitic_n,
         induced_n=induced_n,
-        total_n=parasitic_n + induced_n,
+        total_n=parasitic_n + wing_parasitic_n + induced_n,
         required_lift_n=required_lift_n,
     )
 

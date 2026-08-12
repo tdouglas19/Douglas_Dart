@@ -93,3 +93,9 @@ CD0_FRONTAL = 0.30
 # placeholders, not sourced values.
 WING_ASPECT_RATIO = 3.0
 CL_MAX = 1.0
+
+# Zero-lift wing drag coefficient, referenced to the same backed-out wing
+# reference area (S = b^2/AR) used by stall_speed_m_per_s. Representative of
+# a thin, unoptimized flat-plate-ish lifting surface at this Reynolds number
+# -- a simple, tunable placeholder like CD0_FRONTAL, not a sourced value.
+CD0_WING = 0.02
