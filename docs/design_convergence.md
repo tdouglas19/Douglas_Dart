@@ -1681,3 +1681,69 @@ engine-out fuel cut, dispatch paths), 2 live end-to-end tests (the M=1.1
 SL point self-selects phi in [0.90, 1.00] and lights -- positive thrust
 from a config whose 0.60 setting could never burn), full regression
 suite re-run.
+
+### Finding (2026-08-12): the shared nozzle throat sizes the flameholder, which decides whether the ramjet can burn at all
+
+Gate 3 on `shared_nozzle_candidate_b.yaml` with phi self-selected still
+fails in `ramjet_accel` -- but for a NEW and more specific reason than
+the phi=0.60 finding it replaces. Candidate B's ramjet is blown off at
+EVERY table corner (M 0.4-0.5 x 0-6000 m), while the same query on
+candidate A's geometry lights at all of them.
+
+Isolated by direct A/B (`run_ramjet_fp_operating_query`, M 0.5, 1500 m):
+
+| geometry | throat | gutter width | result |
+|---|---|---|---|
+| candidate A | 0.130 m | 25.0 mm | lights, phi 0.995, **+253 N** |
+| candidate B | 0.170 m | 9.7 mm (capped) | **ENGINE OUT**, -14 N |
+| candidate B + A's gutter | 0.170 m | 25.0 mm (margin violated) | lights, phi 1.000, **+412 N** |
+
+Mechanism: the bridge caps the annular V-gutter so the flow area past it
+keeps a 15% margin over the nozzle throat (a gutter that chokes ahead of
+the throat is a different engine). Candidate B's 0.170 m throat consumes
+so much of the 0.195 m combustor annulus that only a 9.7 mm gutter fits,
+and flameholder residence time scales with gutter width
+(L_rz = 4 w_g, V_rz proportional to A_g L_rz, entrainment to P_g L_rz),
+so tau_res collapses below the Damkohler fold. **The shared nozzle
+throat diameter is therefore a ramjet flame-stability variable, not just
+a nozzle-matching one** -- a coupling neither the native 0D ramjet model
+nor the pulsejet sizing that chose 0.170 m could express.
+
+Note the third row is a DIAGNOSTIC, not a fix: it deliberately violates
+the throat-margin guard. Real fixes are design choices -- smaller shared
+throat (candidate A's 0.130 m), a larger combustor diameter to free
+annulus area, a different flameholder concept (multiple small gutters,
+dump/step, or a piloted zone), or separate nozzles. The model can screen
+any of them cheaply; the trade against pulsejet nozzle matching is the
+vehicle team's call.
+
+### Consequence: the ramjet fuel budget was sized for a mixture the engine cannot use
+
+Gate 3 on `shared_nozzle_candidate_a.yaml` (0.130 m throat, 25 mm gutter
+-- the flameable geometry) with phi self-selected: the ramjet lights and
+accelerates, **peak Mach 0.652 nominal / 0.639 adverse** (vs 0.495 for
+candidate B, whose ramjet never burns), and the run now ends on
+`ramjet_fuel_exhausted_before_reaching_peak_mach` instead of
+non-positive thrust. The adverse scenario does not even raise a flame
+flag -- it accelerated cleanly until the tank ran dry.
+
+Arithmetic behind it: the configs budget 1.40 kg of ramjet fuel at
+`target_equivalence_ratio: 0.60` (f = 0.0409 kg fuel/kg air). The
+first-principles engine requires phi ~ 0.93-1.00 in this Mach band
+(f = 0.063-0.068), i.e. **~1.6x the fuel per kg of air**, so the 1.40 kg
+budget buys roughly what 0.85 kg would have bought at the assumed
+mixture -- about 20 s of burn at the 0.05-0.10 kg/s flows the throttle
+schedule reports for M 0.5-0.7 near sea level.
+
+Both Gate 3 candidates therefore still FAIL, and the stall-margin
+violation (-37.7% / -41.6%, unchanged and independent of propulsion)
+remains a separate blocker. But the ramjet failure mode is now a
+quantified fuel/mixture budgeting problem rather than an unmodelled
+combustion assumption. Open design levers, in the order the model says
+they matter: (1) shared throat 0.130 m (or otherwise free annulus area)
+so the flame can hold at all; (2) re-budget ramjet fuel for the required
+near-stoich mixture, or reduce the burn requirement by lighting later
+and higher; (3) a piloted/stratified flameholder, which is the one
+change that could restore genuinely lean overall fueling (A13 note --
+the model's uniform-premix assumption is what makes lean fueling
+impossible here, and it is deliberately conservative).
