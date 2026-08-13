@@ -115,13 +115,16 @@ def evaluate_wing(args) -> EvaluatedWing:
         wing_concept=wing.to_concept(),
         max_fuel_burn_kg=tank_capacity_kg / (1.0 + FUEL_RESERVE_MARGIN),
         return_to_launch=True,  # same profile the reports fly -- see optimize.py
+        climb_dive=vehicle.to_climb_dive(),  # V3 vehicles keep their profile
     )
     final = result.states[-1]
     feasible = (
         result.safe_landing
         and final.stall_speed_m_per_s <= MAX_ACCEPTABLE_STALL_SPEED_M_PER_S
         and result.min_powered_thrust_margin >= 1.0 + MIN_POWERED_THRUST_MARGIN_FRACTION
-        and result.min_powered_accel_g >= MIN_POWERED_ACCELERATION_G
+        and result.min_traverse_accel_g >= MIN_POWERED_ACCELERATION_G
+        and result.min_powered_accel_g > 0.0
+        and not result.rule_violated
     )
     mass_margin = None
     if feasible:

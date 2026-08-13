@@ -22,6 +22,8 @@ def _corner_seeds():
     from simple_model.constants import FUELS
     from simple_model.optimize import Candidate
 
+    from simple_model.optimize import V3_ENABLED, V3_FLOOR_ALTITUDE_M
+
     seeds = []
     # widened 2026-08-12: the mass budget + thrust margin + composite score
     # move the optimum away from the pure max-diameter corner, so the seed
@@ -35,7 +37,29 @@ def _corner_seeds():
             throat_length_m=tube, wingspan_m=span, climb_angle_deg=climb,
             fuel_key=fuel,
         ))
-    return seeds
+    if not V3_ENABLED:
+        return seeds
+
+    # V3: re-seed the SAME corner with climb/dive/floor variants, plus a
+    # smaller-diameter sweep the dive is expected to unlock (the whole point
+    # of V3 is that gravity covers the lightoff notch, so a smaller engine
+    # should now pass the acceleration gate). The 7-field seeds above are
+    # kept: a V3 campaign should still be able to choose NOT to dive.
+    v3_seeds = []
+    for D, frac, ch, tube, span, fuel, (v3_climb, v3_dive), floor_ft in itertools.product(
+        (0.20, 0.24, 0.28, 0.30), (0.50, 0.54), (0.35, 0.55), (0.70, 0.90),
+        (0.70, 0.85), ("propane", "jet_a"),
+        ((12.0, 6.0), (18.0, 10.0), (25.0, 15.0), (30.0, 20.0)),
+        (400.0, 800.0),
+    ):
+        v3_seeds.append(Candidate(
+            diameter_m=D, throat_diameter_m=D * frac, chamber_length_m=ch,
+            throat_length_m=tube, wingspan_m=span, climb_angle_deg=1.0,
+            fuel_key=fuel, initial_climb_angle_deg=v3_climb,
+            dive_angle_deg=v3_dive,
+            floor_altitude_m=max(floor_ft * 0.3048, V3_FLOOR_ALTITUDE_M),
+        ))
+    return seeds + v3_seeds
 
 
 def main() -> None:

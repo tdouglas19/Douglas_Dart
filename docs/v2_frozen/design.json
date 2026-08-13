@@ -1,0 +1,47 @@
+{
+  "name": "V2 optimal design (accel-gated)",
+  "frozen_utc_date": "2026-08-12",
+  "git_sha": "0f3759c4812b4a5aaf5c2dd9619d8a5673080959",
+  "how_to_refly": "SIMPLE_MODEL_CD0_FRONTAL=0.1 python, then simple_model.flight_sim.run_flight(VehicleGeometry(**vehicle_geometry), 22.68, climb_angle_deg=..., motor_cutoff_mach=1.1, dt_s=0.02, wing_concept=WingConcept(**wing), max_fuel_burn_kg=..., return_to_launch=True). Locked by tests/test_v2_frozen.py.",
+  "vehicle_candidate": {
+    "diameter_m": 0.2798870135842943,
+    "throat_diameter_m": 0.15113898733551892,
+    "chamber_length_m": 0.3417673628514488,
+    "throat_length_m": 0.6798077564160785,
+    "wingspan_m": 0.8126242801268353,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane"
+  },
+  "wing_concept": {
+    "span_m": 0.6535259924064454,
+    "aspect_ratio": 1.9640479608874135,
+    "taper_ratio": 0.782376087935199,
+    "sweep_deg": 9.239978166031012,
+    "airfoil_key": "flat_plate"
+  },
+  "constants_at_freeze": {
+    "CD0_FRONTAL": 0.1,
+    "MIN_POWERED_ACCELERATION_G": 0.25,
+    "MIN_POWERED_THRUST_MARGIN_FRACTION": 0.15,
+    "PULSEJET_MAX_THROAT_AREA_FRACTION": 0.3,
+    "RAMJET_MIN_LIGHTOFF_MACH": 0.45,
+    "OBJECTIVE_WEIGHT_TW": 1.0,
+    "OBJECTIVE_WEIGHT_DIAMETER": 0.5,
+    "OBJECTIVE_WEIGHT_LENGTH": 0.3,
+    "OBJECTIVE_WEIGHT_SPAN": 0.2
+  },
+  "optimizer_results": {
+    "vehicle_score": 1.8077402623040972,
+    "vehicle_peak_tw": 10.095636631109128,
+    "wing_score": 1.784834359317316,
+    "dry_mass_kg": 14.819774502019603,
+    "mass_margin_kg": 5.848996176228489
+  },
+  "verified_mission": {
+    "min_powered_accel_g": 0.26,
+    "min_accel_mach": 0.45,
+    "min_powered_thrust_margin": 1.36,
+    "peak_thrust_to_weight": 10.08,
+    "lands_from_launch_m": 2
+  }
+}

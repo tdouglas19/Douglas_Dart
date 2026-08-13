@@ -66,7 +66,7 @@ as flying into the ground still too fast, not a proper touchdown.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, pi, radians, sin
+from math import asin, cos, pi, radians, sin
 from typing import NamedTuple
 
 from douglas_dart.atmosphere import standard_atmosphere
@@ -151,6 +151,15 @@ FLARE_ALTITUDE_M = 50.0
 # the last few m/s (plus altitude) before the flare window opens.
 DECEL_SPEED_FACTOR = 1.25
 
+# Overhead spiral only: the level bleed must hand off to the speed-holding
+# equilibrium descent already INSIDE the flare window, not at its edge. The
+# equilibrium spiral holds whatever speed it inherits, so if that speed sits
+# above FLARE_SPEED_MARGIN the flare never triggers and the vehicle rides a
+# perfectly good glide into the ground (observed: arrived at h=0 holding
+# 55.9 m/s against a 55.6 m/s trigger -- 0.3 m/s short). Held below
+# FLARE_SPEED_MARGIN so the handoff always lands inside the window.
+SPIRAL_BLEED_SPEED_FACTOR = 1.15
+
 # --- Return-to-launch profile (run_flight(return_to_launch=True)) -----------
 # Instead of bleeding all the cutoff energy flying straight downrange, the
 # vehicle comes home and the trajectory closes into a loop. Sequencing is
@@ -179,6 +188,50 @@ DECEL_SPEED_FACTOR = 1.25
 # overhead ("spiral") -- so the landing itself is the already-validated
 # one. If energy runs out short of home, the normal flare lands the
 # vehicle wherever it is (reported honestly by the trajectory).
+# --- V3 climb-dive profile (run_flight(climb_dive=ClimbDiveProfile(...))) ---
+# The pulsejet->ramjet thrust deficit is a narrow NOTCH at lightoff, not a
+# broad valley: level acceleration measured on the V2 winner runs +0.32 g at
+# M 0.40, dips to +0.21 g at M 0.44, and is back to +0.96 g by M 0.50. The
+# V3 idea (user, 2026-08-12) is to bank the pulsejet's surplus low-Mach
+# thrust as ALTITUDE, then spend it as gravity through that notch:
+# a_gravity/g = sin(dive), so a 10 deg dive adds +0.17 g exactly where the
+# engine is weakest. Measured trade crossing M 0.35 -> 0.60:
+#     dive   min accel   altitude spent
+#      0 deg   +0.13 g        0 ft
+#      5 deg   +0.23 g      650 ft
+#     10 deg   +0.33 g     1050 ft
+#     15 deg   +0.42 g     1340 ft
+# The prize is not the acceleration itself but a SMALLER ENGINE: the
+# min-acceleration gate is what forced V2's peak T/W from 6.89 to 10.08, and
+# a 10/15 deg dive lets the same gate pass with 11%/24% less thrust.
+#
+# Two measured facts shape the profile:
+#   * Being LOW is good for the ramjet -- at M 1.05 the vehicle makes
+#     +3.21 g at 500 ft vs +2.65 g at 5000 ft (ramjet thrust scales with
+#     density and beats the drag rise), so the post-dive "drag strip" run
+#     wants to be near the floor, not up high.
+#   * Climbing costs THRUST, not just fuel -- the same engine makes +0.38 g
+#     at 300 m and +0.32 g at 600 m (M 0.40). Roughly a third of the dive's
+#     benefit is paid back as a climb tax, so a lower top with a steeper
+#     dive beats a gentle dive from high up.
+#
+# Competition rule (user, 2026-08-12): flight path angle must be >= 0 from
+# M 0.80 all the way through cutoff. It does not bind -- the vehicle is at
+# +2.3 g by M 0.60 and pulls out long before M 0.80 -- but violations are
+# tracked and reported rather than assumed away.
+V3_FLOOR_ALTITUDE_M = 400.0 * 0.3048      # 121.9 m -- user-specified hard floor
+V3_DIVE_START_MACH = 0.35
+V3_DIVE_END_MACH = 0.60
+V3_RULE_MACH_LO = 0.80
+V3_RULE_MACH_HI = 1.10
+# Cap on the DERIVED top-of-climb. A shallow dive behind a weak engine
+# traverses the Mach band so slowly that drop = distance * sin(dive) runs
+# away (it fed standard_atmosphere an out-of-range altitude and crashed the
+# optimizer). Capping is the honest response: such a candidate simply never
+# reaches its top, runs out of altitude ceiling or time, and is reported
+# infeasible -- rather than the sizing pass exploding.
+V3_MAX_TOP_ALTITUDE_M = 4000.0
+
 RETURN_LOOP_LOAD_FACTOR = 6.0
 # Matched to the airframe's actual best glide slope (~L/D 5.5-6.5 for the
 # 615 mm wing at ~70 m/s): shallower angles have an equilibrium speed
@@ -196,6 +249,89 @@ class VehicleGeometry:
     throat_length_m: float
     wingspan_m: float
     fuel: Fuel
+
+
+@dataclass(frozen=True)
+class ClimbDiveProfile:
+    """V3 powered trajectory: climb steeply on surplus low-Mach thrust to
+    top_altitude_m, push over and dive through the lightoff notch, pull out
+    at floor_altitude_m, then run the level-ish "drag strip" to cutoff.
+
+    top_altitude_m is normally DERIVED (derive_top_altitude) from how much
+    altitude the dive actually spends crossing the notch -- the user's "mgh
+    sets how high we need to climb" framing -- rather than searched
+    independently, which keeps the three phases self-consistent."""
+
+    initial_climb_angle_deg: float
+    dive_angle_deg: float                 # positive; flown as -angle
+    floor_altitude_m: float = V3_FLOOR_ALTITUDE_M
+    dive_start_mach: float = V3_DIVE_START_MACH
+    dive_end_mach: float = V3_DIVE_END_MACH
+    top_altitude_m: float | None = None
+
+
+def derive_top_altitude(
+    geometry: VehicleGeometry,
+    wing_concept: WingConcept | None,
+    mass_kg: float,
+    profile: ClimbDiveProfile,
+    n_steps: int = 48,
+) -> float:
+    """Closed-form sizing: march the dive Mach band at the dive angle and
+    integrate the altitude it spends, so top = floor + that. Two fixed
+    passes (not a convergence loop) -- the first estimates the drop at the
+    floor's density, the second re-runs it at the resulting mid-dive
+    altitude, which is where the air actually is.
+
+    Returns the floor unchanged for a zero/negative dive angle, and caps the
+    result if the dive cannot be sustained (the flight itself still enforces
+    the floor, so an under-estimate is safe, not silently wrong)."""
+    sin_dive = sin(radians(profile.dive_angle_deg))
+    if sin_dive <= 0.0 or profile.dive_end_mach <= profile.dive_start_mach:
+        return profile.floor_altitude_m
+
+    max_drop = max(V3_MAX_TOP_ALTITUDE_M - profile.floor_altitude_m, 0.0)
+    step = (profile.dive_end_mach - profile.dive_start_mach) / n_steps
+    drop = 0.0
+    for _pass in range(2):
+        reference_alt = min(profile.floor_altitude_m + 0.5 * drop,
+                            V3_MAX_TOP_ALTITUDE_M)
+        drop = 0.0
+        for i in range(n_steps):
+            mach = profile.dive_start_mach + step * i
+            atmosphere = standard_atmosphere(reference_alt)
+            a_sound = atmosphere.speed_of_sound_m_per_s
+            v = mach * a_sound
+            thrust_n = (
+                pulsejet_thrust(geometry.diameter_m, geometry.chamber_length_m,
+                                geometry.throat_diameter_m, geometry.throat_length_m,
+                                mach, reference_alt, geometry.fuel,
+                                atmosphere=atmosphere).average_thrust_n
+                + ramjet_thrust(geometry.diameter_m, geometry.throat_diameter_m,
+                                mach, reference_alt, geometry.fuel,
+                                atmosphere=atmosphere).net_thrust_n
+            )
+            if wing_concept is None:
+                drag_n = total_drag_n(
+                    geometry.diameter_m, geometry.wingspan_m, v,
+                    atmosphere.density_kg_per_m3, mass_kg, -radians(profile.dive_angle_deg),
+                    G0_M_PER_S2, mach=mach).total_n
+            else:
+                drag_n = _concept_drag(
+                    geometry.diameter_m, wing_concept, v,
+                    atmosphere.density_kg_per_m3, mass_kg,
+                    -radians(profile.dive_angle_deg), mach).total_n
+            accel = (thrust_n - drag_n) / mass_kg + G0_M_PER_S2 * sin_dive
+            if accel <= 0.0:
+                # cannot sustain the dive band; fall back to whatever the
+                # partial integration bought (the floor still binds in flight)
+                return profile.floor_altitude_m + min(drop, max_drop)
+            dv = step * a_sound
+            dt = dv / accel
+            drop += (v + 0.5 * dv) * dt * sin_dive
+            if drop >= max_drop:
+                return V3_MAX_TOP_ALTITUDE_M
+    return profile.floor_altitude_m + min(drop, max_drop)
 
 
 class FlightState(NamedTuple):
@@ -241,6 +377,19 @@ class FlightResult:
     MIN_POWERED_ACCELERATION_G in constants.py."""
     min_accel_mach: float = 0.0
     """Mach at which that worst powered acceleration occurred."""
+    min_traverse_accel_g: float = float("inf")
+    """min acceleration over powered steps EXCLUDING the commanded V3 climb
+    -- i.e. over the regimes the vehicle must actually get *through* (the
+    lightoff notch and the drag strip). This is what the acceleration gate
+    tests; see the reasoning in run_flight where it is tracked. Identical to
+    min_powered_accel_g for any non-V3 flight."""
+    min_traverse_accel_mach: float = 0.0
+    climb_dive_top_altitude_m: float | None = None
+    """V3 only: the derived top-of-climb altitude actually flown."""
+    rule_violated: bool = False
+    """V3 rule: True if the flight path angle went NEGATIVE anywhere in
+    V3_RULE_MACH_LO..HI. Gated by the optimizer; see the V3 constant block."""
+    rule_violation_mach: float | None = None
 
 
 def _concept_drag(diameter_m, wing_concept, v, rho, m, gamma_rad, mach):
@@ -266,6 +415,7 @@ def run_flight(
     wing_concept: WingConcept | None = None,
     max_fuel_burn_kg: float | None = None,
     return_to_launch: bool = False,
+    climb_dive: ClimbDiveProfile | None = None,
 ) -> FlightResult:
     # max_fuel_burn_kg: physical usable-fuel limit (tank capacity minus
     # reserve). Exceeding it is a FLAMEOUT: engine off wherever the flight
@@ -278,19 +428,31 @@ def run_flight(
     # concept's own closed forms (drag.py's wing-concept block); its span
     # OVERRIDES geometry.wingspan_m so the wing optimizer owns all wing
     # variables in one place.
-    if return_to_launch:
-        # the overhead spiral descends at the airframe's equilibrium glide
-        # slope (RETURN_GLIDE_ANGLE_DEG), whose steady speed sits at
-        # ~1.25x stall for this vehicle class -- the flare window must
-        # open there or the spiral arrives at flare altitude a couple m/s
-        # too fast and flies into the ground instead of flaring
-        flare_speed_margin = max(flare_speed_margin, DECEL_SPEED_FACTOR)
     climb_angle_rad = radians(climb_angle_deg)
     sin_climb, cos_climb = sin(climb_angle_rad), cos(climb_angle_rad)
     glide_angle_rad = radians(GLIDE_ANGLE_DEG)
     sin_glide, cos_glide = sin(glide_angle_rad), cos(glide_angle_rad)
     return_glide_rad = radians(RETURN_GLIDE_ANGLE_DEG)
     sin_rglide, cos_rglide = sin(return_glide_rad), cos(return_glide_rad)
+
+    # V3 climb-dive setup (no-op when climb_dive is None, which keeps every
+    # pre-V3 flight bit-identical -- see tests/test_v2_frozen.py)
+    v3_top_altitude_m: float | None = None
+    if climb_dive is not None:
+        v3_climb_rad = radians(climb_dive.initial_climb_angle_deg)
+        sin_v3climb, cos_v3climb = sin(v3_climb_rad), cos(v3_climb_rad)
+        v3_dive_rad = -radians(climb_dive.dive_angle_deg)
+        sin_v3dive, cos_v3dive = sin(v3_dive_rad), cos(v3_dive_rad)
+        v3_top_altitude_m = (
+            climb_dive.top_altitude_m
+            if climb_dive.top_altitude_m is not None
+            else derive_top_altitude(geometry, wing_concept, initial_mass_kg,
+                                     climb_dive)
+        )
+    v3_climb_done = False
+    v3_dive_done = False
+    rule_violated = False
+    rule_violation_mach: float | None = None
 
     # Local aliases for the hot loop below: geometry is fixed for the whole
     # flight, but Python attribute lookups (geometry.diameter_m) are slower
@@ -324,6 +486,8 @@ def run_flight(
     min_margin_mach = 0.0
     min_powered_accel_g = float("inf")
     min_accel_mach = 0.0
+    min_traverse_accel_g = float("inf")
+    min_traverse_accel_mach = 0.0
     # return-to-launch state machine (see the constant block above)
     loop_gamma = 0.0        # flight-path angle swept so far in the half-loop
     heading_reversed = False
@@ -376,7 +540,8 @@ def run_flight(
                     mode = "flare"
                     gamma_rad, sin_gamma, cos_gamma = 0.0, 0.0, 1.0
                     x_rate = direction
-                elif v > DECEL_SPEED_FACTOR * stall_speed and h > flare_altitude_m:
+                elif v > (SPIRAL_BLEED_SPEED_FACTOR if overhead
+                          else DECEL_SPEED_FACTOR) * stall_speed and h > flare_altitude_m:
                     # Level deceleration segment (2026-08-12): a fixed -5 deg
                     # glide from supersonic cutoff reaches the ground at ~200 m/s
                     # -- gravity feeds back most of what drag removes (the
@@ -392,11 +557,29 @@ def run_flight(
                     gamma_rad, sin_gamma, cos_gamma = 0.0, 0.0, 1.0
                     x_rate = direction
                 elif overhead:
-                    # descending spiral at the equilibrium glide slope --
-                    # -5 deg bleeds through stall over a long descent
-                    # (observed), the steeper return slope holds speed
+                    # Descending spiral at the TRUE equilibrium glide slope,
+                    # solved closed-form each step rather than flown at a
+                    # fixed angle: steady unpowered flight means
+                    # 0 = -D - W sin(gamma), so sin(gamma) = -D/W holds speed
+                    # constant all the way down. A fixed angle cannot -- at
+                    # the old -9 deg the vehicle bled monotonically and
+                    # arrived at the flare window below stall (V2 landed with
+                    # 3 m/s to spare, V3's higher arrival altitude stalled it
+                    # outright). Drag is evaluated level here to pick the
+                    # angle; cos(gamma) ~ 1 at these slopes, so the one-pass
+                    # estimate is exact to well under a percent.
                     mode = "spiral"
-                    gamma_rad, sin_gamma, cos_gamma = return_glide_rad, sin_rglide, cos_rglide
+                    if wing_concept is None:
+                        drag_level_n = total_drag_n(
+                            diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3,
+                            drag_mass_kg, 0.0, G0_M_PER_S2, mach=mach).total_n
+                    else:
+                        drag_level_n = _concept_drag(
+                            diameter_m, wing_concept, v, atmosphere.density_kg_per_m3,
+                            drag_mass_kg, 0.0, mach).total_n
+                    sin_gamma = -min(drag_level_n / (m * G0_M_PER_S2), 0.5)
+                    gamma_rad = asin(sin_gamma)
+                    cos_gamma = cos(gamma_rad)
                     x_rate = 0.0
                 else:
                     mode = "glide"
@@ -441,17 +624,46 @@ def run_flight(
             weight_flow = fuel_mdot_kg_per_s * G0_M_PER_S2
             specific_impulse_s = thrust_n / weight_flow if weight_flow > 0.0 else 0.0
             mode = "ramjet" if on_ramjet else "pulsejet"
+            gamma_rad = climb_angle_rad
             sin_gamma, cos_gamma = sin_climb, cos_climb
             x_rate = cos_climb
+            if climb_dive is not None:
+                # V3 phase machine. Latched (not re-tested) so a phase never
+                # re-opens: climb to the derived top, dive through the
+                # lightoff notch, then run the drag strip at climb_angle_deg.
+                if not v3_climb_done and h >= v3_top_altitude_m:
+                    v3_climb_done = True
+                if not v3_dive_done and v3_climb_done and (
+                        mach >= climb_dive.dive_end_mach
+                        or h <= climb_dive.floor_altitude_m):
+                    v3_dive_done = True
+                if not v3_climb_done:
+                    mode = "v3_climb"
+                    gamma_rad = v3_climb_rad
+                    sin_gamma, cos_gamma = sin_v3climb, cos_v3climb
+                    x_rate = cos_v3climb
+                elif not v3_dive_done:
+                    mode = "v3_dive"
+                    gamma_rad = v3_dive_rad
+                    sin_gamma, cos_gamma = sin_v3dive, cos_v3dive
+                    x_rate = cos_v3dive
+                else:
+                    mode = "drag_strip"
+                # the rule (gamma >= 0 from M 0.80 through cutoff) is checked
+                # on what is actually flown, not assumed from the schedule
+                if (V3_RULE_MACH_LO <= mach <= V3_RULE_MACH_HI
+                        and sin_gamma < -1e-9 and not rule_violated):
+                    rule_violated = True
+                    rule_violation_mach = mach
             if wing_concept is None:
                 drag_result = total_drag_n(
                     diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
-                    climb_angle_rad, G0_M_PER_S2, mach=mach,
+                    gamma_rad, G0_M_PER_S2, mach=mach,
                 )
             else:
                 drag_result = _concept_drag(
                     diameter_m, wing_concept, v, atmosphere.density_kg_per_m3,
-                    m, climb_angle_rad, mach,
+                    m, gamma_rad, mach,
                 )
 
         weight_n = m * G0_M_PER_S2
@@ -459,7 +671,15 @@ def run_flight(
         weight_along_path_n = weight_n * sin_gamma
         acceleration_m_per_s2 = (thrust_n - drag_result.total_n - weight_along_path_n) / m
         if not engine_off:
-            demand_n = drag_result.total_n + weight_along_path_n
+            # ENGINE-ONLY margin (2026-08-12, V3): the gravity term is
+            # clamped at zero so a dive cannot inflate the margin. In a dive
+            # weight_along_path_n is negative, which would shrink "demand"
+            # and make an underpowered engine look healthy purely because it
+            # is pointed downhill. A climb's gravity term is real work the
+            # engine must do, so it still counts. Identical to the old form
+            # for every non-diving flight (V2 and earlier climb at +1 deg),
+            # which tests/test_v2_frozen.py verifies.
+            demand_n = drag_result.total_n + max(weight_along_path_n, 0.0)
             if demand_n > 1e-9:
                 margin = thrust_n / demand_n
                 if margin < min_powered_thrust_margin:
@@ -469,6 +689,18 @@ def run_flight(
             if accel_g < min_powered_accel_g:
                 min_powered_accel_g = accel_g
                 min_accel_mach = mach
+            # TRAVERSE acceleration excludes the commanded V3 climb. The
+            # gate exists so the vehicle is never stranded in a regime it
+            # cannot accelerate through; a deliberate climb is not such a
+            # regime -- level-equivalent acceleration there is 0.6-0.8 g and
+            # the vehicle can shallow out at any instant to get it back. The
+            # lightoff notch and the transonic drag strip ARE such regimes,
+            # so those are what get gated. (The engine-only thrust margin
+            # above still applies to every powered step, climb included, so
+            # an underpowered engine cannot hide inside the climb.)
+            if mode != "v3_climb" and accel_g < min_traverse_accel_g:
+                min_traverse_accel_g = accel_g
+                min_traverse_accel_mach = mach
 
         states.append(
             FlightState(
@@ -519,4 +751,6 @@ def run_flight(
         states, motor_cutoff_reached, landed, safe_landing, hit_mass_floor,
         stalled, crossover_mach, min_powered_thrust_margin, min_margin_mach,
         min_powered_accel_g, min_accel_mach,
+        min_traverse_accel_g, min_traverse_accel_mach, v3_top_altitude_m,
+        rule_violated, rule_violation_mach,
     )

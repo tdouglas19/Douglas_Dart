@@ -86,7 +86,8 @@ def design_score(candidate, peak_thrust_to_weight: float, span_m: float | None =
         + OBJECTIVE_WEIGHT_LENGTH * body_length / OBJECTIVE_LENGTH_SCALE_M
         + OBJECTIVE_WEIGHT_SPAN * b / OBJECTIVE_SPAN_SCALE_M
     )
-from .flight_sim import VehicleGeometry, run_flight
+from .flight_sim import (ClimbDiveProfile, V3_FLOOR_ALTITUDE_M,
+                         VehicleGeometry, run_flight)
 
 MAX_WET_MASS_KG = 50.0 * KG_PER_LB
 FUEL_RESERVE_MARGIN = 0.25
@@ -125,6 +126,23 @@ WINGSPAN_BOUNDS_M = (0.50, 3.00)  # see MAX_ACCEPTABLE_STALL_SPEED_M_PER_S: belo
 # failed to reach cutoff, best max-Mach 0.44, all bleeding energy into
 # climb they could not afford).
 CLIMB_ANGLE_BOUNDS_DEG = (1.0, 45.0)
+
+# --- V3 climb-dive search (enabled per-campaign via SIMPLE_MODEL_V3=1) -----
+# Three extra variables on top of the seven vehicle ones. The top-of-climb
+# altitude is NOT searched -- it is derived from how much altitude the dive
+# actually spends crossing the lightoff notch
+# (flight_sim.derive_top_altitude), which keeps climb, dive and floor
+# mutually consistent instead of letting the search pick three numbers that
+# do not add up. climb_angle_deg keeps its meaning: the post-pullout "drag
+# strip" angle.
+V3_ENABLED = os.environ.get("SIMPLE_MODEL_V3") == "1"
+V3_CLIMB_ANGLE_BOUNDS_DEG = (5.0, 35.0)
+V3_DIVE_ANGLE_BOUNDS_DEG = (3.0, 25.0)
+# Floor is searched, not pinned: being low is aerodynamically GOOD for the
+# ramjet (+3.21 g at 500 ft vs +2.65 g at 5000 ft at M 1.05), so the search
+# should be free to sit near the floor -- but never below the user's hard
+# 400 ft minimum (V3_FLOOR_ALTITUDE_M).
+V3_FLOOR_BOUNDS_M = (V3_FLOOR_ALTITUDE_M, 1500.0 * 0.3048)
 
 # A real safety requirement, not just a search knob -- see this module's
 # docstring for why "lands at stall speed" is only actually safe once
@@ -198,6 +216,26 @@ class Candidate:
     wingspan_m: float
     climb_angle_deg: float
     fuel_key: str
+    # V3 climb-dive variables. Defaulted so every pre-V3 Candidate (and the
+    # 7-field dicts in docs/v2_frozen/design.json and the old campaign
+    # summaries) still constructs and flies exactly as before: a zero dive
+    # angle means no ClimbDiveProfile is built at all.
+    initial_climb_angle_deg: float = 0.0
+    dive_angle_deg: float = 0.0
+    floor_altitude_m: float = V3_FLOOR_ALTITUDE_M
+
+    @property
+    def uses_climb_dive(self) -> bool:
+        return self.dive_angle_deg > 0.0 and self.initial_climb_angle_deg > 0.0
+
+    def to_climb_dive(self) -> ClimbDiveProfile | None:
+        if not self.uses_climb_dive:
+            return None
+        return ClimbDiveProfile(
+            initial_climb_angle_deg=self.initial_climb_angle_deg,
+            dive_angle_deg=self.dive_angle_deg,
+            floor_altitude_m=max(self.floor_altitude_m, V3_FLOOR_ALTITUDE_M),
+        )
 
     def to_geometry(self) -> VehicleGeometry:
         return VehicleGeometry(
@@ -237,6 +275,12 @@ def _random_candidate(rng: random.Random) -> Candidate:
         wingspan_m=rng.uniform(*WINGSPAN_BOUNDS_M),
         climb_angle_deg=rng.uniform(*CLIMB_ANGLE_BOUNDS_DEG),
         fuel_key=rng.choice(list(FUELS.keys())),
+        initial_climb_angle_deg=(rng.uniform(*V3_CLIMB_ANGLE_BOUNDS_DEG)
+                                 if V3_ENABLED else 0.0),
+        dive_angle_deg=(rng.uniform(*V3_DIVE_ANGLE_BOUNDS_DEG)
+                        if V3_ENABLED else 0.0),
+        floor_altitude_m=(rng.uniform(*V3_FLOOR_BOUNDS_M)
+                          if V3_ENABLED else V3_FLOOR_ALTITUDE_M),
     )
 
 
@@ -286,6 +330,7 @@ def evaluate(
         # optimizing straight-out then reporting return-to-launch produced
         # a "feasible" winner whose reported flight failed its landing.
         return_to_launch=True,
+        climb_dive=candidate.to_climb_dive(),
     )
     final_state = result.states[-1]
     kept_result = result if return_result else None
@@ -296,10 +341,21 @@ def evaluate(
     # not just barely -- see MIN_POWERED_THRUST_MARGIN_FRACTION.
     if result.min_powered_thrust_margin < 1.0 + MIN_POWERED_THRUST_MARGIN_FRACTION:
         return EvaluatedCandidate(candidate, False, None, None, kept_result)
-    # Minimum powered acceleration (user requirement, 2026-08-12): the
-    # margin above is multiplicative and still admits near-zero absolute
-    # acceleration at the pinch -- see MIN_POWERED_ACCELERATION_G.
-    if result.min_powered_accel_g < MIN_POWERED_ACCELERATION_G:
+    # Minimum acceleration (user requirement, 2026-08-12): the margin above
+    # is multiplicative and still admits near-zero absolute acceleration at
+    # the pinch -- see MIN_POWERED_ACCELERATION_G. Gated on the TRAVERSE
+    # figure (excludes the commanded V3 climb, which is not a regime the
+    # vehicle can be stranded in -- see flight_sim); identical to
+    # min_powered_accel_g for any non-V3 candidate.
+    if result.min_traverse_accel_g < MIN_POWERED_ACCELERATION_G:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+    # ...but the vehicle must still be ACCELERATING everywhere under power,
+    # climb included: a climb angle so steep the vehicle decelerates is
+    # trading speed for altitude, not banking surplus thrust.
+    if result.min_powered_accel_g <= 0.0:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+    # Competition rule: flight path angle >= 0 from M 0.80 through cutoff.
+    if result.rule_violated:
         return EvaluatedCandidate(candidate, False, None, None, kept_result)
 
     fuel_loaded_kg = (1.0 + FUEL_RESERVE_MARGIN) * final_state.fuel_burned_kg
@@ -366,6 +422,13 @@ def _perturb(candidate: Candidate, rng: random.Random) -> Candidate:
         wingspan_m=step(candidate.wingspan_m, WINGSPAN_BOUNDS_M),
         climb_angle_deg=step(candidate.climb_angle_deg, CLIMB_ANGLE_BOUNDS_DEG),
         fuel_key=fuel_key,
+        initial_climb_angle_deg=(
+            step(candidate.initial_climb_angle_deg, V3_CLIMB_ANGLE_BOUNDS_DEG)
+            if candidate.uses_climb_dive else candidate.initial_climb_angle_deg),
+        dive_angle_deg=(step(candidate.dive_angle_deg, V3_DIVE_ANGLE_BOUNDS_DEG)
+                        if candidate.uses_climb_dive else candidate.dive_angle_deg),
+        floor_altitude_m=(step(candidate.floor_altitude_m, V3_FLOOR_BOUNDS_M)
+                          if candidate.uses_climb_dive else candidate.floor_altitude_m),
     )
 
 

@@ -89,6 +89,10 @@ _C_REF = "#707070"
 _MODE_COLORS = {
     "pulsejet": "tab:red",
     "ramjet": "tab:green",
+    # V3 powered phases
+    "v3_climb": "tab:olive",
+    "v3_dive": "tab:brown",
+    "drag_strip": "tab:red",
     "loop": "goldenrod",
     "return": "tab:cyan",
     "spiral": "tab:pink",

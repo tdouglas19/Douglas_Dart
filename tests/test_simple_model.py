@@ -190,5 +190,98 @@ class MinimumAccelerationGateTests(unittest.TestCase):
             importlib.reload(consts)
 
 
+class V3ClimbDiveTests(unittest.TestCase):
+    """V3 climb-dive profile: derived top-of-climb, phase sequence, the
+    competition rule, and the deliberately SPLIT gates (gravity counts for
+    acceleration, never for the engine-only thrust margin).
+
+    The scenarios are flown ONCE in a subprocess at a pinned CD0
+    (scripts/v3_probe_flights.py). CD0 is baked into simple_model.constants
+    at import and re-exported by drag/flight_sim, and other modules in this
+    suite pin it themselves (tests/test_medium_model_v2_parity.py), so
+    in-process V3 flights pass or fail on test module import order -- which
+    is exactly how an earlier version of these tests broke."""
+
+    @classmethod
+    def setUpClass(cls):
+        import json
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        proc = subprocess.run(
+            [sys.executable, str(root / "scripts" / "v3_probe_flights.py"), "0.1"],
+            cwd=root, capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            raise AssertionError(f"V3 probe failed:\n{proc.stdout}\n{proc.stderr}")
+        for line in proc.stdout.splitlines():
+            if line.startswith("V3_PROBE_JSON:"):
+                cls.probe = json.loads(line[len("V3_PROBE_JSON:"):])
+                return
+        raise AssertionError(f"no V3_PROBE_JSON:\n{proc.stdout}\n{proc.stderr}")
+
+    def test_derived_top_grows_with_dive_angle(self):
+        tops = self.probe["derived_tops"]
+        self.assertTrue(all(a < b for a, b in zip(tops, tops[1:])), tops)
+        self.assertTrue(all(self.probe["floor_altitude_m"] < t
+                            <= self.probe["max_top_altitude_m"] for t in tops), tops)
+
+    def test_zero_dive_derives_the_floor_itself(self):
+        self.assertAlmostEqual(self.probe["derived_top_zero_dive"],
+                               self.probe["floor_altitude_m"], places=9)
+
+    def test_phase_sequence_and_floor_are_respected(self):
+        s = self.probe["steep_climb"]
+        modes = s["modes_ordered"]
+        for phase in ("v3_climb", "v3_dive", "drag_strip"):
+            self.assertIn(phase, modes, phase)
+        self.assertLess(modes.index("v3_climb"), modes.index("v3_dive"))
+        self.assertLess(modes.index("v3_dive"), modes.index("drag_strip"))
+        # the climb gains altitude, the dive spends it, and the floor holds
+        self.assertGreater(s["climb_alt_gain_m"], 0.0)
+        self.assertGreater(s["dive_alt_loss_m"], 0.0)
+        self.assertGreaterEqual(s["dive_min_alt_m"],
+                                self.probe["floor_altitude_m"] - 25.0)
+
+    def test_dive_buys_traverse_acceleration(self):
+        """The whole point: gravity covers the lightoff notch."""
+        self.assertGreater(self.probe["steep_dive"]["min_traverse_accel_g"],
+                           self.probe["shallow_dive"]["min_traverse_accel_g"])
+        # and both beat flying the notch level
+        self.assertGreater(self.probe["shallow_dive"]["min_traverse_accel_g"],
+                           self.probe["no_profile"]["min_traverse_accel_g"])
+
+    def test_dive_does_not_inflate_the_engine_only_margin(self):
+        """The split gate: a steeper dive must NOT make the thrust margin
+        look better, or an underpowered engine could hide behind gravity."""
+        self.assertLessEqual(self.probe["steep_dive"]["min_powered_thrust_margin"],
+                             self.probe["shallow_dive"]["min_powered_thrust_margin"] + 1e-6)
+
+    def test_traverse_excludes_the_commanded_climb(self):
+        s = self.probe["steep_climb"]
+        # the commanded climb IS the worst powered acceleration...
+        self.assertAlmostEqual(s["min_powered_accel_g"],
+                               s["worst_climb_accel_g"], places=9)
+        # ...and the gated traverse figure is strictly better than it
+        self.assertGreater(s["min_traverse_accel_g"], s["min_powered_accel_g"])
+        # the climb must still be accelerating at all
+        self.assertGreater(s["min_powered_accel_g"], 0.0)
+
+    def test_rule_is_satisfied_and_tracked(self):
+        for key in ("shallow_dive", "steep_dive", "steep_climb"):
+            self.assertFalse(self.probe[key]["rule_violated"], key)
+            self.assertIsNone(self.probe[key]["rule_violation_mach"], key)
+
+    def test_no_profile_means_no_v3_fields(self):
+        s = self.probe["no_profile"]
+        self.assertIsNone(s["top_altitude_m"])
+        self.assertFalse(s["rule_violated"])
+        self.assertNotIn("v3_climb", s["modes_ordered"])
+        # traverse and all-powered coincide when there is no commanded climb
+        self.assertAlmostEqual(s["min_traverse_accel_g"],
+                               s["min_powered_accel_g"], places=9)
+
+
 if __name__ == "__main__":
     unittest.main()

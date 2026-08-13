@@ -24,6 +24,27 @@ truth models in `pulsejet-fp/` (vendored subtree, ~1 min/point).
 - CD0 is **frontal-area referenced** (subsonic baseline; transonic
   multiplier applied in-model). Override per-run via env
   `SIMPLE_MODEL_CD0_FRONTAL` (read once at import → subprocess per level).
+- **V3 climb-dive profile** (2026-08-13, `run_flight(climb_dive=...)`):
+  climb steeply on surplus low-Mach thrust → dive through the ramjet
+  lightoff notch (gravity supplies the acceleration the engine can't) →
+  pull out at a **400 ft hard floor** → level "drag strip" to cutoff.
+  Top-of-climb is DERIVED from the dive, not searched
+  (`derive_top_altitude`). Rule enforced + tracked: flight path angle ≥ 0
+  from M 0.80 through cutoff. Enable in a campaign with
+  `SIMPLE_MODEL_V3=1`; V2 designs are untouched (zero dive angle → no
+  profile). **Split gates**: the acceleration gate counts gravity and is
+  measured on the *traverse* (`min_traverse_accel_g`, excludes the
+  commanded climb — a climb is not a regime you can be stranded in); the
+  thrust-margin gate is **engine-only** (gravity clamped at zero) so a dive
+  can never make a weak engine look healthy.
+- V3 result vs frozen V2: peak T/W **10.08 → 6.61**, body 280 → 225 mm,
+  dry mass 14.80 → 12.57 kg, payload margin 5.85 → **7.42 kg**, same
+  0.26 g traverse acceleration. `out_simple_model/v3_optimal_design.md`.
+- **V2 is frozen** in `docs/v2_frozen/` (design.json = re-flyable inputs +
+  constants + git SHA) and guarded by `tests/test_v2_frozen.py`, which
+  re-flies it **in a subprocess** (`scripts/fly_frozen_v2.py`) because CD0
+  is baked at import and an in-process override silently does nothing once
+  another test module has imported simple_model.
 - Reports/demo fly the **return-to-launch profile**
   (`run_flight(return_to_launch=True)`, 2026-08-12): pitch-up half-loop at
   cutoff (a flat 5g turn measurably wastes ~80% of the energy), glide home
@@ -50,6 +71,9 @@ peak T/W 6.89, margin 1.21 @ M1.10. Full table + plots:
 - Full campaign: `scripts/simple_model_overnight2.py` (~80 min) then
   `scripts/simple_model_report2.py [cd0]` (~1 min; writes `.md` with
   embedded PNGs to `out_simple_model/`).
+- V3 campaign: `scripts/simple_model_v3_campaign.py [cd0]` (~16 min) then
+  `scripts/simple_model_report_v3.py` (~1 min; writes
+  `v3_optimal_design.md` + `*_v3.png`, with a V2 head-to-head table).
 - Method/repeatability doc: `docs/simple_model_campaign_playbook.md`;
   calibration provenance: `docs/simple_model_overview.md`.
 - Tests: the kill-switches MUST be set on the command line —
