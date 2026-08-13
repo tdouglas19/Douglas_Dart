@@ -1747,3 +1747,61 @@ and higher; (3) a piloted/stratified flameholder, which is the one
 change that could restore genuinely lean overall fueling (A13 note --
 the model's uniform-premix assumption is what makes lean fueling
 impossible here, and it is deliberately conservative).
+
+### FINDING (2026-08-13, medium_model): the V2 pulsejet duct cannot sustain a cycle
+
+The frozen V2 duct, run through the first-principles pulsejet
+(pulsejet-fp, propane, sea level, M 0.15), **starts and then dies**: it
+pulses ~12 times with the valve opening strongly and T/T0 cycling 3-8.2,
+then decays monotonically to a flat dead state by ~150 ms -- 3.5 N and
+ZERO fuel flow, p/p0 settling to 0.98-1.03 (a +-2% acoustic ripple, i.e.
+passive ringing, not pulsing).
+
+**Control experiment (this is what makes it a finding rather than a bug).**
+The same chamber VOLUME (29.35 L), flown with the validated FP-1 shape
+scaled isometrically:
+
+    V2 proportions   (chamber 266 x 342, tail 151 x  680 mm):    3.5 N, dead
+    isometric        (chamber 233 x 449, tail 126 x 1855 mm):  172.8 N, p/p0 0.76-1.60
+    isometric N=300  (grid check)                             175.4 N  (1.5% -- converged)
+
+Same code, same scale, same valve-scaling rule, same fuel. Only the duct
+PROPORTIONS differ. And the failure is not the valve: easing it makes no
+difference (preload halved 7.4 N, port area doubled 13.7 N) and removing
+the preload entirely is WORSE (0.3 N), which independently reproduces
+pulsejet-fp's own finding that a soft valve is an acoustic absorber at
+the head antinode and destroys the resonator Q.
+
+Mechanism: with only a 680 mm tailpipe on a 266 mm chamber, the returning
+compression wave does not arrive in phase with heat release, so the
+Rayleigh coupling that sustains a pulsejet never establishes. The
+oscillation is damped rather than driven.
+
+**Why the selection missed it.** `simple_model/pulsejet_simple.py` sizes
+thrust from chamber volume, throat area and an assumed burn duration. It
+contains no acoustic tuning whatsoever, so it cannot distinguish a tuned
+duct from an untuned one -- it reports ~228 N for this geometry. During
+the V2 campaign, shortening the duct was therefore pure profit (lighter,
+better composite score, zero modeled penalty). This is exactly the
+"optimizer exploits missing physics" failure mode design_workflow.md
+warns about, and it selected a duct that cannot run.
+
+Note the closed form is not wrong about MAGNITUDE: the isometric engine
+of the same volume makes 172.8 N against its 228 N estimate, the same
+order. It is wrong about WHICH GEOMETRIES ACHIEVE IT.
+
+**Consequence for the vehicle.** A properly-proportioned pulsejet holding
+V2's 29.4 L needs ~2.7 m of duct; the entire V2 airframe is 1.87 m.
+Scaling down to fit gives ~1.6 L and order-25 N -- nowhere near enough to
+accelerate 22.68 kg to the M 0.45 ramjet lightoff. On this evidence there
+is no pulsejet that both fits this airframe and does its job, so the
+pulsejet -> ramjet handoff is currently unsupported.
+
+**Stated uncertainty.** pulsejet-fp is validated near FP-1's proportions
+(fineness ~11.5); V2's L/D ~ 5.0 is actually closer to a real Argus
+As-014 (~6.4). So "FP-1 proportions are the only workable ones" is NOT
+established -- the model has not been validated across shapes. What IS
+established is that V2's shape decays in this model while an equal-volume
+FP-1-shaped engine sustains. How far outside the workable envelope V2
+sits is less certain than the fact that it is outside it. Resolving that
+properly needs either a shape sweep in pulsejet-fp or real engine data.
