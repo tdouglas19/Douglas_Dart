@@ -233,6 +233,45 @@ def wave_drag_coefficient(mach: float, body_diameter_m: float,
 # Inlet spillage / additive drag  (DERIVED, not correlated)
 # ---------------------------------------------------------------------------
 
+def cowl_suction_recovery_fn(mach: float, lip_area_m2: float,
+                             frontal_area_m2: float) -> float:
+    """Fraction of the pre-entry (additive) drag recovered as suction on
+    the external cowl.
+
+    The physics: additive drag is a rearward force on the pre-entry
+    streamtube; the flow accelerating around the lip leaves a low-pressure
+    region on the cowl's FORWARD-FACING external surface, whose axial
+    component pushes forward. How much is recovered therefore depends on
+    how much forward-facing area the cowl presents and how rounded the lip
+    is:
+
+      * A sharp-lipped supersonic inlet has almost no forward-facing area
+        -- little suction, additive drag charged nearly in full.
+      * A rounded subsonic lip on a long, gently-expanding cowl has a lot
+        -- suction cancels most of the additive drag.
+
+    THIS vehicle is firmly the second case: a 151 mm duct opening into a
+    280 mm body over a 2-diameter (560 mm) nose fairing. The annular
+    forward-facing projected area is (A_frontal - A_lip) = 0.044 m^2,
+    about 2.4x the lip area itself, spread over a ~6.5 deg half-angle
+    expansion. That is a very effective suction surface.
+
+    Recovery is scaled by that area ratio, capped, and reduced
+    supersonically where the lip shock prevents the upstream influence
+    that generates suction.
+    """
+    if lip_area_m2 <= 0.0 or frontal_area_m2 <= lip_area_m2:
+        return 0.5                       # no cowl to speak of
+    area_ratio = (frontal_area_m2 - lip_area_m2) / lip_area_m2
+    subsonic = min(0.60 + 0.15 * area_ratio, 0.92)
+    if mach <= 0.8:
+        return subsonic
+    if mach >= 1.4:
+        return 0.45                      # lip shock kills upstream suction
+    s = (mach - 0.8) / 0.6
+    return subsonic + (0.45 - subsonic) * s
+
+
 def spillage_drag_n(captured_mass_flow_kg_per_s: float,
                     lip_area_m2: float,
                     density_kg_per_m3: float,
@@ -283,11 +322,27 @@ def spillage_drag_n(captured_mass_flow_kg_per_s: float,
     """
     if lip_area_m2 <= 0.0 or velocity_m_per_s <= 1.0:
         return 0.0
-    q = 0.5 * density_kg_per_m3 * velocity_m_per_s ** 2
-    a0 = captured_mass_flow_kg_per_s / max(
-        density_kg_per_m3 * velocity_m_per_s, 1e-9)
-    spilled_area = max(lip_area_m2 - a0, 0.0)
-    return spilled_area * q * (1.0 - cowl_suction_recovery)
+    rho, v_inf = density_kg_per_m3, velocity_m_per_s
+    mdot = max(captured_mass_flow_kg_per_s, 0.0)
+    a0 = mdot / max(rho * v_inf, 1e-9)          # capture area far upstream
+    if a0 >= lip_area_m2:
+        return 0.0                               # swallows its full capture
+
+    # Momentum theorem on the pre-entry streamtube, station 0 (far
+    # upstream, area a0, p_inf, v_inf) to station 1 (the lip plane, which
+    # the streamtube fills):
+    #     v_1   = mdot / (rho * A_lip)            (continuity, rho ~ const)
+    #     p_1 - p_inf = 0.5 rho (v_inf^2 - v_1^2) (Bernoulli on the
+    #                                              external streamline)
+    #     D_add = (p_1 - p_inf) A_lip + mdot (v_1 - v_inf)
+    # The pressure term is a drag (the flow stagnates ahead of a
+    # restrictive inlet); the momentum term is negative (the swallowed air
+    # slowed down). This is a DERIVED result -- the only empirical part of
+    # the spillage term is how much the cowl gives back.
+    v1 = mdot / max(rho * lip_area_m2, 1e-9)
+    dp = 0.5 * rho * (v_inf * v_inf - v1 * v1)
+    d_add = dp * lip_area_m2 + mdot * (v1 - v_inf)
+    return max(d_add, 0.0) * (1.0 - cowl_suction_recovery)
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +390,7 @@ def total_drag_buildup(
     engine_on: bool,
     captured_mass_flow_kg_per_s: float = 0.0,
     lip_area_m2: float = 0.0,
-    cowl_suction_recovery: float = 0.85,
+    cowl_suction_recovery: float | None = None,
 ) -> DragBuildup:
     """Full component build-up at one flight condition.
 
@@ -374,10 +429,11 @@ def total_drag_buildup(
                                     engine_on), q, mach)
     wave = wave_drag_coefficient(mach, diameter_m, body_length_m) \
         * q * frontal_area
+    rec = (cowl_suction_recovery if cowl_suction_recovery is not None
+           else cowl_suction_recovery_fn(mach, lip_area_m2, frontal_area))
     spill = spillage_drag_n(captured_mass_flow_kg_per_s, lip_area_m2,
-                            density_kg_per_m3, velocity_m_per_s,
-                            cowl_suction_recovery)
-    if cowl_suction_recovery >= 1.0:
+                            density_kg_per_m3, velocity_m_per_s, rec)
+    if rec >= 1.0:
         spill = 0.0        # forebody terms assumed to contain it entirely
 
     # -- induced (unchanged form; lift is the driver) --------------------

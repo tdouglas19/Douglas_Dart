@@ -402,6 +402,32 @@ def _concept_drag(diameter_m, wing_concept, v, rho, m, gamma_rad, mach):
     return DragResult(body, wing_par, induced, body + wing_par + induced, lift)
 
 
+_COLD_DUCT_FLOW_COEFFICIENT = 0.90
+"""An unlit duct is a straight-through pipe: it passes very nearly what
+the lip offers (minus internal losses), so it barely spills. Spillage is
+what a HOT, restrictive engine does."""
+
+
+def _duct_swallowed_kg_per_s(ramjet_result, rho, v, lip_area_m2):
+    """Mass flow actually entering the duct, for the spillage term.
+
+    NOTE (real inconsistency between the two models, found 2026-08-13):
+    ``ramjet_simple`` defines its capture area as the vehicle's FULL
+    FRONTAL area (pi D_body^2 / 4), i.e. it assumes the whole nose is
+    inlet. The physical duct is the throat diameter -- 0.0179 m^2 vs
+    0.0616 m^2, a 3.4x disagreement -- so its reported
+    ``captured_air_mass_flow_kg_per_s`` is fictitious and its implied
+    ~90% spillage is largely an artifact. Engine THRUST is unaffected
+    (it is throat-limited either way, below both capture figures), but
+    every spillage-derived force must use the real lip area, so this
+    helper deliberately ignores the engine's capture figure.
+    """
+    lit = ramjet_result.net_thrust_n > 0.0
+    if lit:
+        return ramjet_result.air_mass_flow_kg_per_s
+    return _COLD_DUCT_FLOW_COEFFICIENT * rho * v * lip_area_m2
+
+
 def _buildup_drag(geom_cache, wing_concept, v, rho, temperature_k, m,
                   gamma_rad, mach, engine_on, captured_mdot_kg_per_s):
     """medium_model step-1 drag: component build-up instead of the flat
@@ -452,8 +478,12 @@ def run_flight(
     return_to_launch: bool = False,
     climb_dive: ClimbDiveProfile | None = None,
     drag_model: str = "legacy",
-    cowl_suction_recovery: float = 0.85,
+    cowl_suction_recovery: float | None = None,
 ) -> FlightResult:
+    # cowl_suction_recovery=None uses the geometry/Mach-based value derived
+    # in drag_buildup.cowl_suction_recovery_fn; pass a float to override
+    # (the campaign brackets it, since it is the single largest remaining
+    # uncertainty in the drag model).
     # drag_model: "legacy" reproduces the ancestor EXACTLY (flat
     # CD0_FRONTAL x transonic multiplier) and is what the V2 parity test
     # asserts; "buildup" switches to medium_model's component build-up
@@ -752,10 +782,9 @@ def run_flight(
                     # wide open, so it passes what it is given and there is
                     # no spillage -- spillage arises when the HOT engine
                     # restricts the flow it will accept.
-                    captured_mdot_kg_per_s=(
-                        ramjet_result.air_mass_flow_kg_per_s
-                        if ramjet_result.net_thrust_n > 0.0
-                        else ramjet_result.captured_air_mass_flow_kg_per_s),
+                    captured_mdot_kg_per_s=_duct_swallowed_kg_per_s(
+                        ramjet_result, atmosphere.density_kg_per_m3, v,
+                        geom_cache["lip_area_m2"]),
                 )
             elif wing_concept is None:
                 drag_result = total_drag_n(
