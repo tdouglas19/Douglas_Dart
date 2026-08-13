@@ -1805,3 +1805,60 @@ established is that V2's shape decays in this model while an equal-volume
 FP-1-shaped engine sustains. How far outside the workable envelope V2
 sits is less certain than the fact that it is outside it. Resolving that
 properly needs either a shape sweep in pulsejet-fp or real engine data.
+
+### DESIGN RULE (2026-08-13): a sustaining pulsejet needs tail/chamber-diameter >= ~4.5
+
+Established across 16 first-principles runs while checking whether the V3
+duct can sustain a cycle before modelling anything on it. **Both V2 and
+V3 are dead as designed:**
+
+    V2: chamber 266 mm, duct 1022, tail 562  -> tail/D 2.11 ->   3.0 N  (p/p0 0.98-1.03)
+    V3: chamber 214 mm, duct 1078, tail 570  -> tail/D 2.66 ->   0.8 N  (p/p0 0.99-1.01)
+
+Two hypotheses were tested and FALSIFIED before the right one was found:
+chamber LENGTH (every ratio from 342 down to 100 mm stays dead, including
+at FP-1's exact 4.13 tail/chamber-length ratio), and a chamber-diameter /
+cycle-period figure (V3 is dead at D/T 20.6 where a V2 variant sustained
+at 20.4).
+
+**The predictor that separates all 16 runs is TAIL LENGTH / CHAMBER
+DIAMETER**, with a sharp threshold between 3.50 and 4.50:
+
+    V3 tail  569 (t/D 2.66):    0.8 N   dead
+    V3 tail  749 (t/D 3.50):    0.8 N   dead
+    V3 tail  963 (t/D 4.50):  128.5 N   SUSTAINS   <- 214 mm extension
+    V3 tail 1177 (t/D 5.50):  161.5 N
+    V3 tail 1391 (t/D 6.50):  191.3 N
+
+Physically this is the right variable: the tailpipe gas column is the
+inertia that drives the cycle (the "liquid piston"), so it must be long
+relative to the chamber it breathes from -- not merely long in absolute
+terms, which is why lengthening the chamber never helped.
+
+**Scale-invariant consequence.** With chamber ~ 0.95 x body and the
+model's 3-diameter nose/tail allowance, tail/D >= 4.5 forces
+**vehicle slenderness >= ~9.2 AT ANY SIZE** -- both sides of the ratio
+scale with body diameter, which is why shrinking or growing the whole
+vehicle never fixed it. Confirmed by the sweep: fineness 8.58 dead, 9.53
+alive.
+
+**Minimum V3 fix:** tail 570 -> 963 mm, duct 1078 -> 1472 mm, body
+1754 -> 2147 mm (+22%), slenderness 7.79 -> 9.53, giving 128.5 N. Longer
+buys more (161 N at t/D 5.5, 191 N at 6.5) with diminishing returns.
+
+**Why both campaigns missed it.** `pulsejet_simple.py` sizes thrust from
+chamber volume, throat area and an assumed burn duration -- there is no
+acoustic tuning in it at all, so a short tail costs nothing in the score
+while saving length and mass. The optimizer took that trade in both V2
+and V3. The closed form is not wrong about MAGNITUDE (a sustaining
+engine of similar volume makes 128-190 N against its ~200 N estimates);
+it is wrong about WHICH GEOMETRIES ACHIEVE IT.
+
+**Uncertainty.** pulsejet-fp is validated near FP-1's proportions
+(fineness ~11.5), and every sustaining case found here is FP-1-like, so
+"only these shapes work" and "the model only knows these shapes" are not
+yet distinguishable. Real Argus-class engines ran at fineness ~6.4, which
+is circumstantial evidence against the model's envelope rather than
+against the designs. The threshold's EXISTENCE is solid; its exact
+location should be treated as model-class guidance until checked against
+engine data or a shape sweep with a validated alternative.
