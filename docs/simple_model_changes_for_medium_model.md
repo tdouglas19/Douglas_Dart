@@ -224,6 +224,25 @@ length models.
 
 ---
 
+## 2.8 A second frozen contract now exists: V3
+
+`docs/v3_frozen/` freezes the V3 climb-dive design the same way
+`docs/v2_frozen/` freezes V2 — `design.json` carries the re-flyable inputs
+(vehicle candidate **including** `initial_climb_angle_deg`,
+`dive_angle_deg`, `floor_altitude_m`), the constants, and the verified
+mission numbers. Guarded by `tests/test_v3_frozen.py` via
+`scripts/fly_frozen_v3.py` (subprocess, pinned CD0).
+
+Nothing for medium_model to mirror yet — V2 remains the parity contract,
+since V3 is a trajectory feature rather than a fidelity step. But when
+medium_model is eventually held to V3 as well, `design.json` is the file to
+point at, and `Candidate(**vehicle_candidate).to_climb_dive()` is how the
+profile is rebuilt.
+
+Note also: the V3 report table is deliberately **standalone** — it carries
+no comparison against V2 (user preference). Keep any medium_model report in
+the same style.
+
 ## 3. The parity contract
 
 `tests/test_medium_model_v2_parity.py` holds medium_model to

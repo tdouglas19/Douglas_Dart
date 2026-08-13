@@ -40,11 +40,15 @@ truth models in `pulsejet-fp/` (vendored subtree, ~1 min/point).
 - V3 result vs frozen V2: peak T/W **10.08 → 6.61**, body 280 → 225 mm,
   dry mass 14.80 → 12.57 kg, payload margin 5.85 → **7.42 kg**, same
   0.26 g traverse acceleration. `out_simple_model/v3_optimal_design.md`.
-- **V2 is frozen** in `docs/v2_frozen/` (design.json = re-flyable inputs +
-  constants + git SHA) and guarded by `tests/test_v2_frozen.py`, which
-  re-flies it **in a subprocess** (`scripts/fly_frozen_v2.py`) because CD0
-  is baked at import and an in-process override silently does nothing once
-  another test module has imported simple_model.
+- **V2 and V3 are both frozen** — `docs/v2_frozen/` and `docs/v3_frozen/`
+  (design.json = re-flyable inputs + constants + git SHA), guarded by
+  `tests/test_v2_frozen.py` / `tests/test_v3_frozen.py`, which re-fly them
+  **in subprocesses** (`scripts/fly_frozen_v2.py`, `fly_frozen_v3.py`)
+  because CD0 is baked at import and an in-process override silently does
+  nothing once another test module has imported simple_model.
+- The V3 report table is **standalone** — no comparisons against earlier
+  model versions (user preference, 2026-08-13). Earlier baselines are
+  frozen separately and stand on their own.
 - Reports/demo fly the **return-to-launch profile**
   (`run_flight(return_to_launch=True)`, 2026-08-12): pitch-up half-loop at
   cutoff (a flat 5g turn measurably wastes ~80% of the energy), glide home

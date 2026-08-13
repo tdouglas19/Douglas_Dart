@@ -1,5 +1,8 @@
-"""V3 report: the climb-dive winner's plots + parameter table, plus a
-head-to-head against the frozen V2 baseline (docs/v2_frozen/design.json).
+"""V3 report: the climb-dive winner's plots + parameter table.
+
+Standalone by design -- the table carries no comparison against earlier
+model versions (user preference, 2026-08-13). Earlier baselines are frozen
+separately under docs/ and stand on their own.
 
 Usage: python scripts/simple_model_report_v3.py
 Reads out_simple_model/v3_summary.json (from simple_model_v3_campaign.py).
@@ -13,7 +16,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "out_simple_model"
-FROZEN = ROOT / "docs" / "v2_frozen" / "design.json"
 sys.path.insert(0, str(ROOT))
 
 
@@ -61,12 +63,8 @@ def main() -> None:
             return_to_launch=True, climb_dive=cand.to_climb_dive())
         return cand, concept, result, label
 
-    v3 = fly(row["vehicle"]["candidate"],
-             (row.get("wing") or {}).get("wing"), "V3")
-    frozen = json.loads(FROZEN.read_text())
-    v2 = fly(frozen["vehicle_candidate"], frozen["wing_concept"], "V2")
-
-    cand, concept, result, _ = v3
+    cand, concept, result, _ = fly(row["vehicle"]["candidate"],
+                                   (row.get("wing") or {}).get("wing"), "V3")
     run_demo.GEOMETRY = VehicleGeometry(
         cand.diameter_m, cand.throat_diameter_m, cand.chamber_length_m,
         cand.throat_length_m, cand.wingspan_m, FUELS[cand.fuel_key])
@@ -76,8 +74,11 @@ def main() -> None:
     fuel_loaded = (1.0 + FUEL_RESERVE_MARGIN) * fin.fuel_burned_kg
     paths = [run_demo.plot_propulsion(),
              run_demo.plot_flight_profile(result, fuel_loaded)]
-    for p in paths:                      # keep V3 plots beside the V2 ones
-        p.rename(p.with_name(p.stem + "_v3" + p.suffix))
+    # keep the V3 plots under their own names. Path.replace, not .rename:
+    # on Windows rename() raises FileExistsError if the target exists, so a
+    # second run of this report would crash instead of refreshing.
+    for p in paths:
+        p.replace(p.with_name(p.stem + "_v3" + p.suffix))
     paths = [p.with_name(p.stem + "_v3" + p.suffix) for p in paths]
 
     mass = vehicle_dry_mass(cand.diameter_m, cand.chamber_length_m,
@@ -88,34 +89,11 @@ def main() -> None:
                    for a, b in zip(result.states, result.states[1:])) / 1e3
     top_ft = (result.climb_dive_top_altitude_m or 0.0) / 0.3048
 
-    def stat(r):
-        return (max(s.thrust_to_weight for s in r.states),
-                r.min_traverse_accel_g, r.min_powered_thrust_margin)
-
-    v2_tw, v2_acc, v2_mar = stat(v2[2])
-    v2_fuel = (1.0 + FUEL_RESERVE_MARGIN) * v2[2].states[-1].fuel_burned_kg
-    v2_mass = vehicle_dry_mass(v2[0].diameter_m, v2[0].chamber_length_m,
-                               v2[0].throat_diameter_m, v2[0].throat_length_m,
-                               v2[1].reference_area_m2, v2_fuel)
-
-    def pct(new, old):
-        return f"{(new - old) / old * 100:+.0f}%"
-
     lines = [
-        "# V3 climb-dive design -- parameter table and V2 comparison", "",
+        "# V3 climb-dive design -- full parameter table", "",
         f"Campaign: CD0 = {cd0}; climb-dive profile; acceleration gate "
         f"{MIN_POWERED_ACCELERATION_G} g on the traverse (notch + drag strip).", "",
-        "## Head-to-head vs the frozen V2 baseline", "",
-        "| metric | V2 (frozen) | V3 (climb-dive) | change |", "|---|---|---|---|",
-        f"| peak T/W (objective) | {v2_tw:.2f} | {peak_tw:.2f} | {pct(peak_tw, v2_tw)} |",
-        f"| min traverse acceleration | {v2_acc:+.3f} g | {result.min_traverse_accel_g:+.3f} g | {pct(result.min_traverse_accel_g, v2_acc)} |",
-        f"| min engine-only thrust margin | {v2_mar:.2f} | {result.min_powered_thrust_margin:.2f} | {pct(result.min_powered_thrust_margin, v2_mar)} |",
-        f"| body diameter | {v2[0].diameter_m*1e3:.0f} mm | {cand.diameter_m*1e3:.0f} mm | {pct(cand.diameter_m, v2[0].diameter_m)} |",
-        f"| dry mass | {v2_mass.dry_mass_kg:.2f} kg | {mass.dry_mass_kg:.2f} kg | {pct(mass.dry_mass_kg, v2_mass.dry_mass_kg)} |",
-        f"| payload/ballast margin | {MAX_WET_MASS_KG - v2_mass.dry_mass_kg - v2_fuel:.2f} kg | "
-        f"{MAX_WET_MASS_KG - mass.dry_mass_kg - fuel_loaded:.2f} kg | "
-        f"{pct(MAX_WET_MASS_KG - mass.dry_mass_kg - fuel_loaded, MAX_WET_MASS_KG - v2_mass.dry_mass_kg - v2_fuel)} |",
-        "", "## V3 trajectory", "", "| phase | value |", "|---|---|",
+        "## Trajectory", "", "| phase | value |", "|---|---|",
         f"| initial climb angle | {cand.initial_climb_angle_deg:.1f} deg |",
         f"| top of climb (DERIVED from the dive) | {top_ft:.0f} ft |",
         f"| dive angle | {cand.dive_angle_deg:.1f} deg |",
