@@ -15,10 +15,13 @@ campaign playbook"). Companion background: `docs/simple_model_overview.md`
 Outputs land in `out_simple_model/`:
 - `campaign_cd0_*.log` — full optimizer log per CD0 level
 - `summary.json` — machine-readable per-campaign verdicts + best candidates
-- `thrust_vs_mach.png`, `flight_profile.png`, `altitude_vs_distance.png`,
-  `fuel_mass.png` — the winning design's plots
-- `cd0_sensitivity.png` — feasibility & best peak T/W vs CD0
+- `propulsion.png` (thrust/Isp/SFC vs Mach) and `flight_profile.png`
+  (time histories incl. fuel remaining + altitude-vs-downrange trajectory,
+  background shading = flight mode) — the winning design's two plots
 - `tw_optimal_design.md` — the dimensional-parameter table
+  (the standalone fuel-remaining and CD0-sensitivity figures were retired
+  2026-08-12 per user preference: two plots only; sensitivity verdicts
+  live in `summary.json` / `overnight2_summary.json`)
 
 ## What the campaign actually does (the method)
 
@@ -81,8 +84,14 @@ Outputs land in `out_simple_model/`:
 
 `scripts/simple_model_overnight2.py` supersedes the v1 family for full
 studies: per CD0 level it (1) optimizes the vehicle under ALL gates
-(thrust margin >= 1.15x, parametric mass budget from
-simple_model/mass_model.py, fuel-fits, stall cap) with the COMPOSITE
+(thrust margin >= 1.15x, minimum powered acceleration >=
+MIN_POWERED_ACCELERATION_G -- env `SIMPLE_MODEL_MIN_ACCEL_G`; the default
+was set from a direct achievability scan: grid-scan the corner with the
+gate disabled, record each otherwise-feasible design's
+min_powered_accel_g, and place the gate just below the observed ceiling
+-- rerun that scan if the physics or constraint stack changes, parametric
+mass budget from simple_model/mass_model.py, fuel-fits, stall cap) with
+the COMPOSITE
 objective (constants.py OBJECTIVE_* block: T/W + diameter + length +
 span), flying a real thin-wing concept (SIMPLE_MODEL_WING_AIRFOIL) so
 wing wave drag is priced in; then (2) optimizes the wing concept (span,

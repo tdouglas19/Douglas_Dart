@@ -30,7 +30,8 @@ from .optimize import (Candidate, FUEL_RESERVE_MARGIN, MAX_WET_MASS_KG,
                        _annular_volume_m3, FUEL_VOLUME_FRACTION_OF_ANNULUS,
                        design_score)
 from .mass_model import vehicle_dry_mass
-from .constants import MIN_POWERED_THRUST_MARGIN_FRACTION
+from .constants import (MIN_POWERED_ACCELERATION_G,
+                        MIN_POWERED_THRUST_MARGIN_FRACTION)
 
 WING_SPAN_BOUNDS_M = (0.50, 3.00)
 WING_AR_BOUNDS = (1.5, 7.0)
@@ -113,12 +114,14 @@ def evaluate_wing(args) -> EvaluatedWing:
         dt_s=dt_s, max_time_s=MAX_TIME_S,
         wing_concept=wing.to_concept(),
         max_fuel_burn_kg=tank_capacity_kg / (1.0 + FUEL_RESERVE_MARGIN),
+        return_to_launch=True,  # same profile the reports fly -- see optimize.py
     )
     final = result.states[-1]
     feasible = (
         result.safe_landing
         and final.stall_speed_m_per_s <= MAX_ACCEPTABLE_STALL_SPEED_M_PER_S
         and result.min_powered_thrust_margin >= 1.0 + MIN_POWERED_THRUST_MARGIN_FRACTION
+        and result.min_powered_accel_g >= MIN_POWERED_ACCELERATION_G
     )
     mass_margin = None
     if feasible:

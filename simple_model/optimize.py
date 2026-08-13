@@ -62,7 +62,8 @@ from dataclasses import dataclass
 from math import pi
 
 from .constants import (
-    FUELS, KG_PER_LB, MIN_POWERED_THRUST_MARGIN_FRACTION,
+    FUELS, KG_PER_LB, MIN_POWERED_ACCELERATION_G,
+    MIN_POWERED_THRUST_MARGIN_FRACTION,
     NOSE_TAIL_LENGTH_DIAMETERS,
     OBJECTIVE_DIAMETER_SCALE_M, OBJECTIVE_LENGTH_SCALE_M,
     OBJECTIVE_SPAN_SCALE_M, OBJECTIVE_TW_SCALE,
@@ -281,6 +282,10 @@ def evaluate(
         max_time_s=max_time_s,
         wing_concept=wing_concept,
         max_fuel_burn_kg=tank_capacity_kg / (1.0 + FUEL_RESERVE_MARGIN),
+        # gates must judge the SAME profile the reports fly (2026-08-12):
+        # optimizing straight-out then reporting return-to-launch produced
+        # a "feasible" winner whose reported flight failed its landing.
+        return_to_launch=True,
     )
     final_state = result.states[-1]
     kept_result = result if return_result else None
@@ -290,6 +295,11 @@ def evaluate(
     # mission must close with headroom at EVERY powered velocity regime,
     # not just barely -- see MIN_POWERED_THRUST_MARGIN_FRACTION.
     if result.min_powered_thrust_margin < 1.0 + MIN_POWERED_THRUST_MARGIN_FRACTION:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+    # Minimum powered acceleration (user requirement, 2026-08-12): the
+    # margin above is multiplicative and still admits near-zero absolute
+    # acceleration at the pinch -- see MIN_POWERED_ACCELERATION_G.
+    if result.min_powered_accel_g < MIN_POWERED_ACCELERATION_G:
         return EvaluatedCandidate(candidate, False, None, None, kept_result)
 
     fuel_loaded_kg = (1.0 + FUEL_RESERVE_MARGIN) * final_state.fuel_burned_kg

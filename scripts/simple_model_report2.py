@@ -44,10 +44,12 @@ def main() -> None:
 
     import matplotlib
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
 
     from simple_model import run_demo
-    from simple_model.constants import AIRFOILS, FUELS, KG_PER_LB
+    from simple_model.constants import (AIRFOILS, FUELS, KG_PER_LB,
+                                        MIN_POWERED_ACCELERATION_G,
+                                        NOSE_LENGTH_DIAMETERS,
+                                        TAIL_LENGTH_DIAMETERS)
     from simple_model.drag import WingConcept
     from simple_model.flight_sim import VehicleGeometry, run_flight
     from simple_model.mass_model import vehicle_dry_mass
@@ -73,7 +75,7 @@ def main() -> None:
     run_demo.GEOMETRY = geometry
     run_demo.CLIMB_ANGLE_DEG = cand["climb_angle_deg"]
     run_demo.OUT_DIR = OUT
-    paths = [run_demo.plot_thrust_vs_mach()]
+    paths = [run_demo.plot_propulsion()]
 
     tank_cap = (FUEL_VOLUME_FRACTION_OF_ANNULUS
                 * _annular_volume_m3(cand["diameter_m"], cand["throat_diameter_m"],
@@ -83,43 +85,18 @@ def main() -> None:
                         climb_angle_deg=cand["climb_angle_deg"],
                         motor_cutoff_mach=MOTOR_CUTOFF_MACH,
                         dt_s=0.02, max_time_s=900.0, wing_concept=concept,
-                        max_fuel_burn_kg=tank_cap / (1.0 + FUEL_RESERVE_MARGIN))
+                        max_fuel_burn_kg=tank_cap / (1.0 + FUEL_RESERVE_MARGIN),
+                        return_to_launch=True)
     final = result.states[-1]
     fuel_loaded = (1.0 + FUEL_RESERVE_MARGIN) * final.fuel_burned_kg
-    paths += [run_demo.plot_flight_profile(result),
-              run_demo.plot_altitude_vs_distance(result),
-              run_demo.plot_fuel_mass(result, fuel_loaded)]
-
-    # CD0 sensitivity (score + peak T/W, wing-stage where available)
-    fig, ax1 = plt.subplots(figsize=(8.5, 5))
-    ax2 = ax1.twinx()
-    xs, scores, tws, dead = [], [], [], []
-    for r in all_rows:
-        v = r.get("vehicle") or {}
-        w = r.get("wing") or {}
-        best = w if w.get("feasible") else (v if v.get("feasible") else None)
-        if best:
-            xs.append(r["cd0"]); scores.append(best["score"])
-            tws.append(best["max_thrust_to_weight"])
-        else:
-            dead.append(r["cd0"])
-    ax1.plot(xs, scores, "-o", color="#2a78d6", label="composite score (lower=better)")
-    ax2.plot(xs, tws, "--s", color="#008300", label="peak T/W")
-    for d in dead:
-        ax1.axvline(d, color="#e34948", alpha=0.3, lw=8)
-    ax1.set_xlabel("body CD0")
-    ax1.set_ylabel("composite score", color="#2a78d6")
-    ax2.set_ylabel("peak T/W", color="#008300")
-    ax1.set_title("v2 campaign: score & peak T/W vs CD0\n(red bands: infeasible under full constraint stack)")
-    ax1.grid(alpha=0.3)
-    fig.tight_layout()
-    p = OUT / "cd0_sensitivity_v2.png"
-    fig.savefig(p, dpi=150); plt.close(fig); paths.append(p)
+    paths.append(run_demo.plot_flight_profile(result, fuel_loaded))
 
     mass = vehicle_dry_mass(cand["diameter_m"], cand["chamber_length_m"],
                             cand["throat_diameter_m"], cand["throat_length_m"],
                             concept.reference_area_m2, fuel_loaded)
     peak_tw = max(st.thrust_to_weight for st in result.states)
+    ground_track_km = sum(abs(b.distance_m - a.distance_m)
+                          for a, b in zip(result.states, result.states[1:])) / 1e3
     lines = [
         "# v2 optimized vehicle + wing -- full parameter table", "",
         f"Campaign: CD0 = {cd0}; composite objective (T/W + D + length + span)", "",
@@ -127,6 +104,8 @@ def main() -> None:
         f"| body diameter | {cand['diameter_m']*1e3:.0f} mm |",
         f"| throat diameter | {cand['throat_diameter_m']*1e3:.0f} mm (area frac {(cand['throat_diameter_m']/cand['diameter_m'])**2:.3f}) |",
         f"| chamber / tube length | {cand['chamber_length_m']*1e3:.0f} / {cand['throat_length_m']*1e3:.0f} mm |",
+        f"| nose cone / boattail length | {NOSE_LENGTH_DIAMETERS*cand['diameter_m']*1e3:.0f} / "
+        f"{TAIL_LENGTH_DIAMETERS*cand['diameter_m']*1e3:.0f} mm ({NOSE_LENGTH_DIAMETERS:.0f}D / {TAIL_LENGTH_DIAMETERS:.0f}D) |",
         f"| overall body length (incl. nose/tail) | {(cand['chamber_length_m']+cand['throat_length_m']+3.0*cand['diameter_m'])*1e3:.0f} mm |",
         f"| climb angle / fuel | {cand['climb_angle_deg']:.1f} deg / {cand['fuel_key']} |", "",
         "| wing concept | value |", "|---|---|",
@@ -146,9 +125,22 @@ def main() -> None:
         f"| peak T/W | {peak_tw:.2f} |",
         f"| composite score | {(wres if wres.get('feasible') else vres)['score']:.3f} |",
         f"| min powered thrust margin | {result.min_powered_thrust_margin:.2f} at M {result.min_margin_mach:.2f} (required >= 1.15) |",
+        f"| min powered acceleration | {result.min_powered_accel_g:.2f} g at M {result.min_accel_mach:.2f} "
+        f"(required >= {MIN_POWERED_ACCELERATION_G:.2f} g) |",
         f"| cutoff / safe landing | {result.motor_cutoff_reached} / {result.safe_landing} |",
         f"| touchdown / stall speed | {final.velocity_m_per_s:.0f} / {final.stall_speed_m_per_s:.0f} m/s |",
-        f"| flight time / distance | {final.time_s:.0f} s / {final.distance_m/1e3:.1f} km |",
+        f"| flight time / ground track | {final.time_s:.0f} s / {ground_track_km:.1f} km "
+        f"(lands {abs(final.distance_m):.0f} m from launch) |",
+        "",
+        "## Plots",
+        "",
+        "### Propulsion (thrust, Isp, SFC vs Mach; sea level)",
+        "",
+        "![propulsion](propulsion.png)",
+        "",
+        "### Flight profile (time histories incl. fuel remaining + trajectory; shading = flight mode)",
+        "",
+        "![flight profile](flight_profile.png)",
     ]
     tp = OUT / "v2_optimal_design.md"
     tp.write_text("\n".join(lines))

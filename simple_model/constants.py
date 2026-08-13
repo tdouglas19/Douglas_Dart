@@ -192,6 +192,26 @@ CD0_FRONTAL = float(_os.environ.get("SIMPLE_MODEL_CD0_FRONTAL", CD0_FRONTAL))
 # "engines deliver X% less thrust than modeled."
 MIN_POWERED_THRUST_MARGIN_FRACTION = 0.15
 
+# Minimum powered-flight ACCELERATION in g's (2026-08-12, user requirement):
+# the multiplicative margin above still lets the optimum ride a barely-
+# positive acceleration through the transition pinch (~0.13 g on the first
+# v2 winner), so feasibility additionally requires
+# acceleration >= MIN_POWERED_ACCELERATION_G * g0 at every powered
+# timestep. The user's 1 g target was checked directly and is NOT
+# reachable inside the constraint stack: a 4,000-design scan around the
+# feasible corner (CD0=0.10, gate disabled, all other gates active --
+# method in docs/simple_model_campaign_playbook.md) measured the ceiling
+# at ~0.35-0.38 g, always binding at the M~0.45 ramjet-lightoff pinch.
+# The throat operability cap (area fraction <= 0.30) ties thrust to
+# diameter, and drag + structure mass grow right along with it -- the
+# 0.38 g designs sit at D~315 mm with ~1 kg of mass margin left. 0.25 g
+# is roughly double the unconstrained optimum's pinch acceleration while
+# leaving the search real room under the ceiling. Env-overridable for
+# sensitivity campaigns, like CD0 above.
+MIN_POWERED_ACCELERATION_G = float(
+    _os.environ.get("SIMPLE_MODEL_MIN_ACCEL_G", "0.25")
+)
+
 # --- Wing-concept model (2026-08-12, wing optimizer) ----------------------
 # Closed-form wing description for simple_model/wing_optimize.py. The
 # DEFAULT concept reproduces the original fixed-wing constants exactly
@@ -251,7 +271,13 @@ CFRP_MIN_GAUGE_M = 1.5e-3
 # duct sees. At ~1.2 atm gauge the min-gauge floor dominates for any sane
 # diameter, which is itself the realistic outcome at this scale.
 STRUCTURAL_OVERHEAD_FRACTION = 0.35  # frames, longerons, fasteners, fins
-NOSE_TAIL_LENGTH_DIAMETERS = 3.0     # nose cone + boattail length, in D
+# Nose cone + boattail lengths in diameters. The 2:1 split is the standard
+# slender-body arrangement (ogive nose ~2D for wave drag, ~1D boattail for
+# base drag); only the SUM feeds the mass/length models, the split is for
+# reporting the dimensional table.
+NOSE_LENGTH_DIAMETERS = 2.0
+TAIL_LENGTH_DIAMETERS = 1.0
+NOSE_TAIL_LENGTH_DIAMETERS = NOSE_LENGTH_DIAMETERS + TAIL_LENGTH_DIAMETERS
 WING_AREAL_MASS_KG_M2 = 6.0          # solid-ish small supersonic wing panel
 AVIONICS_FIXED_MASS_KG = 2.0         # autopilot, batteries, servos, RF
 TANK_HARDWARE_FIXED_KG = 0.5         # valves, plumbing, regulator

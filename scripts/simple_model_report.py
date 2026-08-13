@@ -50,7 +50,6 @@ def main() -> None:
     # imports AFTER the env is set (constants.py reads it at import time)
     import matplotlib
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
 
     from simple_model import run_demo
     from simple_model.constants import FUELS, KG_PER_LB
@@ -71,44 +70,15 @@ def main() -> None:
     run_demo.OUT_DIR = OUT
 
     print(f"T/W-optimal design (CD0={cd0}): {cand}")
-    paths = [run_demo.plot_thrust_vs_mach()]
+    paths = [run_demo.plot_propulsion()]
 
     result = run_flight(geometry, MAX_WET_MASS_KG,
                         climb_angle_deg=cand["climb_angle_deg"],
                         motor_cutoff_mach=MOTOR_CUTOFF_MACH,
-                        dt_s=0.02, max_time_s=900.0)
+                        dt_s=0.02, max_time_s=900.0, return_to_launch=True)
     final = result.states[-1]
     fuel_loaded_kg = (1.0 + FUEL_RESERVE_MARGIN) * final.fuel_burned_kg
-    paths.append(run_demo.plot_flight_profile(result))
-    paths.append(run_demo.plot_altitude_vs_distance(result))
-    paths.append(run_demo.plot_fuel_mass(result, fuel_loaded_kg))
-
-    # CD0 sensitivity figure
-    fig, ax = plt.subplots(figsize=(8, 5))
-    xs, ys, dead = [], [], []
-    for r in summary:
-        res = r["result"] or {}
-        if res.get("feasible"):
-            xs.append(r["cd0"]); ys.append(res["max_thrust_to_weight"])
-        else:
-            dead.append(r["cd0"])
-    ax.plot(xs, ys, "-o", color="#2a78d6", ms=7,
-            label="feasible: best peak T/W")
-    for d in dead:
-        ax.axvline(d, color="#e34948", alpha=0.35, lw=8)
-    ax.plot([], [], color="#e34948", alpha=0.35, lw=8,
-            label="infeasible (transition gap unclosable)")
-    ax.set_xlabel("body CD0 (frontal-referenced, flat subsonic value)")
-    ax.set_ylabel("best achievable peak thrust-to-weight")
-    ax.set_title("Feasibility & optimum vs body drag coefficient\n"
-                 "(50 lb dart, M 1.1 cutoff, safe landing; calibrated physics)")
-    ax.grid(alpha=0.3)
-    ax.legend()
-    fig.tight_layout()
-    sens_path = OUT / "cd0_sensitivity.png"
-    fig.savefig(sens_path, dpi=150)
-    plt.close(fig)
-    paths.append(sens_path)
+    paths.append(run_demo.plot_flight_profile(result, fuel_loaded_kg))
 
     # dimensional table
     peak_tw = max(st.thrust_to_weight for st in result.states)
