@@ -22,10 +22,16 @@ from medium_model.constants import AIRFOILS, FUELS  # noqa: E402
 from medium_model.drag import WingConcept  # noqa: E402
 from medium_model.flight_sim import VehicleGeometry, run_flight  # noqa: E402
 from medium_model.mission import (MAX_WET_MASS_KG, MOTOR_CUTOFF_MACH,  # noqa: E402
+                                  burn_limit_kg, loaded_fuel_kg,
                                   usable_fuel_kg)
 
+# The design's ACTUAL fuel allocation, from the mass budget it closed on.
+LOADED_FUEL_KG = loaded_fuel_kg(DESIGN["optimizer_results"]["dry_mass_kg"],
+                                DESIGN["optimizer_results"]["mass_margin_kg"])
 
-def fly(drag_model: str, cowl_suction_recovery: float = 0.85):
+
+def fly(drag_model: str, cowl_suction_recovery: float = 0.85,
+        fuel_rule: str = "v2_volumetric"):
     c = DESIGN["vehicle_candidate"]
     w = DESIGN["wing_concept"]
     geometry = VehicleGeometry(
@@ -33,9 +39,14 @@ def fly(drag_model: str, cowl_suction_recovery: float = 0.85):
         c["throat_length_m"], c["wingspan_m"], FUELS[c["fuel_key"]])
     concept = WingConcept(w["span_m"], w["aspect_ratio"], w["taper_ratio"],
                           w["sweep_deg"], AIRFOILS[w["airfoil_key"]])
-    burn = usable_fuel_kg(c["diameter_m"], c["throat_diameter_m"],
-                          c["throat_length_m"],
-                          FUELS[c["fuel_key"]].density_kg_per_m3)
+    if fuel_rule == "v2_volumetric":
+        # the ancestor's rule: burn against TANK VOLUME (5.84 kg for V2)
+        burn = usable_fuel_kg(c["diameter_m"], c["throat_diameter_m"],
+                              c["throat_length_m"],
+                              FUELS[c["fuel_key"]].density_kg_per_m3)
+    else:
+        # medium_model's rule: 90% of the fuel the design actually loads
+        burn = burn_limit_kg(LOADED_FUEL_KG)
     return run_flight(
         geometry, MAX_WET_MASS_KG, climb_angle_deg=c["climb_angle_deg"],
         motor_cutoff_mach=MOTOR_CUTOFF_MACH, dt_s=0.02, max_time_s=900.0,
@@ -60,6 +71,7 @@ def summarize(name: str, r) -> dict:
         "range_m": max(s.distance_m for s in r.states),
         "lands_from_launch_m": abs(r.states[-1].distance_m),
         "flight_time_s": r.states[-1].time_s,
+        "fuel_burned_kg": max(s.fuel_burned_kg for s in r.states),
     }
 
 
@@ -68,11 +80,18 @@ def main():
     # without CFD (see drag_buildup.spillage_drag_n), so it is BRACKETED
     # rather than picked: recovery 1.0 = the forebody terms already contain
     # it, 0.85 = nominal residual, 0.5 = podded-nacelle-style full charge.
+    print(f"V2 loaded fuel (mass budget): {LOADED_FUEL_KG:.3f} kg"
+          f"  ->  burn limit {burn_limit_kg(LOADED_FUEL_KG):.3f} kg (90%)")
     rows = []
     rows.append(summarize("0: copy (legacy)", fly("legacy")))
-    rows.append(summarize("1: buildup, no spill", fly("buildup", 1.0)))
-    rows.append(summarize("1b: buildup, spill 0.85", fly("buildup", 0.85)))
-    rows.append(summarize("1c: buildup, spill 0.5", fly("buildup", 0.5)))
+    rows.append(summarize("0b: + real fuel cap",
+                          fly("legacy", fuel_rule="loaded_90pct")))
+    rows.append(summarize("1: + buildup, no spill",
+                          fly("buildup", 1.0, "loaded_90pct")))
+    rows.append(summarize("1b: + spill 0.85",
+                          fly("buildup", 0.85, "loaded_90pct")))
+    rows.append(summarize("1c: + spill 0.5",
+                          fly("buildup", 0.5, "loaded_90pct")))
 
     keys = [("peak_mach", "peak M", "{:.3f}"),
             ("cutoff_reached", "cutoff", "{}"),
@@ -84,6 +103,7 @@ def main():
             ("lands_from_launch_m", "lands from launch m", "{:.0f}"),
             ("flight_time_s", "flight s", "{:.0f}")]
 
+    keys.insert(2, ("fuel_burned_kg", "fuel burned kg", "{:.3f}"))
     width = max(len(label) for _, label, _ in keys) + 2
     print(f"\nFrozen V2 through the medium_model fidelity ladder\n")
     header = " " * width + "".join(f"{r['step']:>26}" for r in rows)
