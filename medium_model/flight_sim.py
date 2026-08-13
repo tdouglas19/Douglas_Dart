@@ -402,6 +402,41 @@ def _concept_drag(diameter_m, wing_concept, v, rho, m, gamma_rad, mach):
     return DragResult(body, wing_par, induced, body + wing_par + induced, lift)
 
 
+def _buildup_drag(geom_cache, wing_concept, v, rho, temperature_k, m,
+                  gamma_rad, mach, engine_on, captured_mdot_kg_per_s):
+    """medium_model step-1 drag: component build-up instead of the flat
+    CD0 placeholder (see drag_buildup.py). Returns the same DragResult
+    shape so the integrator is untouched, with the build-up's body terms
+    (friction + form + base + wave + spillage) collapsed into the
+    'parasitic' slot and the full breakdown carried alongside."""
+    from math import cos as _c
+
+    from .drag import DragResult
+    from .drag_buildup import total_drag_buildup
+
+    lift = m * G0_M_PER_S2 * _c(gamma_rad)
+    b = total_drag_buildup(
+        diameter_m=geom_cache["diameter_m"],
+        body_length_m=geom_cache["body_length_m"],
+        duct_exit_diameter_m=geom_cache["duct_exit_diameter_m"],
+        tail_length_m=geom_cache["tail_length_m"],
+        wing_reference_area_m2=geom_cache["wing_area_m2"],
+        wing_thickness_ratio=geom_cache["wing_thickness_ratio"],
+        wing_sweep_deg=geom_cache["wing_sweep_deg"],
+        velocity_m_per_s=v, density_kg_per_m3=rho,
+        temperature_k=temperature_k, mach=mach, required_lift_n=lift,
+        oswald_efficiency=geom_cache["oswald_e"],
+        wing_aspect_ratio=geom_cache["aspect_ratio"],
+        engine_on=engine_on,
+        captured_mass_flow_kg_per_s=captured_mdot_kg_per_s,
+        lip_area_m2=geom_cache["lip_area_m2"],
+        cowl_suction_recovery=geom_cache["cowl_suction_recovery"],
+    )
+    body_terms = b.friction_n + b.form_n + b.base_n + b.wave_n + b.spillage_n
+    return DragResult(body_terms, b.wing_profile_n, b.induced_n, b.total_n,
+                      lift), b
+
+
 def run_flight(
     geometry: VehicleGeometry,
     initial_mass_kg: float,
@@ -416,7 +451,15 @@ def run_flight(
     max_fuel_burn_kg: float | None = None,
     return_to_launch: bool = False,
     climb_dive: ClimbDiveProfile | None = None,
+    drag_model: str = "legacy",
+    cowl_suction_recovery: float = 0.85,
 ) -> FlightResult:
+    # drag_model: "legacy" reproduces the ancestor EXACTLY (flat
+    # CD0_FRONTAL x transonic multiplier) and is what the V2 parity test
+    # asserts; "buildup" switches to medium_model's component build-up
+    # (drag_buildup.py) -- step 1 of the fidelity ladder. The switch exists
+    # so the parity baseline stays re-runnable forever, and so the drag
+    # delta is MEASURED by flying one design both ways rather than argued.
     # max_fuel_burn_kg: physical usable-fuel limit (tank capacity minus
     # reserve). Exceeding it is a FLAMEOUT: engine off wherever the flight
     # is, cutoff NOT credited. Without this cap, marginal designs could
@@ -464,6 +507,35 @@ def run_flight(
     throat_length_m = geometry.throat_length_m
     wingspan_m = geometry.wingspan_m
     fuel = geometry.fuel
+
+    # Geometry the build-up needs that the ancestor never had to compute
+    # (it drew everything from frontal area alone). Assembled once.
+    use_buildup = drag_model == "buildup"
+    geom_cache = None
+    if use_buildup:
+        from math import pi as _pi
+
+        from .constants import (NOSE_TAIL_LENGTH_DIAMETERS,
+                                TAIL_LENGTH_DIAMETERS)
+        _wc = wing_concept
+        geom_cache = {
+            "diameter_m": diameter_m,
+            "duct_exit_diameter_m": throat_diameter_m,
+            "tail_length_m": TAIL_LENGTH_DIAMETERS * diameter_m,
+            "body_length_m": (chamber_length_m + throat_length_m
+                              + NOSE_TAIL_LENGTH_DIAMETERS * diameter_m),
+            "wing_area_m2": (_wc.span_m ** 2 / _wc.aspect_ratio if _wc
+                             else wingspan_m ** 2 / 3.0),
+            "aspect_ratio": _wc.aspect_ratio if _wc else 3.0,
+            "wing_sweep_deg": _wc.sweep_deg if _wc else 0.0,
+            "wing_thickness_ratio": getattr(
+                getattr(_wc, "airfoil", None), "thickness_ratio", 0.03),
+            "oswald_e": _wc.oswald_e if _wc else 0.80,
+            # capture area for the spillage term: the intake is the duct
+            # ahead of the chamber, i.e. the same throat-sized flowpath
+            "lip_area_m2": _pi * throat_diameter_m ** 2 / 4.0,
+            "cowl_suction_recovery": cowl_suction_recovery,
+        }
 
     t, h, x, v, m = 0.0, 0.0, 0.0, initial_velocity_m_per_s, initial_mass_kg
     fuel_burned_kg = 0.0
@@ -585,7 +657,16 @@ def run_flight(
                     mode = "glide"
                     gamma_rad, sin_gamma, cos_gamma = glide_angle_rad, sin_glide, cos_glide
                     x_rate = direction * cos_glide
-            if wing_concept is None:
+            if use_buildup:
+                # engine OFF: the dead duct exit is base too, and there is
+                # no captured stream, so no spillage term
+                drag_result, _bd = _buildup_drag(
+                    geom_cache, wing_concept, v,
+                    atmosphere.density_kg_per_m3,
+                    atmosphere.temperature_k, drag_mass_kg, gamma_rad, mach,
+                    engine_on=False, captured_mdot_kg_per_s=0.0,
+                )
+            elif wing_concept is None:
                 drag_result = total_drag_n(
                     diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3,
                     drag_mass_kg, gamma_rad, G0_M_PER_S2, mach=mach,
@@ -655,7 +736,28 @@ def run_flight(
                         and sin_gamma < -1e-9 and not rule_violated):
                     rule_violated = True
                     rule_violation_mach = mach
-            if wing_concept is None:
+            if use_buildup:
+                # engine ON: exhaust fills the duct exit (smaller base),
+                # and the inlet spills whatever it does not swallow
+                drag_result, _bd = _buildup_drag(
+                    geom_cache, wing_concept, v,
+                    atmosphere.density_kg_per_m3,
+                    atmosphere.temperature_k, m, gamma_rad, mach,
+                    engine_on=True,
+                    # Spillage is an INLET phenomenon and the ramjet duct is
+                    # the one with a capture streamtube: ramjet_simple
+                    # already reports both what the streamtube offers
+                    # (captured_*) and what the engine actually swallows.
+                    # When the ramjet is not producing, the duct is cold and
+                    # wide open, so it passes what it is given and there is
+                    # no spillage -- spillage arises when the HOT engine
+                    # restricts the flow it will accept.
+                    captured_mdot_kg_per_s=(
+                        ramjet_result.air_mass_flow_kg_per_s
+                        if ramjet_result.net_thrust_n > 0.0
+                        else ramjet_result.captured_air_mass_flow_kg_per_s),
+                )
+            elif wing_concept is None:
                 drag_result = total_drag_n(
                     diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
                     gamma_rad, G0_M_PER_S2, mach=mach,
