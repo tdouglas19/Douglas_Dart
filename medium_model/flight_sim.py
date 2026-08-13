@@ -479,7 +479,14 @@ def run_flight(
     climb_dive: ClimbDiveProfile | None = None,
     drag_model: str = "legacy",
     cowl_suction_recovery: float | None = None,
+    propulsion: object | None = None,
 ) -> FlightResult:
+    # propulsion=None uses the ancestor's closed-form engines (parity).
+    # Pass a medium_model.fp_propulsion.FpPropulsion to march the
+    # first-principles engines ALONG this trajectory instead -- thrust and
+    # fuel then come from transient simulations at the real flight
+    # condition, and the ramjet's lightoff becomes a computed event rather
+    # than the configured RAMJET_MIN_LIGHTOFF_MACH gate.
     # cowl_suction_recovery=None uses the geometry/Mach-based value derived
     # in drag_buildup.cowl_suction_recovery_fn; pass a float to override
     # (the campaign brackets it, since it is the single largest remaining
@@ -716,22 +723,33 @@ def run_flight(
             # the transition gap artificially lethal: total thrust dipped to
             # a single engine exactly where drag peaks. Total = simple sum;
             # crossover_mach still reports where the ramjet first dominates.
-            ramjet_result = ramjet_thrust(
-                diameter_m, throat_diameter_m, mach, h, fuel, atmosphere=atmosphere
-            )
-            pulsejet_result = pulsejet_thrust(
-                diameter_m, chamber_length_m, throat_diameter_m, throat_length_m, mach, h, fuel,
-                atmosphere=atmosphere,
-            )
-            if not on_ramjet and ramjet_result.net_thrust_n > pulsejet_result.average_thrust_n:
-                on_ramjet = True
-                crossover_mach = mach
+            if propulsion is not None:
+                # First-principles engines marched along the trajectory.
+                thrust_n, fuel_mdot_kg_per_s = propulsion.thrust_and_fuel(
+                    t, mach, h)
+                if not on_ramjet and propulsion.ramjet_lit and (
+                        propulsion.ramjet_thrust_n
+                        > propulsion.pulsejet_thrust_n):
+                    on_ramjet = True
+                    crossover_mach = mach
+                ramjet_result = pulsejet_result = None
+            else:
+                ramjet_result = ramjet_thrust(
+                    diameter_m, throat_diameter_m, mach, h, fuel, atmosphere=atmosphere
+                )
+                pulsejet_result = pulsejet_thrust(
+                    diameter_m, chamber_length_m, throat_diameter_m, throat_length_m, mach, h, fuel,
+                    atmosphere=atmosphere,
+                )
+                if not on_ramjet and ramjet_result.net_thrust_n > pulsejet_result.average_thrust_n:
+                    on_ramjet = True
+                    crossover_mach = mach
 
-            thrust_n = pulsejet_result.average_thrust_n + ramjet_result.net_thrust_n
-            fuel_mdot_kg_per_s = (
-                pulsejet_result.fuel_mass_flow_kg_per_s
-                + ramjet_result.fuel_mass_flow_kg_per_s
-            )
+                thrust_n = pulsejet_result.average_thrust_n + ramjet_result.net_thrust_n
+                fuel_mdot_kg_per_s = (
+                    pulsejet_result.fuel_mass_flow_kg_per_s
+                    + ramjet_result.fuel_mass_flow_kg_per_s
+                )
             weight_flow = fuel_mdot_kg_per_s * G0_M_PER_S2
             specific_impulse_s = thrust_n / weight_flow if weight_flow > 0.0 else 0.0
             mode = "ramjet" if on_ramjet else "pulsejet"
@@ -782,9 +800,14 @@ def run_flight(
                     # wide open, so it passes what it is given and there is
                     # no spillage -- spillage arises when the HOT engine
                     # restricts the flow it will accept.
-                    captured_mdot_kg_per_s=_duct_swallowed_kg_per_s(
-                        ramjet_result, atmosphere.density_kg_per_m3, v,
-                        geom_cache["lip_area_m2"]),
+                    captured_mdot_kg_per_s=(
+                        propulsion.captured_mdot_kg_per_s(
+                            atmosphere.density_kg_per_m3, v,
+                            geom_cache["lip_area_m2"])
+                        if propulsion is not None
+                        else _duct_swallowed_kg_per_s(
+                            ramjet_result, atmosphere.density_kg_per_m3, v,
+                            geom_cache["lip_area_m2"])),
                 )
             elif wing_concept is None:
                 drag_result = total_drag_n(

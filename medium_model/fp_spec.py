@@ -87,19 +87,26 @@ class MediumModelFpSpec:
         )
 
     # -- pulsejet -------------------------------------------------------
+    # FP-1 splits its tail section (everything aft of the chamber) as
+    # cone 0.130 : tailpipe 0.620, i.e. the cone is 17.33% of it.
+    _CONE_FRACTION_OF_TAIL = 0.130 / (0.130 + 0.620)
+
     def pulsejet_geometry(self):
         from pulsejet_fp.geometry import EngineGeometry
 
-        # FP-1's proportions (chamber 0.150 / cone 0.130 / tailpipe 0.620
-        # long, chamber 0.078 / tailpipe 0.042 dia) applied to V2's own
-        # chamber and tube lengths: the cone is the transition between
-        # them, taken as the FP-1 fraction of chamber length.
+        # The DUCT LENGTH BUDGET IS chamber_length + throat_length, and the
+        # cone comes OUT of it, not on top of it. (Adding the cone as extra
+        # length built an engine 30% longer than the vehicle's duct --
+        # found 2026-08-13, and it flattered the acoustics, since a longer
+        # gas column is more favourable.)
+        tail_total = self.throat_length_m
+        cone = self._CONE_FRACTION_OF_TAIL * tail_total
         return EngineGeometry(
             chamber_diameter=0.95 * self.diameter_m,
             chamber_length=self.chamber_length_m,
-            cone_length=(0.130 / 0.150) * self.chamber_length_m,
+            cone_length=cone,
             tailpipe_diameter=self.throat_diameter_m,
-            tailpipe_length=self.throat_length_m,
+            tailpipe_length=tail_total - cone,
         )
 
     def pulsejet_valve(self, reference_valve):

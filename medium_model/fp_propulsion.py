@@ -113,6 +113,7 @@ class FpPropulsion:
         self._rj_state = None
         self._rj_phi = None
         self._rj_lit = False
+        self._rj_air = 0.0
         self._last_pj_condition = None      # (mach, alt) of last converge
         self._last_rj_condition = None
         self._n_transients = 0
@@ -212,6 +213,7 @@ class FpPropulsion:
             self._rj_lit = True
             self._rj_phi = op.required_phi
             self._rj = _Held(op.net_thrust_n, op.mdot_fuel_kg_s, True)
+            self._rj_air = op.mdot_air_kg_s
             self._rj_state = (op.result.end_state
                               if op.result is not None else None)
         else:
@@ -222,6 +224,7 @@ class FpPropulsion:
             self._rj_lit = False
             self._rj_state = None
             self._rj_phi = None
+            self._rj_air = 0.0
             # engine-out is still a FORCE: cold-throughflow drag, fuel cut
             self._rj = _Held(min(op.net_thrust_n, 0.0), 0.0, True)
         self._last_rj_condition = (mach, altitude_m)
@@ -239,6 +242,28 @@ class FpPropulsion:
         tr.ramjet_fuel_kg_s.append(self._rj.fuel_kg_s if self._rj.valid else 0.0)
         tr.ramjet_phi.append(self._rj_phi)
         tr.ramjet_lit.append(self._rj_lit)
+
+    # -- what the integrator needs beyond thrust/fuel ------------------
+    @property
+    def ramjet_lit(self) -> bool:
+        return self._rj_lit
+
+    @property
+    def ramjet_thrust_n(self) -> float:
+        return self._rj.thrust_n if self._rj.valid else 0.0
+
+    @property
+    def pulsejet_thrust_n(self) -> float:
+        return self._pj.thrust_n if self._pj.valid else 0.0
+
+    def captured_mdot_kg_per_s(self, rho: float, v: float,
+                               lip_area_m2: float) -> float:
+        """Duct mass flow for the spillage drag term. A lit ramjet
+        restricts what it accepts; an unlit duct is a straight-through
+        pipe and passes very nearly what the lip offers."""
+        if self._rj_lit and self._rj_air > 0.0:
+            return self._rj_air
+        return 0.90 * rho * v * lip_area_m2
 
     @property
     def n_transients(self) -> int:
