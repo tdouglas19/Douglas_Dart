@@ -88,6 +88,20 @@ peak T/W 6.89, margin 1.21 @ M1.10. Full table + plots:
   switches). Never pipe the run through `tail` — the pipeline exit code is
   `tail`'s, not Python's, and it masks failures.
 
+## medium_model handoff (firm — user preference)
+
+- **Every change to `simple_model/` must be written up in
+  `docs/simple_model_changes_for_medium_model.md`** so the user can paste it
+  to the parallel session working on `medium_model/`. Say for each change
+  whether it alters a **V2 re-fly** (what the parity test can see) and why
+  it was made, not just what changed.
+- `medium_model/` is a standalone COPY — zero Python imports of
+  `simple_model` (verified). Two shared surfaces though: the `SIMPLE_MODEL_*`
+  env namespace (medium_model falls back to it), and CD0 being baked at
+  import, which `tests/test_medium_model_v2_parity.py` leaks into the test
+  process. CD0-sensitive simple_model tests therefore run in pinned
+  subprocesses (`scripts/fly_frozen_v2.py`, `scripts/v3_probe_flights.py`).
+
 ## Repo layout notes
 
 - `pulsejet-fp/` is a git-subtree vendor of the first-principles pulsejet;
