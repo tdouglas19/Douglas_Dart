@@ -107,5 +107,88 @@ class WingWaveDragRegressionTests(unittest.TestCase):
                            wing_wave_drag_coefficient(c, 2.0))
 
 
+class ReturnToLaunchTests(unittest.TestCase):
+    """The return profile (2026-08-12): pitch-up half-loop at cutoff, glide
+    home, spiral + flare over the launch point. Locks the phase sequence and
+    that the trajectory actually closes."""
+
+    GEOM = VehicleGeometry(0.28, 0.151, 0.34, 0.68, 0.81, FUELS["propane"])
+
+    def test_legacy_profile_unchanged_by_default(self):
+        r = run_flight(self.GEOM, initial_mass_kg=50 * KG_PER_LB,
+                       climb_angle_deg=1.0, dt_s=0.05, max_time_s=600.0)
+        modes = {s.mode for s in r.states}
+        self.assertNotIn("loop", modes)
+        self.assertNotIn("return", modes)
+        # legacy flights only ever fly downrange
+        self.assertGreater(r.states[-1].distance_m, 0.0)
+
+    def test_return_profile_reverses_and_flies_back(self):
+        """CD0 is baked at import, so at the suite's default CD0 this design
+        cannot reach M 1.1 -- cutoff is lowered here so the post-cutoff
+        mechanism (half-loop -> reversed heading -> inbound glide) is what
+        gets tested. Completing the trip home needs the low-CD0 energy
+        budget and is verified in the campaign reports, not here."""
+        r = run_flight(self.GEOM, initial_mass_kg=50 * KG_PER_LB,
+                       climb_angle_deg=1.0, motor_cutoff_mach=0.30,
+                       dt_s=0.05, max_time_s=900.0, return_to_launch=True)
+        self.assertTrue(r.motor_cutoff_reached)
+        modes = [s.mode for s in r.states]
+        for phase in ("loop", "return"):
+            self.assertIn(phase, modes, phase)
+        # phases occur in order: powered -> loop -> return
+        self.assertLess(modes.index("loop"), modes.index("return"))
+        # the half-loop trades speed for altitude -- that is what buys the
+        # range home (a flat turn instead wastes it, see RETURN_* comments)
+        loop = [s for s in r.states if s.mode == "loop"]
+        self.assertGreater(loop[-1].altitude_m, loop[0].altitude_m)
+        self.assertLess(loop[-1].velocity_m_per_s, loop[0].velocity_m_per_s)
+        # heading is reversed: the inbound glide flies back toward launch
+        inbound = [s for s in r.states if s.mode == "return"]
+        self.assertLess(inbound[-1].distance_m, inbound[0].distance_m)
+        self.assertLess(r.states[-1].distance_m,
+                        max(s.distance_m for s in r.states))
+
+
+class MinimumAccelerationGateTests(unittest.TestCase):
+    """The min-powered-acceleration gate (2026-08-12, user requirement) --
+    the multiplicative thrust margin alone admits ~0.12 g at the M~0.45
+    pinch, which is what this additive gate exists to rule out."""
+
+    def test_min_accel_is_tracked_over_powered_flight_only(self):
+        from simple_model.constants import G0_M_PER_S2
+        g = VehicleGeometry(0.28, 0.151, 0.34, 0.68, 0.81, FUELS["propane"])
+        # cutoff lowered to one this design reaches at the suite's default
+        # CD0, so the flight HAS an unpowered segment to be excluded
+        r = run_flight(g, initial_mass_kg=50 * KG_PER_LB, climb_angle_deg=1.0,
+                       motor_cutoff_mach=0.30, dt_s=0.05, max_time_s=600.0)
+        powered = [s for s in r.states if s.mode in ("pulsejet", "ramjet")]
+        unpowered = [s for s in r.states if s.mode not in ("pulsejet", "ramjet")]
+        self.assertTrue(powered and unpowered)
+        expected = min(s.acceleration_m_per_s2 / G0_M_PER_S2 for s in powered)
+        self.assertAlmostEqual(r.min_powered_accel_g, expected, places=9)
+        # the unpowered glide decelerates harder; it must NOT leak into the
+        # gated quantity (that would make every design look infeasible)
+        self.assertLess(min(s.acceleration_m_per_s2 for s in unpowered),
+                        expected * G0_M_PER_S2)
+
+    def test_gate_constant_is_env_overridable(self):
+        import importlib
+        import os as _os
+
+        import simple_model.constants as consts
+        original = _os.environ.get("SIMPLE_MODEL_MIN_ACCEL_G")
+        try:
+            _os.environ["SIMPLE_MODEL_MIN_ACCEL_G"] = "0.42"
+            importlib.reload(consts)
+            self.assertAlmostEqual(consts.MIN_POWERED_ACCELERATION_G, 0.42)
+        finally:
+            if original is None:
+                _os.environ.pop("SIMPLE_MODEL_MIN_ACCEL_G", None)
+            else:
+                _os.environ["SIMPLE_MODEL_MIN_ACCEL_G"] = original
+            importlib.reload(consts)
+
+
 if __name__ == "__main__":
     unittest.main()

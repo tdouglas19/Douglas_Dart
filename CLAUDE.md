@@ -52,8 +52,17 @@ peak T/W 6.89, margin 1.21 @ M1.10. Full table + plots:
   embedded PNGs to `out_simple_model/`).
 - Method/repeatability doc: `docs/simple_model_campaign_playbook.md`;
   calibration provenance: `docs/simple_model_overview.md`.
-- Tests: `.venv/Scripts/python -m unittest discover tests` (conftest sets
-  the pulsejet-fp AND ramjet-fp kill-switches for the legacy suite).
+- Tests: the kill-switches MUST be set on the command line —
+  `tests/conftest.py` is a *pytest* convention and `unittest discover`
+  never loads it, so a bare `unittest discover` runs the FP primaries live
+  and reports 13 bogus failures (verified 2026-08-12):
+  ```
+  DOUGLAS_DART_DISABLE_PULSEJET_FP=1 DOUGLAS_DART_DISABLE_RAMJET_FP=1 \
+    .venv/Scripts/python -m unittest discover tests
+  ```
+  Green = `Ran 152 tests ... OK (skipped=1)`, ~814 s (~2600 s without the
+  switches). Never pipe the run through `tail` — the pipeline exit code is
+  `tail`'s, not Python's, and it masks failures.
 
 ## Repo layout notes
 
