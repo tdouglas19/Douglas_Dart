@@ -50,8 +50,8 @@ if TYPE_CHECKING:
     # runtime imports are lazy inside run_pulsejet_fp_query).
     from pulsejet_fp import ThrustResult as PulsejetFpThrustResult
     # ramjet-fp: same pattern (ramjet_fp_bridge.py's runtime imports are
-    # lazy, inside run_ramjet_fp_query).
-    from ramjet_fp import RamjetResult as RamjetFpResult
+    # lazy, inside run_ramjet_fp_operating_query).
+    from ramjet_fp import RamjetOperatingPoint as RamjetFpOperatingPoint
 
 from .atmosphere import standard_atmosphere
 from .compressible import stagnation_pressure
@@ -81,9 +81,9 @@ from .ramjet_fp_bridge import (
     RAMJET_FP_RECOVERY_OVERRIDE_NA_FLAG,
     RamjetFpSpec,
     derive_ramjet_fp_spec,
+    ramjet_fp_operating_point_is_usable,
     ramjet_fp_primary_enabled,
-    ramjet_fp_result_is_usable,
-    run_ramjet_fp_query,
+    run_ramjet_fp_operating_query,
 )
 
 PULSEJET_MODE = "pulsejet"
@@ -315,6 +315,13 @@ class PropulsionMapPoint:
 
     validity_flags: tuple[str, ...]
     numerical_reference_only: bool = True
+    ramjet_required_equivalence_ratio: float | None = None
+    """Ramjet-fp-sourced points only (2026-08-12): the mixture ratio is an
+    OUTPUT of the first-principles model -- the leanest stable phi plus a
+    margin, verified by its own transient run. This is the fuel-control
+    design value at this (M, alt); None for the native 0D path (which
+    still consumes the configured target_equivalence_ratio), for
+    pulsejet modes, and for engine-out FP points (fuel cut)."""
 
 
 # cycle_based_averaging_fix.md (2026-08-08): the pulsejet path no longer uses
@@ -429,7 +436,7 @@ def _pulsejet_point(
 
 
 def _ramjet_fp_result_to_point(
-    result: "RamjetFpResult",
+    op: "RamjetFpOperatingPoint",
     spec: RamjetFpSpec,
     mach: float,
     altitude_m: float,
@@ -437,24 +444,29 @@ def _ramjet_fp_result_to_point(
     *,
     extra_validity_flags: tuple[str, ...] = (),
 ) -> PropulsionMapPoint:
-    """Map a ramjet-fp ``RamjetResult`` into the common schema.
+    """Map a ramjet-fp ``RamjetOperatingPoint`` into the common schema.
 
-    Cycle-mean values throughout (the model's lit attractor is a bounded
-    combustion oscillation -- flagged). ramjet-fp's eq. 30 net thrust
-    already charges the swallowed stream's freestream momentum, so
-    ``gross - drag == net`` holds exactly with drag reconstructed as
-    gross - net. The achieved total-pressure recovery is an OUTPUT of the
-    resolved inlet/duct physics (Rankine-Hugoniot + resolved losses), so
-    scenario recovery overrides cannot apply and are flagged instead."""
+    The mixture ratio is an OUTPUT (`ramjet_required_equivalence_ratio`)
+    -- the engine self-selected its leanest-stable-plus-margin mixture;
+    fuel flow is the flow AT that mixture, and zero for an engine-out
+    point (a real throttle cuts fuel to a dead engine). Cycle-mean values
+    throughout (the lit attractor is a bounded combustion oscillation --
+    flagged). ramjet-fp's eq. 30 net thrust already charges the swallowed
+    stream's freestream momentum, so ``gross - drag == net`` holds with
+    drag reconstructed as gross - net. The achieved total-pressure
+    recovery is an OUTPUT of the resolved inlet/duct physics
+    (Rankine-Hugoniot + resolved losses), so scenario recovery overrides
+    cannot apply and are flagged instead."""
 
+    result = op.result
     mult = scenario.thrust_multiplier
-    net_thrust_n = result.net_thrust_n * mult
+    net_thrust_n = op.net_thrust_n * mult
     gross_thrust_n = (result.gross_thrust_n
                       if math.isfinite(result.gross_thrust_n)
-                      else result.net_thrust_n) * mult
+                      else op.net_thrust_n) * mult
     drag_n = gross_thrust_n - net_thrust_n
 
-    fuel_flow = result.mdot_fuel_kg_s if math.isfinite(result.mdot_fuel_kg_s) else 0.0
+    fuel_flow = op.mdot_fuel_kg_s if math.isfinite(op.mdot_fuel_kg_s) else 0.0
     specific_impulse_s = None
     tsfc_per_hour = None
     if fuel_flow > 1e-12 and net_thrust_n > 0.0:
@@ -484,15 +496,16 @@ def _ramjet_fp_result_to_point(
     if result.status == "oscillatory" and result.oscillation_amplitude_n \
             > 0.5 * max(abs(result.net_thrust_n), 5.0):
         validity_flags.append(RAMJET_FP_OSCILLATORY_FLAG)
-    if not result.flame_stable:
+    if not op.viable:
         validity_flags.append(RAMJET_FP_BLOWN_OFF_FLAG)
+        validity_flags.append("ramjet_fp_no_viable_mixture_fuel_cut")
     if scenario.ramjet_total_pressure_recovery_override is not None:
         validity_flags.append(RAMJET_FP_RECOVERY_OVERRIDE_NA_FLAG)
     validity_flags.extend(extra_validity_flags)
 
     lightoff_status = (
-        f"ramjet_fp_flame_stable_{result.status}"
-        if result.flame_stable else f"ramjet_fp_flame_out_{result.status}"
+        f"ramjet_fp_flame_stable_phi_{op.required_phi:.3f}"
+        if op.viable else f"ramjet_fp_no_viable_mixture_{result.status}"
     )
     return PropulsionMapPoint(
         mode=RAMJET_MODE,
@@ -513,8 +526,9 @@ def _ramjet_fp_result_to_point(
         combustor_temperature_k=None,
         peak_chamber_pressure_pa=None,
         lightoff_status=lightoff_status,
-        self_sustaining_status=result.flame_stable,
+        self_sustaining_status=op.viable,
         validity_flags=tuple(validity_flags),
+        ramjet_required_equivalence_ratio=op.required_phi,
     )
 
 
@@ -527,14 +541,16 @@ def _ramjet_point(
     """RAMJET_MODE's dispatch target. Priority order (2026-08-12, Gate 2):
 
     1. **ramjet-fp** (first-principles unsteady quasi-1D model, sibling
-       repo with a pinned editable install) -- the PRIMARY. Always
-       derivable from the case's own flowpath dimensions, guarded by
-       `ramjet_fp_result_is_usable`. Note ``blown_off`` is a USABLE
-       answer (the flame will not hold at this condition; the point
-       carries the cold-throughflow drag and a visible flag) -- the
-       stability physics the native 0D model cannot represent is exactly
-       what this primary contributes to Gate 2/Gate 3.
-    2. The native steady 0D cycle (`evaluate_ramjet`) -- the fallback,
+       repo with a pinned editable install) -- the PRIMARY, queried as an
+       OPERATING POINT: phi is an output (leanest stable mixture +
+       margin, self-selected and verified by the model; 2026-08-12 user
+       directive), never read from the config. Guarded by
+       `ramjet_fp_operating_point_is_usable`. Note engine-out (no viable
+       mixture) is a USABLE answer: fuel cut to zero, cold-throughflow
+       drag, visible flags -- the stability physics the native 0D model
+       cannot represent is exactly what this primary contributes.
+    2. The native steady 0D cycle (`evaluate_ramjet`, which still
+       consumes the configured target_equivalence_ratio) -- the fallback,
        and the path taken when `DOUGLAS_DART_DISABLE_RAMJET_FP=1`.
 
     Demotion is visible via `RAMJET_FP_FALLBACK_FLAG`, never silent; an
@@ -542,18 +558,18 @@ def _ramjet_point(
     must not take down an overnight design run)."""
 
     if ramjet_fp_primary_enabled():
-        fp_result: "RamjetFpResult | None" = None
+        fp_op: "RamjetFpOperatingPoint | None" = None
         fp_spec = None
         try:
             fp_spec = derive_ramjet_fp_spec(case)
-            fp_result = run_ramjet_fp_query(fp_spec, mach, altitude_m,
-                                            _ramjet_fp_fidelity_default())
+            fp_op = run_ramjet_fp_operating_query(
+                fp_spec, mach, altitude_m, _ramjet_fp_fidelity_default())
         except Exception:
-            fp_result = None
-        if fp_result is not None and fp_spec is not None \
-                and ramjet_fp_result_is_usable(fp_result):
+            fp_op = None
+        if fp_op is not None and fp_spec is not None \
+                and ramjet_fp_operating_point_is_usable(fp_op):
             return _ramjet_fp_result_to_point(
-                fp_result, fp_spec, mach, altitude_m, scenario
+                fp_op, fp_spec, mach, altitude_m, scenario
             )
         point = _ramjet_native_point(case, mach, altitude_m, scenario)
         return dataclasses_replace(

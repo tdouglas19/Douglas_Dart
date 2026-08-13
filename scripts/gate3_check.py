@@ -6,9 +6,12 @@ packaging, or rule constraints." Full fidelity (verification-grade dt,
 docs/design_convergence.md's dt-convergence solver) -- this is a trust-the-
 number check, not a search query.
 
-Usage: python scripts/gate3_check.py [config_path]
+Usage: python scripts/gate3_check.py [config_path] [ramjet_fidelity]
 Defaults to configs/shared_nozzle_candidate_b.yaml, the config
-docs/design_workflow.md's own Gate 3 status line tracks.
+docs/design_workflow.md's own Gate 3 status line tracks, and ramjet
+table fidelity "full" (trust-the-number; each lazy-table corner is an
+operating-point query of 4-9 transients since phi is self-selected --
+pass "fast" for iteration).
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from douglas_dart.ramjet_fp_bridge import ramjet_fp_primary_enabled
 from douglas_dart.trajectory import ADVERSE_SCENARIO, NOMINAL_SCENARIO, simulate_mission
 
 config_path = sys.argv[1] if len(sys.argv) > 1 else "configs/shared_nozzle_candidate_b.yaml"
+ramjet_fidelity = sys.argv[2] if len(sys.argv) > 2 else "full"
 case = load_reference_case(config_path)
 
 # Gate 3's ramjet source (2026-08-12): the first-principles ramjet-fp lazy
@@ -41,7 +45,7 @@ for scenario in (NOMINAL_SCENARIO, ADVERSE_SCENARIO):
     t0 = time.time()
     result = simulate_mission(
         case, scenario, pulsejet_table_fidelity=PULSEJET_FIDELITY_FULL,
-        ramjet_table_fidelity="full",
+        ramjet_table_fidelity=ramjet_fidelity,
     )
     dt = time.time() - t0
     print(f"=== {scenario.name} ({dt:.1f}s) ===")

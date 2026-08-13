@@ -57,7 +57,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # lazy, like the pulsejet-fp bridge
-    from ramjet_fp import RamjetResult
+    from ramjet_fp import RamjetOperatingPoint, RamjetResult
     from .config import ReferenceCase
 
 
@@ -128,8 +128,13 @@ class RamjetFpSpec:
     x_exit_m: float
     gutter_radius_m: float
     gutter_width_m: float
-    equivalence_ratio: float
     gutter_capped_by_throat: bool = False
+    # NOTE (2026-08-12, user directive): the mixture ratio is deliberately
+    # NOT part of the spec -- phi is an OUTPUT of the query (the engine
+    # self-selects its leanest-stable-plus-margin mixture; see
+    # run_ramjet_fp_operating_query). The config's
+    # ramjet.target_equivalence_ratio is consumed only by the native 0D
+    # fallback path, never by the FP primary.
 
     @property
     def gutter_frontal_area_m2(self) -> float:
@@ -171,7 +176,6 @@ def derive_ramjet_fp_spec(case: "ReferenceCase") -> RamjetFpSpec:
         capped = True
         w_g = max(a_g_max / (2.0 * math.pi * r_g), 1e-3)
 
-    phi = min(max(case.ramjet.target_equivalence_ratio, 0.3), 1.4)
     return RamjetFpSpec(
         lip_diameter_m=lip,
         combustor_diameter_m=combustor,
@@ -184,7 +188,6 @@ def derive_ramjet_fp_spec(case: "ReferenceCase") -> RamjetFpSpec:
         x_exit_m=_RJ1_X_EXIT * s_x,
         gutter_radius_m=r_g,
         gutter_width_m=w_g,
-        equivalence_ratio=phi,
         gutter_capped_by_throat=capped,
     )
 
@@ -198,21 +201,25 @@ _FP_NUMERICS_BY_FIDELITY: dict[str, tuple[int, float]] = {
 
 
 @lru_cache(maxsize=512)
-def run_ramjet_fp_query(
+def run_ramjet_fp_operating_query(
     spec: RamjetFpSpec,
     mach: float,
     altitude_m: float,
     ramjet_fidelity: str,
-) -> "RamjetResult":
-    """Run ramjet-fp's transient sim to its attractor (steady, oscillatory
-    limit cycle, or blown off -- all honest, reportable outcomes).
+) -> "RamjetOperatingPoint":
+    """Fly a ramjet of THIS SIZE at (mach, altitude): the model returns
+    the mixture ratio and fuel consumption it needs -- phi is an OUTPUT
+    (leanest stable mixture + margin, capped at stoich, verified by its
+    own transient run; ~4-9 transients per point, all deterministic and
+    memoized). Where no mixture holds the flame the answer is engine-out:
+    fuel cut to zero, cold-throughflow drag reported. The required_phi
+    surface over (M, alt) IS the fuel-control design curve.
 
-    Pure and deterministic given these arguments (the sibling model has no
-    RNG and bans wall-clock reads), so memoization is safe. Lazy import
-    keeps ramjet-fp an optional dependency until the mode is used."""
+    Pure given these arguments (no RNG, no wall-clock in the sibling), so
+    memoization is safe. Lazy import keeps ramjet-fp optional."""
 
     from ramjet_fp import (FlameholderDesign, Numerics, RamjetGeometry,
-                           ramjet_thrust, reference_gas)
+                           ramjet_operating_point)
 
     if ramjet_fidelity not in _FP_NUMERICS_BY_FIDELITY:
         raise ValueError(f"unknown ramjet fidelity: {ramjet_fidelity!r}")
@@ -234,10 +241,9 @@ def run_ramjet_fp_query(
         frontal_area=spec.gutter_frontal_area_m2,
         shear_perimeter=spec.gutter_shear_perimeter_m,
     )
-    return ramjet_thrust(
+    return ramjet_operating_point(
         mach,
         altitude_m,
-        gas=reference_gas(spec.equivalence_ratio),
         geom=geom,
         fh=fh,
         numerics=Numerics(n_cells=n_cells),
@@ -268,6 +274,16 @@ def ramjet_fp_result_is_usable(result: "RamjetResult") -> bool:
     return True
 
 
+def ramjet_fp_operating_point_is_usable(op: "RamjetOperatingPoint") -> bool:
+    """The operating-point guard: the selected (or engine-out) run must
+    itself pass the structural checks. viable=False is USABLE -- it is
+    the model's answer that no mixture holds the flame here."""
+
+    if op.result is None:
+        return False
+    return ramjet_fp_result_is_usable(op.result)
+
+
 # ---------------------------------------------------------------------------
 # Gate 3: lazy bilinear mission table
 # ---------------------------------------------------------------------------
@@ -282,11 +298,22 @@ class RamjetFpMissionTable:
     The mission solver queries thrust at continuously-varying (M, alt)
     every step; a raw FP call per step is unaffordable, so this snaps to a
     0.1-Mach x 1500-m grid and computes only the corner cells the
-    trajectory actually touches (~12-16 FP runs per mission, memoized
-    across scenarios and repeat calls). Thrust and fuel flow are bilinear
+    trajectory actually touches (~12-16 corner cells per mission, each an
+    operating-point query of 4-9 transients since phi is self-selected;
+    memoized across scenarios and repeat calls). Thrust and fuel flow are bilinear
     cycle means; ``flame_ok`` is the corner-weighted flame fraction >= 0.5
     (the blow-off boundary is sharp, so the transition band spans at most
-    one cell). Same spirit as trajectory.py's pulsejet static table."""
+    one cell). Same spirit as trajectory.py's pulsejet static table.
+
+    BRANCH BASIS (honesty note): each corner is an independent COLD-START
+    operating-point query -- the relight branch. Inside the oscillation
+    pinch this is conservative: the sibling's continuation campaigns show
+    a continuously CARRIED flame transits M 0.4-1.3 at <=~1000 m where
+    cold relight can fail (ramjet-fp architecture.md #8-#10).
+    Branch-continuous mission seeding (warm-starting each cell from the
+    previous along the trajectory) is tracked as future work; until then
+    Gate 3 under-reports feasibility inside the pinch, never
+    over-reports."""
 
     def __init__(self, spec: RamjetFpSpec, fidelity: str):
         self.spec = spec
@@ -294,12 +321,13 @@ class RamjetFpMissionTable:
 
     @lru_cache(maxsize=4096)
     def _corner(self, mach_node: float, alt_node: float):
-        res = run_ramjet_fp_query(self.spec, mach_node, alt_node,
-                                  self.fidelity)
-        flame = 1.0 if (res.flame_stable
-                        and ramjet_fp_result_is_usable(res)) else 0.0
-        fuel = res.mdot_fuel_kg_s if math.isfinite(res.mdot_fuel_kg_s) else 0.0
-        return res.net_thrust_n, fuel, flame
+        op = run_ramjet_fp_operating_query(self.spec, mach_node, alt_node,
+                                           self.fidelity)
+        flame = 1.0 if (op.viable
+                        and ramjet_fp_operating_point_is_usable(op)) else 0.0
+        fuel = op.mdot_fuel_kg_s if math.isfinite(op.mdot_fuel_kg_s) else 0.0
+        thrust = op.net_thrust_n if math.isfinite(op.net_thrust_n) else 0.0
+        return thrust, fuel, flame
 
     def query(self, mach: float, altitude_m: float) -> tuple[float, float, bool]:
         """(net_thrust_n, fuel_flow_kg_per_s, flame_ok), cycle means."""

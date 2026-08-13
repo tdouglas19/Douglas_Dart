@@ -1,6 +1,7 @@
-"""One real end-to-end ramjet-fp query through the Gate 2 dispatch and the
-Gate 3 lazy table (fast fidelity, ~15-60 s each with a warm numba cache;
-kept separate from test_ramjet_fp_bridge.py so iteration can deselect it)."""
+"""Real end-to-end ramjet-fp operating-point queries through the Gate 2
+dispatch and the Gate 3 lazy table (fast fidelity; the phi search runs
+4-9 transients per point, ~1-3 min each test with a warm numba cache;
+kept separate so iteration can deselect them)."""
 from __future__ import annotations
 
 import math
@@ -15,7 +16,6 @@ except ImportError:
 from douglas_dart.config import load_reference_case
 from douglas_dart.propulsion_map import NOMINAL, _ramjet_point
 from douglas_dart.ramjet_fp_bridge import (
-    RAMJET_FP_BLOWN_OFF_FLAG,
     derive_ramjet_fp_spec,
     get_ramjet_fp_mission_table,
 )
@@ -26,17 +26,20 @@ def case():
     return load_reference_case("configs/shared_nozzle_candidate_a.yaml")
 
 
-def test_live_gate2_point_reports_lean_blowoff(case, monkeypatch):
-    """The vehicle config's phi=0.60 premixed flame does not hold at
-    M=1.1 (ramjet-fp architecture.md #3-#5): the map must carry that
-    verdict with the cold-throughflow drag, not a lit thrust number."""
+def test_live_gate2_point_self_selects_mixture(case, monkeypatch):
+    """M=1.1 sea level, candidate A: the engine must self-select a
+    near-stoich mixture (campaign phi_min ~ 0.98 there), light, and
+    report positive thrust WITH the required phi as an output -- the
+    config's target_equivalence_ratio (0.60, unviable premixed) must
+    play no role in the FP path."""
     monkeypatch.setenv("DOUGLAS_DART_DISABLE_RAMJET_FP", "0")
     pt = _ramjet_point(case, 1.1, 0.0, NOMINAL)
-    assert "ramjet_fp_status_blown_off" in pt.validity_flags
-    assert RAMJET_FP_BLOWN_OFF_FLAG in pt.validity_flags
-    assert pt.self_sustaining_status is False
-    assert pt.net_thrust_n < 0.0        # cold-throughflow drag
-    assert -200.0 < pt.net_thrust_n     # and only drag, not garbage
+    assert pt.self_sustaining_status is True
+    assert pt.ramjet_required_equivalence_ratio is not None
+    assert 0.90 <= pt.ramjet_required_equivalence_ratio <= 1.00
+    assert pt.net_thrust_n > 200.0
+    assert pt.fuel_mass_flow_kg_per_s > 0.01
+    assert pt.lightoff_status.startswith("ramjet_fp_flame_stable_phi_")
 
 
 def test_live_gate3_table_interpolates(case, monkeypatch):
@@ -44,7 +47,8 @@ def test_live_gate3_table_interpolates(case, monkeypatch):
     table = get_ramjet_fp_mission_table(derive_ramjet_fp_spec(case), "fast")
     thrust, fuel, flame = table.query(1.12, 100.0)
     assert math.isfinite(thrust) and math.isfinite(fuel)
-    assert flame is False               # phi=0.60: blown off here too
-    # memoized corners: the repeat query is effectively free
+    assert flame                     # self-selected mixture holds here
+    assert thrust > 0.0 and fuel > 0.0
+    # memoized corners: the repeat query reuses them
     thrust2, fuel2, flame2 = table.query(1.13, 200.0)
     assert math.isfinite(thrust2)
