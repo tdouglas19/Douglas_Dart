@@ -1,0 +1,74 @@
+{
+  "_README": [
+    "EVERY number in this file is INVENTED. None of it comes from",
+    "out_medium_model/v4_export/structural_dimensions.json, because the model",
+    "that produced that file carries no geometry for any of it.",
+    "",
+    "Edit this file to re-shape the vehicle; geometry.py reads it and nothing",
+    "else. Anything built from a value here is tagged ASSUMED and drawn dashed",
+    "grey in the viewer, so the invented geometry is never mistaken for the",
+    "model's own.",
+    "",
+    "See scripts/PROPULSION_2D_GEOMETRY.md for what each knob does and why it",
+    "has the value it has."
+  ],
+
+  "inlet": {
+    "_note": "Nose inlet with external-compression centrebody (user directive, 2026-08-14). At the vehicle's M 1.10 peak a spike buys ~0.1% total-pressure recovery over a plain pitot inlet -- the centrebody's real justification here is packaging (annular capture frees a nose volume), not compression. Shock-on-lip is NOT a design driver and is not used to place the lip: the vehicle never reaches a Mach where a 20 deg cone throws an attached shock.",
+
+    "centrebody_cone_half_angle_deg": 20.0,
+    "centrebody_max_diameter_frac_of_body": 0.522,
+    "centrebody_cylinder_length_m": 0.120,
+    "_centrebody_sizing_note": "0.522 x body = 111.7 mm. The centrebody is the DESIGN VARIABLE (user directive: size it for avionics) and the cowl lip is SOLVED from it via the capture rule. 0.522 is the value that keeps the lip at the 132.26 mm it had under the old throat-area rule, i.e. it takes the whole 2.67x inlet oversizing found by the flight model (2026-08-14) and spends it on avionics volume instead of shrinking the cowl. The flight model states avionics volume is a FREE VARIABLE (payload_and_avionics.avionics_volume_m3 is null), so nothing here is being overridden -- if a real volume requirement appears, set this from it and the lip will follow.",
+    "_centrebody_closure_note": "The centrebody always closes to a point AT the chamber head, so the chamber sees a full-area entry with no base step. Carrying it further aft INTO the chamber would cut the diffuser area ratio and is the other lever on the 7.82 deg diffuser angle -- but it changes the combustor, so it is out of scope here and is deliberately not a knob.",
+
+    "capture_area_rule": "annulus_equals_required_mass_flow",
+    "_capture_area_rule_note": "SUPERSEDED RULE, 2026-08-14. The original rule was 'annulus_equals_throat_area' (D_lip = sqrt(D_throat^2 + D_cb^2)), preserving the repo convention that inlet capture equals nozzle throat area. The flight model then supplied what the engine ACTUALLY consumes -- mdot_air = mdot_fuel * 15.7 / phi from the FP ramjet's own trace -- and the answer is 39.365 cm2 at cutoff (M 1.092), against the 105.02 cm2 the throat rule demanded. The throat rule oversized the inlet 2.67x. The default rule now reads inlet.implied_capture_area_m2 from the export. 'annulus_equals_throat_area' is retained so the earlier drawing can be reproduced. NOTE the export calls its area a FLOOR: full stream-tube capture, no spillage, no strut blockage.",
+
+    "diffuser_policy": "constant_angle_then_dump",
+    "diffuser_target_half_angle_deg": 7.0,
+    "_diffuser_policy_note": "Correctly sizing the inlet made the diffuser HARDER, not easier: capture 39.4 cm2 to a 343.1 cm2 chamber head is an area ratio of 8.7, which over the available 275 mm works out at a 14.1 deg equivalent cone -- far past separation, and no wall shape fixes it because both areas and the length are fixed. The physical answer is the one a ramjet with a flameholder uses anyway: diffuse at a sane angle (7 deg) as far as the nose allows, then DUMP into the combustor through a sudden expansion. That step is a real feature, not a drawing artifact, so the area distribution is genuinely discontinuous at the chamber head. Set 'full' to diffuse the whole way instead and see the 14.1 deg for yourself.",
+
+    "cowl_lip_thickness_m": 0.003,
+    "cowl_inner_curve": "constant_area_angle",
+    "cowl_outer_curve": "parabolic_tangent",
+    "_cowl_inner_curve_note": "constant_area_angle shapes the wall so the equivalent-cone radius sqrt(A/pi) grows LINEARLY, giving one uniform equivalent diffuser half-angle over the whole intake. Because the duct is annular the wall follows the centrebody: r_cowl(x) = sqrt(R_eq(x)^2 + r_cb(x)^2), and both endpoints fall out exactly right. The alternatives ('smoothstep', 'parabolic_tangent') are shape-only laws that ignore the centrebody and bunch all the area growth into the middle: smoothstep peaks at a 13.1 deg equivalent half-angle, which separates. With the endpoints fixed by the capture area and the chamber head, 7.82 deg is the BEST achievable over this length -- constant_area_angle is the law that actually achieves it.",
+    "_cowl_outer_curve_note": "parabolic_tangent so the outer mould line meets the barrel with no slope discontinuity at x = nose_fairing_length. The profile is not in the model; only the 428 mm length is."
+  },
+
+  "divergent_nozzle": {
+    "_note": "User directive 2026-08-14: 'there should be some form of exit diameter to expand the combustion gasses through a diverging nozzle, but the chamber pressure is very low so it doesnt have to be much'. The model has NO divergence at all -- its nozzle_exit_diameter_m equals the tailpipe diameter, so what the model calls the nozzle exit is really the THROAT. Adding divergence therefore changes the exit, never the throat: throat area, throat_to_body_area_fraction and the inlet capture rule are all untouched.",
+
+    "_sizing_note": "The user's instinct is right and the number is smaller than it sounds. With gamma 1.3 the nozzle does not even CHOKE until p0/pa >= 1.832, which at 0.90 total-pressure recovery means M ~ 1.07 -- and the vehicle cuts off at M 1.10. So the nozzle is unchoked for nearly the whole mission, where a divergent section acts as a subsonic diffuser and REDUCES thrust. At the M 1.10 design point the thermodynamically optimum area ratio is 1.0015, i.e. essentially none. The real argument for expanding here is EXTERNAL: a bigger exit lets the boattail close less steeply (12.69 deg at AR 1.00 -> 11.97 at 1.10 -> 10.03 at 1.39 -> 8.03 at 1.72). 1.10 is the compromise: visible divergence, exit pressure ratio 0.665 (over-expanded but above the ~0.4 Summerfield separation limit), and a small boattail gain. Run the tool to see the full trade table.",
+
+    "expansion_area_ratio": 1.10,
+    "half_angle_deg": 15.0,
+
+    "_design_point_note": "Needed only to JUDGE the expansion, never to build it -- the geometry follows expansion_area_ratio alone. These are ASSUMED: structural_dimensions.json carries no flight condition.",
+    "design_mach": 1.10,
+    "gamma_hot": 1.30,
+    "total_pressure_recovery": 0.90
+  },
+
+  "chamber_to_tailpipe_cone": {
+    "_note": "The mass model gives this transition ZERO length (stated outright in structural_dimensions.json). A 214 -> 115.6 mm step over 0 mm is not a shape. Length is DERIVED from the half-angle below and the two flow radii.",
+    "half_angle_deg": 15.0
+  },
+
+  "walls": {
+    "_note": "The source data is internally inconsistent about whether its diameters are flow IDs or OMLs, and it PROVES each reading in a checkable form. frontal_area_m2 = pi/4 * 0.214^2 proves 214 mm is the OUTER surface. throat_to_body_area_fraction = (115.638/214)^2 proves 115.638 mm is a FLOW area. So the two are read differently, deliberately, and the resulting model-vs-as-drawn volume deltas are reported rather than hidden. The two entries below are NOT free choices: geometry._check_wall_readings() re-derives both from the JSON at build time and raises if either stops holding, so a future export that changes convention fails loudly instead of drawing the wall on the wrong side.",
+    "body_diameter_is": "oml",
+    "tailpipe_diameter_is": "flow_id",
+    "_chamber_wall_stackup": "DESCRIPTIVE, not a knob -- outboard to inboard: CFRP skin, then steel liner. In the chamber the combustion liner IS the body skin (V4 deleted the annular gap), which is what makes the thermal problem the export README flags visible in the drawing. The drawing's skin_id and duct_od contours encode this order; changing it means editing geometry.py, not this file."
+  },
+
+  "not_modelled": {
+    "_note": "Drawn as nothing, listed here so the omissions are explicit rather than silent.",
+    "centrebody_support_struts": "A nose centrebody must be carried by struts or a strut ring across the annular diffuser. There is no strut geometry here and no strut blockage in any area number.",
+    "side_valve_runners": "The pulsejet's side reed-valve runners do not fit inside a 214 mm skin (export README). Out of scope for this drawing; an external fairing is needed and its drag is in neither the flat CD0 nor the build-up.",
+    "flameholder": "medium_model.fp_spec carries a flameholder station and gutter, but it is not in structural_dimensions.json. This tool stays pure to the JSON input.",
+    "reed_valve_station": "Same -- fp_spec has petal geometry, the JSON does not.",
+    "wing_and_fins": "Out of scope (propulsion flowpath + OML only). The model has no fin geometry at all and no longitudinal station for the wing.",
+    "fuel_tank_walls": "The model says 50% of the annulus is usable but not how the other 50% is distributed. The annulus is drawn full and the 50% is applied as a scalar, exactly as the model does."
+  }
+}
