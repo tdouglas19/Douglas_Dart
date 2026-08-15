@@ -1,0 +1,26 @@
+v4_rungc: V4 frozen -- top 1100 m, climb 6 deg spiral, dive 14 deg, pull-out 3 g (max 6), floor 121.9 m, ramjet gate M 0.5 descending-only; build-up drag + first-principles engines, n_cells 324, dM 0.05, d_alt 76 m, chamber/body 1, dt 0.02 s
+
+peak M 0.488  cutoff False  dive exit M 0.488
+ramjet: lit NO
+traverse -0.223 g  powered -0.390 g  pushover 0.115 g  margin 0.000
+loads: total 3.013 g in v4_pullout  (yaw 3.005, roll 0.338)
+floor: flown min 121.87 m vs 121.92 m  violated False
+radii: spiral 1613 m  pushover 937 m (3.6 s)  pull-out 1379 m (2.2 s)
+fuel 2.764 / 2.764 kg cap (100%)  tank dry True  FP runs 36
+landing: safe False  stalled True  46979.6 m from launch  flight 438 s
+  event 100.9s pulsejet_quenched_M0.333
+  event 114.9s pulsejet_quenched_M0.356
+
+phase            t0     t1     dt     M0     M1   alt0   alt1     g0     g1  nmax   fuel     %       T       D   min_g
+v3_climb        0.0  106.7  106.7  0.118  0.284      0   1100    6.0    6.0  1.20  0.704  25.5   100.0    65.3  -0.390
+v4_pushover   106.7  110.3    3.6  0.284  0.313   1100   1074    6.0  -14.0  0.22  0.019   0.7    84.0    39.6   0.115
+v3_dive       110.3  137.7   27.4  0.313  0.488   1073    164  -14.0  -14.0  1.02  0.148   5.3    78.6    82.3  -0.057
+v4_pullout    137.7  139.9    2.2  0.488  0.482    163    122  -14.0    0.9  3.01  0.016   0.6    99.3   144.7  -0.223
+drag_strip    139.9  429.1  289.1  0.482  0.402    122    865    1.0    1.0  1.00  1.877  67.9    93.2    91.7  -0.084
+loop          429.1  433.9    4.8  0.402  0.117    865   1137    0.0  178.4 12.49  0.000   0.0     0.0   282.4 -10.984
+return        433.9  438.0    4.1  0.111  0.067   1137   1117   -9.0   -9.0  1.34  0.000   0.0     0.0   102.1  -0.755
+
+wrote out_medium_model\v4_rungc_trajectory.png
+      out_medium_model\v4_rungc_fuel.png
+      out_medium_model\v4_rungc_engines.png
+      out_medium_model\v4_rungc_final.json

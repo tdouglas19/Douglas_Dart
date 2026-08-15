@@ -92,6 +92,11 @@ _MODE_COLORS = {
     # V3 powered phases
     "v3_climb": "tab:olive",
     "v3_dive": "tab:brown",
+    # V4 pitch arcs. Without these the arcs fall through to the "gray"
+    # default and read as unlabelled gaps in the trajectory panel -- they are
+    # short (3-5 s) but they are where all the body load lives.
+    "v4_pushover": "tab:orange",
+    "v4_pullout": "tab:green",
     "drag_strip": "tab:red",
     "loop": "goldenrod",
     "return": "tab:cyan",
@@ -115,7 +120,11 @@ def _sfc_lb_per_lbf_hr(fuel_mass_flow_kg_per_s: float, thrust_n: float) -> float
     return fuel_lb_per_hr / thrust_lbf
 
 
-def plot_propulsion() -> Path:
+def plot_propulsion(lightoff_mach: float | None = None) -> Path:
+    # lightoff_mach (V4): draw the ramjet curve against the gate the design
+    # actually flies rather than the module default, so the plot cannot show
+    # the engine coming alive somewhere the mission does not. None keeps the
+    # pre-V4 behaviour (RAMJET_MIN_LIGHTOFF_MACH).
     mach_values = [i * 0.02 for i in range(0, 76)]  # 0.00 .. 1.50
     pulsejet_results = [
         pulsejet_thrust(
@@ -130,7 +139,9 @@ def plot_propulsion() -> Path:
         for m in mach_values
     ]
     ramjet_results = [
-        ramjet_thrust(GEOMETRY.diameter_m, GEOMETRY.throat_diameter_m, m, REFERENCE_ALTITUDE_M, GEOMETRY.fuel)
+        ramjet_thrust(GEOMETRY.diameter_m, GEOMETRY.throat_diameter_m, m,
+                      REFERENCE_ALTITUDE_M, GEOMETRY.fuel,
+                      lightoff_mach=lightoff_mach)
         for m in mach_values
     ]
     pulsejet_thrust_n = [r.average_thrust_n for r in pulsejet_results]
@@ -220,7 +231,8 @@ def _align_twin_ticks(ax_left, ax_right):
     ax_right.set_yticklabels([f"{t:.1f}" for t in mapped])
 
 
-def plot_flight_profile(result, fuel_loaded_kg: float) -> Path:
+def plot_flight_profile(result, fuel_loaded_kg: float,
+                        profile_note: str | None = None) -> Path:
     """The whole flight on one figure: six time-history panels on a shared
     clock (Mach, altitude, velocity vs stall, thrust vs drag, mass & fuel
     remaining, T/W & acceleration), plus altitude-vs-downrange as a
@@ -345,8 +357,14 @@ def plot_flight_profile(result, fuel_loaded_kg: float) -> Path:
         f"{abs(final.distance_m) / 0.3048:.0f} ft from launch)", fontsize=10)
     ax_traj.legend(loc="best", fontsize=8, markerscale=2.5)
 
+    # profile_note (V4): CLIMB_ANGLE_DEG is the single powered climb angle for
+    # V2, but for a V3/V4 climb-dive profile it is only the post-pullout drag
+    # strip -- printing it as "the climb" actively misdescribes the flight
+    # (V4 climbs at 6 deg and would be titled "1 deg climb"). Callers with a
+    # multi-phase profile pass their own description.
     fig.suptitle(
-        f"Flight profile: {CLIMB_ANGLE_DEG:.0f}° climb"
+        f"Flight profile: "
+        f"{profile_note if profile_note is not None else f'{CLIMB_ANGLE_DEG:.0f}° climb'}"
         f" -- wet mass {MAX_WET_MASS_KG / KG_PER_LB:.0f} lb, "
         f"D={GEOMETRY.diameter_m * 1000:.0f} mm, fuel={GEOMETRY.fuel.display_name}\n"
         f"(background shading / trajectory point color = flight mode)",

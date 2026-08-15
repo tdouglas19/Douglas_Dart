@@ -1,0 +1,7 @@
+{
+  "gate": 0.5,
+  "top_m": 1100.0,
+  "dive_deg": 14.0,
+  "climb_deg": 6.0,
+  "pullout_n": 3.0
+}

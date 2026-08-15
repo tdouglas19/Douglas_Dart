@@ -1,0 +1,147 @@
+[
+  {
+    "lightoff_mach": 0.45,
+    "climb_deg": 8.0,
+    "span_m": 0.5325,
+    "aspect_ratio": 1.86,
+    "peak_mach": 1.1001872200167269,
+    "above_m1": true,
+    "cutoff": true,
+    "min_traverse_g": 0.18287145269423424,
+    "min_powered_g": 0.040490397636621815,
+    "margin": 1.0237749357899604,
+    "fuel_kg": 1.7643885870426357,
+    "tank_dry": false,
+    "lands_from_launch_m": 6797.387428669607,
+    "safe_landing": false,
+    "flight_s": 165.64000000001093,
+    "fp_runs": 66,
+    "events": [
+      "66.9s ramjet_lit_M0.450_alt215_phi0.863"
+    ]
+  },
+  {
+    "lightoff_mach": 0.35,
+    "climb_deg": 8.0,
+    "span_m": 0.5325,
+    "aspect_ratio": 1.86,
+    "peak_mach": 1.1001014958403512,
+    "above_m1": true,
+    "cutoff": true,
+    "min_traverse_g": 0.3310468594651067,
+    "min_powered_g": 0.040490397636621815,
+    "margin": 1.089604016702274,
+    "fuel_kg": 1.7842073974337596,
+    "tank_dry": false,
+    "lands_from_launch_m": 5266.787678853269,
+    "safe_landing": false,
+    "flight_s": 155.4200000000057,
+    "fp_runs": 75,
+    "events": [
+      "52.4s ramjet_lit_M0.350_alt557_phi0.855"
+    ]
+  },
+  {
+    "lightoff_mach": 0.3,
+    "climb_deg": 8.0,
+    "span_m": 0.5325,
+    "aspect_ratio": 1.86,
+    "peak_mach": 1.1000006788824648,
+    "above_m1": true,
+    "cutoff": true,
+    "min_traverse_g": 0.05201357645702379,
+    "min_powered_g": 0.05201357645702379,
+    "margin": 1.0101048084176913,
+    "fuel_kg": 2.1608912056683613,
+    "tank_dry": false,
+    "lands_from_launch_m": 5170.462135639457,
+    "safe_landing": false,
+    "flight_s": 146.56000000000117,
+    "fp_runs": 75,
+    "events": [
+      "34.4s ramjet_lit_M0.300_alt343_phi0.847"
+    ]
+  },
+  {
+    "lightoff_mach": 0.25,
+    "climb_deg": 8.0,
+    "span_m": 0.5325,
+    "aspect_ratio": 1.86,
+    "peak_mach": 1.100028291817164,
+    "above_m1": true,
+    "cutoff": true,
+    "min_traverse_g": 0.07322456887260549,
+    "min_powered_g": 0.07322456887260549,
+    "margin": 1.0143159338176435,
+    "fuel_kg": 2.243834096525526,
+    "tank_dry": false,
+    "lands_from_launch_m": 4664.029745847218,
+    "safe_landing": false,
+    "flight_s": 139.73999999999768,
+    "fp_runs": 69,
+    "events": [
+      "23.4s ramjet_lit_M0.250_alt198_phi0.831"
+    ]
+  },
+  {
+    "lightoff_mach": 0.3,
+    "climb_deg": 12.0,
+    "span_m": 0.5325,
+    "aspect_ratio": 1.86,
+    "peak_mach": 1.1000528592053358,
+    "above_m1": true,
+    "cutoff": true,
+    "min_traverse_g": 0.36318789022257175,
+    "min_powered_g": 0.04537998500161514,
+    "margin": 1.0691615395717855,
+    "fuel_kg": 1.8638400786696212,
+    "tank_dry": false,
+    "lands_from_launch_m": 4377.243242155792,
+    "safe_landing": false,
+    "flight_s": 153.76000000000485,
+    "fp_runs": 71,
+    "events": [
+      "48.7s ramjet_lit_M0.300_alt526_phi0.839"
+    ]
+  },
+  {
+    "lightoff_mach": 0.3,
+    "climb_deg": 16.66,
+    "span_m": 0.5325,
+    "aspect_ratio": 1.86,
+    "peak_mach": 0.11754542074640872,
+    "above_m1": false,
+    "cutoff": false,
+    "min_traverse_g": Infinity,
+    "min_powered_g": -0.579989291675658,
+    "margin": 0.495391607611078,
+    "fuel_kg": 0.12248276328753192,
+    "tank_dry": false,
+    "lands_from_launch_m": 537.6828671772627,
+    "safe_landing": false,
+    "flight_s": 15.779999999999752,
+    "fp_runs": 3,
+    "events": []
+  },
+  {
+    "lightoff_mach": 0.3,
+    "climb_deg": 8.0,
+    "span_m": 0.65,
+    "aspect_ratio": 2.5,
+    "peak_mach": 1.1000062464965368,
+    "above_m1": true,
+    "cutoff": true,
+    "min_traverse_g": 0.059312022330651575,
+    "min_powered_g": 0.059312022330651575,
+    "margin": 1.0114711591041048,
+    "fuel_kg": 2.2344963918095466,
+    "tank_dry": false,
+    "lands_from_launch_m": 2358.7850459886213,
+    "safe_landing": false,
+    "flight_s": 191.24000000002403,
+    "fp_runs": 68,
+    "events": [
+      "28.6s ramjet_lit_M0.300_alt293_phi0.839"
+    ]
+  }
+]

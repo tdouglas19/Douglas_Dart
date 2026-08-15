@@ -1,0 +1,10 @@
+method,mach,source,CL_alpha_finite_difference,Cm_alpha_finite_difference,CL_alpha_stability_mode,Cm_alpha_stability_mode,CL_alpha,Cm_alpha,Cn_beta,Cl_beta,CY_beta,cg_x_m,neutral_point_x_m,static_margin_cref,pitch_stable,directionally_stable,short_period_rad_s,short_period_damping,dutch_roll_rad_s,dutch_roll_damping,roll_tau_s
+panel,0.3,panel: finite difference of sweep points,1.425463,4.917286,,,1.425463,4.917286,,,,0.922084,-0.100067,-3.449605,False,False,,,,,
+panel,0.6,panel: finite difference of sweep points,1.88853,5.212418,,,1.88853,5.212418,,,,0.922084,0.104258,-2.760041,False,False,,,,,
+vortex_lattice,0.2,vortex_lattice: finite difference of sweep points,1.603659,3.196321,,,1.603659,3.196321,,,,0.922084,0.331497,-1.993143,False,False,,,,,
+vortex_lattice,0.3,"vortex_lattice: finite difference, rate derivatives from stability mode",1.625516,3.250806,1.699353,3.647571,1.625516,3.250806,-2.176241,-0.001031,-0.60772,0.922084,0.329506,-1.999861,False,False,,,,,0.343573
+vortex_lattice,0.4,vortex_lattice: finite difference of sweep points,1.659429,3.300517,,,1.659429,3.300517,,,,0.922084,0.33274,-1.988947,False,False,,,,,
+vortex_lattice,0.5,"vortex_lattice: finite difference, rate derivatives from stability mode",1.7219,3.444988,2.012824,0.395802,1.7219,3.444988,-2.095464,0.331009,-0.547077,0.922084,0.329261,-2.000689,False,False,,,,,
+vortex_lattice,0.6,vortex_lattice: finite difference of sweep points,1.788775,3.618274,,,1.788775,3.618274,-2.472445,-0.008383,-0.694891,0.922084,0.322719,-2.022766,False,False,,,,,
+vortex_lattice,0.7,vortex_lattice: finite difference of sweep points,1.927955,3.989244,,,1.927955,3.989244,,,,0.922084,0.308973,-2.069159,False,False,,,,,
+vortex_lattice,0.8,"vortex_lattice: finite difference, rate derivatives from stability mode",2.263261,5.514353,1.756655,-4.70596,2.263261,5.514353,-0.476265,-0.018121,-0.6881,0.922084,0.200137,-2.436464,False,False,,,,,0.128001

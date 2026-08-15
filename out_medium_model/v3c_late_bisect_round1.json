@@ -1,0 +1,18 @@
+[
+  {
+    "climb": 14.0,
+    "dive": 20.0,
+    "gate": 0.42,
+    "traverse": 0.4117548518439064,
+    "powered": 0.005979531705853208,
+    "margin": 1.0135159399167606,
+    "fuel_kg": 1.8024474747371617,
+    "peak_mach": 1.1000410876487585,
+    "cutoff": true,
+    "fp_runs": 74,
+    "passes": true,
+    "events": [
+      "73.4s ramjet_lit_M0.420_alt226_phi0.863"
+    ]
+  }
+]

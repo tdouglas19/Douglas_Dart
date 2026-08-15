@@ -1,0 +1,97 @@
+[
+  {
+    "climb_deg": 8.0,
+    "span_m": 0.5325,
+    "aspect_ratio": 1.86,
+    "peak_mach": 1.1001872200167269,
+    "cutoff": true,
+    "above_m1": true,
+    "min_traverse_g": 0.18287145269423424,
+    "min_powered_g": 0.040490397636621815,
+    "margin": 1.0237749357899604,
+    "fuel_kg": 1.7643885870426357,
+    "lands_from_launch_m": 6797.387428669607,
+    "safe_landing": false,
+    "flight_s": 165.64000000001093,
+    "fp_runs": 66,
+    "events": [
+      "66.9s ramjet_lit_M0.450_alt215_phi0.863"
+    ]
+  },
+  {
+    "climb_deg": 8.0,
+    "span_m": 0.65,
+    "aspect_ratio": 2.5,
+    "peak_mach": 1.1001290511503132,
+    "cutoff": true,
+    "above_m1": true,
+    "min_traverse_g": 0.17810089887753372,
+    "min_powered_g": 0.03130275509585629,
+    "margin": 1.0129344071185247,
+    "fuel_kg": 1.765255905092668,
+    "lands_from_launch_m": 4035.433231843245,
+    "safe_landing": false,
+    "flight_s": 211.88000000003458,
+    "fp_runs": 66,
+    "events": [
+      "64.3s ramjet_lit_M0.450_alt244_phi0.863"
+    ]
+  },
+  {
+    "climb_deg": 8.0,
+    "span_m": 0.8,
+    "aspect_ratio": 3.0,
+    "peak_mach": 1.1000043651995175,
+    "cutoff": true,
+    "above_m1": true,
+    "min_traverse_g": 0.15320459803017838,
+    "min_powered_g": 0.013264357413212953,
+    "margin": 0.9635812682098143,
+    "fuel_kg": 1.8914009675352164,
+    "lands_from_launch_m": 3742.2781170383837,
+    "safe_landing": false,
+    "flight_s": 228.40000000004304,
+    "fp_runs": 68,
+    "events": [
+      "69.0s ramjet_lit_M0.450_alt288_phi0.863"
+    ]
+  },
+  {
+    "climb_deg": 12.0,
+    "span_m": 0.65,
+    "aspect_ratio": 2.5,
+    "peak_mach": 1.1001473222562759,
+    "cutoff": true,
+    "above_m1": true,
+    "min_traverse_g": 0.1798576925173853,
+    "min_powered_g": 0.04472140937893861,
+    "margin": 1.0163895521829194,
+    "fuel_kg": 1.774791108169527,
+    "lands_from_launch_m": 3242.1951776014935,
+    "safe_landing": false,
+    "flight_s": 209.2000000000332,
+    "fp_runs": 67,
+    "events": [
+      "60.8s ramjet_lit_M0.450_alt155_phi0.863"
+    ]
+  },
+  {
+    "climb_deg": 5.0,
+    "span_m": 0.65,
+    "aspect_ratio": 2.5,
+    "peak_mach": 1.1001542084052223,
+    "cutoff": true,
+    "above_m1": true,
+    "min_traverse_g": 0.16147674426788589,
+    "min_powered_g": -0.009974441709500908,
+    "margin": 0.9783612100271338,
+    "fuel_kg": 1.8604138410041855,
+    "lands_from_launch_m": 6135.478900680197,
+    "safe_landing": false,
+    "flight_s": 223.6400000000406,
+    "fp_runs": 66,
+    "events": [
+      "75.7s ramjet_lit_M0.450_alt349_phi0.863"
+    ]
+  }
+]

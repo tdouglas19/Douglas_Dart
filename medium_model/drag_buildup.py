@@ -363,6 +363,13 @@ class DragBuildup(NamedTuple):
     """The flat frontal-referenced CD0 this build-up is EQUIVALENT to at
     this condition -- the number to compare against the ancestor's 0.10
     placeholder, and the headline of the drag attribution row."""
+    fin_profile_n: float = 0.0
+    """Tail/fin profile drag. ZERO unless a fin area is passed -- this repo
+    has no tail surfaces, and this term exists so the COST of adding them can
+    be measured rather than argued (VSP stability finding, 2026-08-14). It is
+    already included in total_n; it is broken out so the fin's share stays
+    visible. No induced term: fins are sized here for stability, and a
+    stabiliser at trim carries no net lift worth charging."""
 
 
 def body_wetted_area_m2(diameter_m: float, body_length_m: float) -> float:
@@ -391,6 +398,12 @@ def total_drag_buildup(
     captured_mass_flow_kg_per_s: float = 0.0,
     lip_area_m2: float = 0.0,
     cowl_suction_recovery: float | None = None,
+    # Tail/fin surfaces (2026-08-14). All default to zero, so every flight
+    # flown before this existed -- including the V4 freeze -- is unchanged.
+    fin_area_m2: float = 0.0,
+    fin_aspect_ratio: float = 1.2,
+    fin_thickness_ratio: float = 0.04,
+    fin_sweep_deg: float = 35.0,
 ) -> DragBuildup:
     """Full component build-up at one flight condition.
 
@@ -423,6 +436,18 @@ def total_drag_buildup(
     ff_wing = wing_form_factor(wing_thickness_ratio, wing_sweep_deg, mach)
     wing_profile = cf_wing * ff_wing * q * s_wet_wing
 
+    # -- friction + form, fins (same treatment as the wing, no lift) ------
+    fin_profile = 0.0
+    if fin_area_m2 > 0.0:
+        fin_chord = sqrt(fin_area_m2 / max(fin_aspect_ratio, 1e-9))
+        cf_fin = skin_friction_coefficient(
+            reynolds_number(density_kg_per_m3, velocity_m_per_s, fin_chord,
+                            temperature_k), mach)
+        fin_profile = (cf_fin
+                       * wing_form_factor(fin_thickness_ratio, fin_sweep_deg,
+                                          mach)
+                       * q * 2.0 * fin_area_m2)
+
     # -- base, wave, spillage -------------------------------------------
     d_base = base_diameter_m(diameter_m, tail_length_m, duct_exit_diameter_m)
     base = base_drag_n(base_area_m2(d_base, duct_exit_diameter_m,
@@ -445,10 +470,10 @@ def total_drag_buildup(
         induced = 0.0
 
     total = (friction_body + form_body + base + wave + spill
-             + wing_profile + induced)
+             + wing_profile + fin_profile + induced)
     cd0_equiv = ((friction_body + form_body + base + wave + spill
-                  + wing_profile) / (q * frontal_area)) if frontal_area > 0 \
-        else 0.0
+                  + wing_profile + fin_profile) / (q * frontal_area)) \
+        if frontal_area > 0 else 0.0
     return DragBuildup(friction_body, form_body, base, wave, spill,
                        wing_profile, induced, total, required_lift_n,
-                       cd0_equiv)
+                       cd0_equiv, fin_profile)

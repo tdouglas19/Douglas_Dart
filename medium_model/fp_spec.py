@@ -41,6 +41,24 @@ class MediumModelFpSpec:
     chamber_length_m: float
     throat_length_m: float
     gutter_capped: bool = False
+    chamber_diameter_fraction: float = 0.95
+    """Chamber (= combustor) diameter as a fraction of the BODY diameter.
+
+    0.95 is the historical value and the default, so every V3b/V3c/V3d FP
+    result stays reproducible: it assumed a thin annular gap between the
+    duct and the skin. V4's premise is that the chamber IS the body -- the
+    gap was deleted on 2026-08-13 because it never fit the side valve
+    runners anyway (docs/v4_frozen/design.json) -- so a V4 run passes 1.0.
+
+    It scales more than the chamber bore. The valve pack and the intake are
+    sized isometrically OFF the chamber diameter, and the ramjet burns in
+    the same duct, so all four move together. That is the point: "the
+    chamber is the body" is a statement about the flowpath, not about one
+    number (user decision, 2026-08-13)."""
+
+    @property
+    def chamber_diameter_m(self) -> float:
+        return self.chamber_diameter_fraction * self.diameter_m
 
     # -- ramjet ---------------------------------------------------------
     @property
@@ -48,7 +66,7 @@ class MediumModelFpSpec:
         """The duct the ramjet burns in IS the pulsejet duct on this
         shared-flowpath vehicle: chamber-sized, floored above the throat
         so the nozzle stays convergent."""
-        return max(0.95 * self.diameter_m, 1.10 * self.throat_diameter_m)
+        return max(self.chamber_diameter_m, 1.10 * self.throat_diameter_m)
 
     def ramjet_geometry(self):
         from ramjet_fp import RamjetGeometry
@@ -102,7 +120,7 @@ class MediumModelFpSpec:
         tail_total = self.throat_length_m
         cone = self._CONE_FRACTION_OF_TAIL * tail_total
         return EngineGeometry(
-            chamber_diameter=0.95 * self.diameter_m,
+            chamber_diameter=self.chamber_diameter_m,
             chamber_length=self.chamber_length_m,
             cone_length=cone,
             tailpipe_diameter=self.throat_diameter_m,
@@ -121,7 +139,7 @@ class MediumModelFpSpec:
         """
         from dataclasses import replace
 
-        s = (0.95 * self.diameter_m) / 0.078      # vs FP-1 chamber dia
+        s = self.chamber_diameter_m / 0.078      # vs FP-1 chamber dia
         return replace(
             reference_valve,
             petal_length=reference_valve.petal_length * s,
@@ -135,7 +153,7 @@ class MediumModelFpSpec:
     def pulsejet_intake(self):
         from pulsejet_fp import IntakeDesign
 
-        s = (0.95 * self.diameter_m) / 0.078
+        s = self.chamber_diameter_m / 0.078
         # Side-mounted inlets ingesting boundary-layer air at static
         # pressure -- the Douglas Dart configuration (pulsejet-fp #8c).
         return IntakeDesign(
@@ -147,11 +165,17 @@ class MediumModelFpSpec:
         )
 
 
-def spec_from_geometry(geometry) -> MediumModelFpSpec:
-    """Build the FP spec from a medium_model ``VehicleGeometry``."""
+def spec_from_geometry(geometry, chamber_diameter_fraction: float = 0.95
+                       ) -> MediumModelFpSpec:
+    """Build the FP spec from a medium_model ``VehicleGeometry``.
+
+    chamber_diameter_fraction defaults to the historical 0.95 so existing
+    callers are unchanged; pass 1.0 for a V4 airframe, where the chamber is
+    the body."""
     return MediumModelFpSpec(
         diameter_m=geometry.diameter_m,
         throat_diameter_m=geometry.throat_diameter_m,
         chamber_length_m=geometry.chamber_length_m,
         throat_length_m=geometry.throat_length_m,
+        chamber_diameter_fraction=chamber_diameter_fraction,
     )

@@ -1,0 +1,109 @@
+{
+  "name": "V3c: V3a geometry, trajectory and lightoff gate tuned for the LATEST possible ramjet ignition",
+  "frozen_utc_date": "2026-08-13",
+  "git_sha": "d7b0670c8c39b05c40feed913a652614adf33134",
+  "how_to_refly": "MEDIUM_MODEL_CD0_FRONTAL=0.1 PYTHONPATH=. .venv/Scripts/python scripts/medium_model_v3b_final.py --climb 12 --dive 20 --floor 122 --lightoff 0.44 --tag v3c   (omit --span/--ar: they default to the frozen wing)",
+  "vehicle_candidate": {
+    "diameter_m": 0.22521729709177246,
+    "throat_diameter_m": 0.12161734042955713,
+    "chamber_length_m": 0.38930734448088206,
+    "throat_length_m": 1.2423,
+    "wingspan_m": 0.8033145899324761,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane",
+    "initial_climb_angle_deg": 12.0,
+    "dive_angle_deg": 20.0,
+    "floor_altitude_m": 122.0
+  },
+  "wing_concept": {
+    "span_m": 0.532526287202532,
+    "aspect_ratio": 1.8595845502152375,
+    "taper_ratio": 0.5120481632935137,
+    "sweep_deg": 13.4220600837535,
+    "airfoil_key": "thin_cambered"
+  },
+  "propulsion": {
+    "model": "first-principles (pulsejet-fp + ramjet-fp), marched",
+    "fuel": "propane",
+    "n_cells": 162,
+    "ramjet_lightoff_mach": 0.44,
+    "lightoff_rule": "TWO rules, one at each end of the dive. For MAXIMUM TRAVERSE (V3b) set the gate to the Mach at TOP of climb. For LATEST IGNITION (this design) set it to the Mach reached at the BOTTOM of the dive -- the gate must be crossed while the vehicle is still descending. At climb 12 / dive 20 the vehicle crosses M 0.44 at 220 m, still in the dive; M 0.45 is not crossed until 179 m in LEVEL flight after pullout, and traverse collapses from 0.368 to 0.006 g. That is the cliff.",
+    "ceiling": "M 0.44 is the latest gate that CLOSES Gate 3, and there are two separate walls above it, both measured with full FP flights:\n  * TRAVERSE wall at 0.45-0.46: the gate is still reachable but the ramjet lights too deep in the dive to pair with the gravity assist. (14,20,0.45) -> 0.006 g; (12,25,0.46) -> 0.092 g (lights at 147 m, 25 m above the floor).\n  * REACHABILITY wall at ~0.47: the vehicle cannot get there at all on pulsejet alone. (12,22,0.47) peaks at M 0.461, (12,25,0.48) at 0.464, (12,28,0.50) at 0.468, (12,30,0.50) at 0.470 -- all run the tank dry at 2.424 kg without ever lighting the ramjet.",
+    "dive_angle_does_not_move_the_wall": "A closed-form study concluded that extending the dive past 20 deg opens gate 0.50 (traverse 0.415 at climb 12 / dive 30) and recommended flying it. FP refutes this outright: peak Mach is 0.464 / 0.468 / 0.470 at dive 25 / 28 / 30 -- essentially identical. Dive angle does not move the pulsejet-alone ceiling. The closed-form estimate relied on a 0.781 'haircut' calibrated at dive 9.89 and gates 0.30-0.44; that ratio collapses near the boundary (at gate 0.45 the measured ratio is 0.05, not 0.78), which is exactly where the recommendation sat."
+  },
+  "optimizer_results": {
+    "note": "carried over from V3a unchanged -- V3c changes no geometry. Consumers derive loaded fuel as wet - dry - margin = 22.68 - 12.57 - 7.42 = 2.69 kg.",
+    "vehicle_score": 1.3507127377692438,
+    "wing_score": 1.3179175424911405,
+    "dry_mass_kg": 12.569615400692696,
+    "mass_margin_kg": 7.4167464526123235
+  },
+  "constants_at_freeze": {
+    "CD0_FRONTAL": 0.1,
+    "MIN_POWERED_ACCELERATION_G": 0.25,
+    "MIN_POWERED_THRUST_MARGIN_FRACTION": 0.15,
+    "PULSEJET_MAX_THROAT_AREA_FRACTION": 0.3,
+    "RAMJET_MIN_LIGHTOFF_MACH": 0.45,
+    "V3_FLOOR_ALTITUDE_M": 121.92,
+    "FUEL_BURN_FRACTION_OF_LOADED": 0.9
+  },
+  "verified_mission": {
+    "propulsion": "FP, 74 engine solves, n_cells 162",
+    "drag_model": "buildup",
+    "peak_mach": 1.1,
+    "motor_cutoff_reached": true,
+    "min_traverse_accel_g": 0.368,
+    "min_powered_accel_g": 0.012,
+    "min_powered_thrust_margin": 1.027,
+    "fuel_burned_kg": 1.759,
+    "burn_limit_kg": 2.424,
+    "loaded_fuel_kg": 2.693,
+    "ramjet_lit": "68.2s ramjet_lit_M0.440_alt220_phi0.855",
+    "gates": {
+      "mach_above_1": "PASS (1.100)",
+      "traverse_accel_0.26g": "PASS (0.368, 41% over)",
+      "powered_accel_0.25g": "FAIL (0.012) -- climb-limited; late ignition makes this WORSE than V3b's 0.049 because the pulsejet carries the vehicle alone for longer",
+      "powered_thrust_margin_1.15": "FAIL (1.027) -- never met in any config in any campaign"
+    }
+  },
+  "why_not_climb_14": "climb 14 / dive 20 / gate 0.44 scores a higher traverse (0.385 vs 0.368) but lights at 138 m -- only 16 m above the 121.9 m floor. The flight model switches flight-path angle from -20 deg to +1 deg in ONE TIMESTEP and charges nothing for the pull-out, but a real pull-out needs ~30 m of altitude to stay under 10 g. Climb 12 lights at 220 m and leaves that room; climb 14 does not.",
+  "pullout_not_modelled": {
+    "issue": "flight_sim latches v3_dive_done and switches gamma instantaneously. No pull-out arc, no load factor, no g limit anywhere in the phase machine.",
+    "cost_at_dive_20": "9.5 g with a 30 m arc (2118 N / 476 lbf through the wing joint at 22.68 kg wet), 18.0 g with a 15 m arc.",
+    "aero_capability": "15.4 g available at the dive exit (M 0.60, 122 m, q 25167 Pa, CL_max 0.890 section-stall-limited from medium_model/lift.py). So dive 20 is aerodynamically flyable WITH a ~30 m arc, and not without one.",
+    "structural": "NOT MODELLED ANYWHERE IN THE REPO. 476 lbf through the wing joint on a 50 lb airframe is the open question."
+  },
+  "derived_from": "docs/v3b_medium_model/design.json",
+  "change": "NO GEOMETRY CHANGE from V3a/V3b. climb 10 -> 12 deg, dive 9.89 -> 20 deg, floor 133.14 -> 122 m, lightoff gate 0.30 -> 0.44. Ignition is 47% later in Mach than V3b at 8% LOWER traverse (0.368 vs 0.389) and 5% less fuel (1.759 vs 1.845 kg). The point of the trade is ignition reliability: the ramjet lights on 202 N of thrust at M 0.45 versus 67 N at M 0.25.",
+  "cost_of_late_ignition": "climb margin. min_powered_accel_g falls 0.049 -> 0.012 g and thrust margin 1.078 -> 1.027, because a later gate means the pulsejet carries the vehicle alone for longer. Every late-ignition config measured sits at 0.006-0.024 g of climb margin.",
+  "what_was_tested": {
+    "fp_flights_this_campaign": 22,
+    "gates_flown_fp": [
+      0.3,
+      0.35,
+      0.38,
+      0.4,
+      0.42,
+      0.43,
+      0.44,
+      0.45,
+      0.46,
+      0.47,
+      0.48,
+      0.49,
+      0.5
+    ],
+    "dives_flown_fp": [
+      9.89,
+      14.0,
+      16.0,
+      18.0,
+      20.0,
+      22.0,
+      25.0,
+      28.0,
+      30.0
+    ],
+    "note": "the prior campaign's FP flights were all at dive 9.89; this campaign flew dive up to 30 deg, which is what exposed the reachability wall"
+  }
+}

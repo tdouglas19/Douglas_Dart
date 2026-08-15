@@ -82,7 +82,19 @@ def ramjet_thrust(
     altitude_m: float,
     fuel: Fuel,
     atmosphere: Atmosphere | None = None,
+    lightoff_mach: float | None = None,
+    allow_light: bool = True,
 ) -> RamjetResult:
+    # lightoff_mach / allow_light (2026-08-13, V4): the lightoff decision is
+    # no longer a bare module constant. `lightoff_mach` overrides
+    # RAMJET_MIN_LIGHTOFF_MACH per call so a campaign can sweep the gate
+    # without monkeypatching; `allow_light=False` vetoes the light entirely
+    # regardless of Mach, which is how flight_sim's RamjetStart enforces
+    # "light in the dive, not in the climb" (a Mach gate alone cannot say
+    # WHERE in the trajectory it fires -- see docs/v3_learnings_for_v4.md
+    # section 3.3, where the same gate is worth 0.052 g or 0.331 g depending
+    # only on which phase it lands in). Both default to the pre-V4 behaviour,
+    # so every V2/V3 re-fly is bit-identical.
     # See pulsejet_thrust's matching parameter for why: lets flight_sim.py's
     # hot loop pass its already-computed Atmosphere instead of this
     # function independently recomputing the identical value every step.
@@ -167,8 +179,12 @@ def ramjet_thrust(
     # Minimum-viable-speed gate (see RamjetResult.lit): zero below the
     # lightoff Mach, linear ramp over RAMJET_LIGHTOFF_RAMP_MACH above it so
     # the closed form stays continuous. One comparison + one multiply.
-    lightoff_factor = (mach - RAMJET_MIN_LIGHTOFF_MACH) / RAMJET_LIGHTOFF_RAMP_MACH
+    gate_mach = (RAMJET_MIN_LIGHTOFF_MACH if lightoff_mach is None
+                 else lightoff_mach)
+    lightoff_factor = (mach - gate_mach) / RAMJET_LIGHTOFF_RAMP_MACH
     lightoff_factor = min(max(lightoff_factor, 0.0), 1.0)
+    if not allow_light:
+        lightoff_factor = 0.0
     lit = lightoff_factor > 0.0
     net_thrust_n *= lightoff_factor
     gross_thrust_n *= lightoff_factor

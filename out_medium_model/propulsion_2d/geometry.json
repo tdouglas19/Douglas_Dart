@@ -1,0 +1,423 @@
+{
+  "provenance": {
+    "dims_source": "out_medium_model/v4_export/structural_dimensions.json",
+    "git_sha": "d7b0670c8c39b05c40feed913a652614adf33134",
+    "units": "metres in 'segments'; the viewer works in mm"
+  },
+  "stations": [
+    {
+      "name": "nose_tip",
+      "x_m": 0.0,
+      "source": "JSON",
+      "detail": "stations_from_nose_tip_m.nose_tip"
+    },
+    {
+      "name": "cowl_lip",
+      "x_m": 0.15345760378621848,
+      "source": "ASSUMED",
+      "detail": "spike shoulder plane = capture plane"
+    },
+    {
+      "name": "centrebody_max_dia_end",
+      "x_m": 0.2734576037862185,
+      "source": "ASSUMED",
+      "detail": "end of the centrebody barrel"
+    },
+    {
+      "name": "nose_fairing_end",
+      "x_m": 0.428,
+      "source": "JSON",
+      "detail": "nose_fairing_end__barrel_start"
+    },
+    {
+      "name": "chamber_start",
+      "x_m": 0.428,
+      "source": "JSON",
+      "detail": "combustion_chamber_start"
+    },
+    {
+      "name": "chamber_end",
+      "x_m": 0.817307344480882,
+      "source": "JSON",
+      "detail": "combustion_chamber_end__tailpipe_start"
+    },
+    {
+      "name": "cone_end",
+      "x_m": 0.991523114619776,
+      "source": "ASSUMED",
+      "detail": "chamber_end + 174.2 mm at 15.0 deg"
+    },
+    {
+      "name": "tailpipe_end",
+      "x_m": 2.059607344480882,
+      "source": "JSON",
+      "detail": "tailpipe_end / boattail_start"
+    },
+    {
+      "name": "nozzle_throat",
+      "x_m": 2.2630751984759105,
+      "source": "ASSUMED",
+      "detail": "nozzle_exit - 10.5 mm of divergence (area ratio 1.100 at 15.0 deg)"
+    },
+    {
+      "name": "nozzle_exit",
+      "x_m": 2.273607344480882,
+      "source": "JSON",
+      "detail": "nozzle_exit__body_end"
+    }
+  ],
+  "chains": {
+    "centrebody": {
+      "label": "centrebody (ASSUMED)",
+      "segments": [
+        {
+          "name": "spike cone",
+          "curve": "cone",
+          "x0_m": 0.0,
+          "x1_m": 0.15345760378621848,
+          "r0_m": 0.0,
+          "r1_m": 0.055854,
+          "source": "ASSUMED",
+          "detail": "20.0 deg half-angle cone"
+        },
+        {
+          "name": "centrebody barrel",
+          "curve": "line",
+          "x0_m": 0.15345760378621848,
+          "x1_m": 0.2734576037862185,
+          "r0_m": 0.055854,
+          "r1_m": 0.055854,
+          "source": "ASSUMED",
+          "detail": "payload / avionics volume"
+        },
+        {
+          "name": "centrebody closure",
+          "curve": "smoothstep",
+          "x0_m": 0.2734576037862185,
+          "x1_m": 0.428,
+          "r0_m": 0.055854,
+          "r1_m": 0.0,
+          "source": "ASSUMED",
+          "detail": "closes out at the chamber head"
+        }
+      ]
+    },
+    "cowl_inner": {
+      "label": "cowl inner / diffuser (ASSUMED)",
+      "segments": [
+        {
+          "name": "diffuser",
+          "curve": "constant_area_angle",
+          "x0_m": 0.15345760378621848,
+          "x1_m": 0.428,
+          "r0_m": 0.06612636526350509,
+          "r1_m": 0.06910768710826079,
+          "source": "ASSUMED",
+          "detail": "constant_area_angle: r(x) = sqrt(R_eq(x)^2 + r_cb(x)^2), R_eq linear 35.398 -> 69.108 mm over 274.542 mm"
+        }
+      ]
+    },
+    "flow": {
+      "label": "flowpath wetted line",
+      "segments": [
+        {
+          "name": "chamber",
+          "curve": "line",
+          "x0_m": 0.428,
+          "x1_m": 0.817307344480882,
+          "r0_m": 0.1045,
+          "r1_m": 0.1045,
+          "source": "DERIVED",
+          "detail": "body OML minus skin+duct stackup"
+        },
+        {
+          "name": "contraction cone",
+          "curve": "cone",
+          "x0_m": 0.817307344480882,
+          "x1_m": 0.991523114619776,
+          "r0_m": 0.1045,
+          "r1_m": 0.05781902508251723,
+          "source": "ASSUMED",
+          "detail": "15.0 deg half-angle (model gives it ZERO length)"
+        },
+        {
+          "name": "tailpipe",
+          "curve": "line",
+          "x0_m": 0.991523114619776,
+          "x1_m": 2.2630751984759105,
+          "r0_m": 0.05781902508251723,
+          "r1_m": 0.05781902508251723,
+          "source": "JSON",
+          "detail": "dia is JSON (internal_flowpath.tailpipe_diameter_m) and IS the nozzle throat; its START station follows the ASSUMED cone and its end the ASSUMED divergence"
+        },
+        {
+          "name": "divergent nozzle",
+          "curve": "cone",
+          "x0_m": 2.2630751984759105,
+          "x1_m": 2.273607344480882,
+          "r0_m": 0.05781902508251723,
+          "r1_m": 0.06064110509911601,
+          "source": "ASSUMED",
+          "detail": "area ratio 1.100 at 15.0 deg half-angle (the model has NO divergence)"
+        }
+      ]
+    },
+    "duct_od": {
+      "label": "duct outer wall (steel)",
+      "segments": [
+        {
+          "name": "chamber liner OD",
+          "curve": "line",
+          "x0_m": 0.428,
+          "x1_m": 0.817307344480882,
+          "r0_m": 0.1055,
+          "r1_m": 0.1055,
+          "source": "DERIVED",
+          "detail": "+1.0 mm steel"
+        },
+        {
+          "name": "cone OD",
+          "curve": "cone",
+          "x0_m": 0.817307344480882,
+          "x1_m": 0.991523114619776,
+          "r0_m": 0.1055,
+          "r1_m": 0.05881902508251723,
+          "source": "DERIVED",
+          "detail": "+1.0 mm steel"
+        },
+        {
+          "name": "tailpipe OD",
+          "curve": "line",
+          "x0_m": 0.991523114619776,
+          "x1_m": 2.2630751984759105,
+          "r0_m": 0.05881902508251723,
+          "r1_m": 0.05881902508251723,
+          "source": "DERIVED",
+          "detail": "+1.0 mm steel"
+        },
+        {
+          "name": "divergent nozzle OD",
+          "curve": "cone",
+          "x0_m": 2.2630751984759105,
+          "x1_m": 2.273607344480882,
+          "r0_m": 0.05881902508251723,
+          "r1_m": 0.06164110509911601,
+          "source": "DERIVED",
+          "detail": "+1.0 mm steel"
+        }
+      ]
+    },
+    "oml": {
+      "label": "outer mould line",
+      "segments": [
+        {
+          "name": "cowl outer",
+          "curve": "parabolic_tangent",
+          "x0_m": 0.15345760378621848,
+          "x1_m": 0.428,
+          "r0_m": 0.06912636526350509,
+          "r1_m": 0.107,
+          "source": "ASSUMED",
+          "detail": "length is JSON (nose_fairing_length_m); profile is not"
+        },
+        {
+          "name": "barrel",
+          "curve": "line",
+          "x0_m": 0.428,
+          "x1_m": 2.059607344480882,
+          "r0_m": 0.107,
+          "r1_m": 0.107,
+          "source": "JSON",
+          "detail": "body.constant_diameter_barrel_length_m"
+        },
+        {
+          "name": "boattail",
+          "curve": "cone",
+          "x0_m": 2.059607344480882,
+          "x1_m": 2.273607344480882,
+          "r0_m": 0.107,
+          "r1_m": 0.07692426137368823,
+          "source": "DERIVED",
+          "detail": "8.00 deg half-angle from JSON length + exit dia"
+        }
+      ]
+    },
+    "skin_id": {
+      "label": "skin inner surface",
+      "segments": [
+        {
+          "name": "skin ID barrel",
+          "curve": "line",
+          "x0_m": 0.428,
+          "x1_m": 2.059607344480882,
+          "r0_m": 0.1055,
+          "r1_m": 0.1055,
+          "source": "DERIVED",
+          "detail": "-1.5 mm CFRP"
+        },
+        {
+          "name": "skin ID boattail",
+          "curve": "cone",
+          "x0_m": 2.059607344480882,
+          "x1_m": 2.273607344480882,
+          "r0_m": 0.1055,
+          "r1_m": 0.07542426137368823,
+          "source": "DERIVED",
+          "detail": "-1.5 mm CFRP, clamped to the duct OD"
+        }
+      ]
+    }
+  },
+  "scalars": {
+    "body diameter (OML)": {
+      "value": 214.0,
+      "unit": "mm",
+      "source": "JSON"
+    },
+    "overall length": {
+      "value": 2273.607344480882,
+      "unit": "mm",
+      "source": "JSON"
+    },
+    "fineness ratio": {
+      "value": 10.624333385424684,
+      "unit": "-",
+      "source": "JSON"
+    },
+    "spike half-angle": {
+      "value": 20.0,
+      "unit": "deg",
+      "source": "ASSUMED"
+    },
+    "spike length (tip -> lip plane)": {
+      "value": 153.45760378621847,
+      "unit": "mm",
+      "source": "ASSUMED"
+    },
+    "centrebody max diameter": {
+      "value": 111.708,
+      "unit": "mm",
+      "source": "ASSUMED"
+    },
+    "centrebody volume (avionics)": {
+      "value": 2.239996052469486,
+      "unit": "L",
+      "source": "ASSUMED"
+    },
+    "cowl lip diameter": {
+      "value": 132.25273052701016,
+      "unit": "mm",
+      "source": "ASSUMED"
+    },
+    "annular capture area": {
+      "value": 39.365,
+      "unit": "cm2",
+      "source": "JSON"
+    },
+    "throat area (model)": {
+      "value": 105.02468841204954,
+      "unit": "cm2",
+      "source": "JSON"
+    },
+    "capture / throat area": {
+      "value": 0.3748166321194592,
+      "unit": "-",
+      "source": "DERIVED"
+    },
+    "chamber flow diameter": {
+      "value": 209.0,
+      "unit": "mm",
+      "source": "DERIVED"
+    },
+    "chamber flow area": {
+      "value": 343.0697717536393,
+      "unit": "cm2",
+      "source": "DERIVED"
+    },
+    "diffuser area ratio (chamber/capture)": {
+      "value": 8.715096449984488,
+      "unit": "-",
+      "source": "DERIVED"
+    },
+    "diffuser exit dia (dump plane)": {
+      "value": 138.21537421652158,
+      "unit": "mm",
+      "source": "ASSUMED"
+    },
+    "dump sudden-expansion area ratio": {
+      "value": 2.286545586957535,
+      "unit": "-",
+      "source": "ASSUMED"
+    },
+    "annular base area (as drawn)": {
+      "value": 66.53001499376859,
+      "unit": "cm2",
+      "source": "DERIVED"
+    },
+    "annular base area (export, engine on)": {
+      "value": 80.87409276720844,
+      "unit": "cm2",
+      "source": "JSON"
+    },
+    "contraction cone half-angle": {
+      "value": 15.0,
+      "unit": "deg",
+      "source": "ASSUMED"
+    },
+    "contraction cone length": {
+      "value": 174.21577013889404,
+      "unit": "mm",
+      "source": "ASSUMED"
+    },
+    "tailpipe length (as drawn)": {
+      "value": 1282.0842298611062,
+      "unit": "mm",
+      "source": "DERIVED"
+    },
+    "tailpipe length (model)": {
+      "value": 1242.3,
+      "unit": "mm",
+      "source": "JSON"
+    },
+    "nozzle throat diameter": {
+      "value": 115.63805016503447,
+      "unit": "mm",
+      "source": "JSON"
+    },
+    "nozzle expansion area ratio": {
+      "value": 1.1,
+      "unit": "-",
+      "source": "ASSUMED"
+    },
+    "nozzle exit flow diameter": {
+      "value": 121.28221019823202,
+      "unit": "mm",
+      "source": "ASSUMED"
+    },
+    "divergent half-angle": {
+      "value": 15.0,
+      "unit": "deg",
+      "source": "ASSUMED"
+    },
+    "divergent length": {
+      "value": 10.532146004971452,
+      "unit": "mm",
+      "source": "ASSUMED"
+    },
+    "boattail half-angle": {
+      "value": 7.999999999999986,
+      "unit": "deg",
+      "source": "DERIVED"
+    },
+    "boattail base OD": {
+      "value": 153.84852274737645,
+      "unit": "mm",
+      "source": "JSON"
+    },
+    "throat / body area fraction": {
+      "value": 0.2919940310501141,
+      "unit": "-",
+      "source": "JSON"
+    }
+  }
+}

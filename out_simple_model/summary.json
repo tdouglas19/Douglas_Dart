@@ -1,0 +1,70 @@
+[
+  {
+    "cd0": 0.3,
+    "status": "infeasible",
+    "wall_s": 273,
+    "result": {
+      "feasible": false,
+      "error": "No feasible candidate found in 20000 random draws -- no sampled geometry both reached motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or increase n_random."
+    },
+    "exit": 0
+  },
+  {
+    "cd0": 0.25,
+    "status": "infeasible",
+    "wall_s": 288,
+    "result": {
+      "feasible": false,
+      "error": "No feasible candidate found in 20000 random draws -- no sampled geometry both reached motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or increase n_random."
+    },
+    "exit": 0
+  },
+  {
+    "cd0": 0.2,
+    "status": "infeasible",
+    "wall_s": 290,
+    "result": {
+      "feasible": false,
+      "error": "No feasible candidate found in 20000 random draws -- no sampled geometry both reached motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or increase n_random."
+    },
+    "exit": 0
+  },
+  {
+    "cd0": 0.15,
+    "status": "feasible",
+    "wall_s": 283,
+    "result": {
+      "feasible": true,
+      "max_thrust_to_weight": 10.403517654025734,
+      "candidate": {
+        "diameter_m": 0.28,
+        "throat_diameter_m": 0.15120000000000003,
+        "chamber_length_m": 0.4,
+        "throat_length_m": 1.0,
+        "wingspan_m": 0.7,
+        "climb_angle_deg": 1.0,
+        "fuel_key": "propane"
+      }
+    },
+    "exit": 0
+  },
+  {
+    "cd0": 0.1,
+    "status": "feasible",
+    "wall_s": 310,
+    "result": {
+      "feasible": true,
+      "max_thrust_to_weight": 7.554448550048945,
+      "candidate": {
+        "diameter_m": 0.2600861670591089,
+        "throat_diameter_m": 0.12937165335848053,
+        "chamber_length_m": 0.5616320501240807,
+        "throat_length_m": 0.9794840551252878,
+        "wingspan_m": 0.714302928318352,
+        "climb_angle_deg": 1.0,
+        "fuel_key": "propane"
+      }
+    },
+    "exit": 0
+  }
+]

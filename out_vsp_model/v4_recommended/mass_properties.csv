@@ -1,0 +1,20 @@
+condition,item,mass_kg,x_m,x_mm,length_m,radius_m,station_source,basis
+at release (full fuel),avionics,2.0,0.214,214.0,0.15,0.08241,chosen,"CHOSEN: packaged in the nose-cowl annulus, forward of the chamber"
+at release (full fuel),payload_ballast_margin,4.683065,0.214,214.0,0.2,0.0535,chosen,CHOSEN: 21% of wet mass with no assigned location -- the CG trim lever
+at release (full fuel),engine_duct_steel__chamber,2.054594,0.622654,622.65,0.389307,0.107,derived,"steel duct, chamber segment; split from the total by wetted area"
+at release (full fuel),landing_hardware,0.5,1.136804,1136.8,0.0,0.107,chosen,CHOSEN: skids/attach points at mid-body
+at release (full fuel),airframe_skin_cfrp,4.952496,1.15636,1156.36,2.273607,0.107,derived,CFRP skin; centroid integrated over the derived outer mold line
+at release (full fuel),engine_duct_steel__tailpipe,3.542801,1.438457,1438.46,1.2423,0.057819,derived,"steel duct, tailpipe segment; split from the total by wetted area"
+at release (full fuel),tank_hardware,0.960653,1.438457,1438.46,1.2423,0.08241,derived,tank shell; the annulus between tailpipe OD and body ID
+at release (full fuel),fuel_loaded,3.071019,1.438457,1438.46,1.2423,0.08241,derived,"propane in the tailpipe annulus, 100% of the loaded mass"
+at release (full fuel),wing,0.914992,1.706238,1706.24,0.255713,0.183586,derived,wing panels lumped at the MAC quarter-chord; moves with wing station
+at release (full fuel),TOTAL,22.67962,0.94629,946.29,,,,CG; Ixx=0.1830 Iyy=9.6482 Izz=9.6482 kg m^2
+fuel 0%,avionics,2.0,0.214,214.0,0.15,0.08241,chosen,"CHOSEN: packaged in the nose-cowl annulus, forward of the chamber"
+fuel 0%,payload_ballast_margin,4.683065,0.214,214.0,0.2,0.0535,chosen,CHOSEN: 21% of wet mass with no assigned location -- the CG trim lever
+fuel 0%,engine_duct_steel__chamber,2.054594,0.622654,622.65,0.389307,0.107,derived,"steel duct, chamber segment; split from the total by wetted area"
+fuel 0%,landing_hardware,0.5,1.136804,1136.8,0.0,0.107,chosen,CHOSEN: skids/attach points at mid-body
+fuel 0%,airframe_skin_cfrp,4.952496,1.15636,1156.36,2.273607,0.107,derived,CFRP skin; centroid integrated over the derived outer mold line
+fuel 0%,engine_duct_steel__tailpipe,3.542801,1.438457,1438.46,1.2423,0.057819,derived,"steel duct, tailpipe segment; split from the total by wetted area"
+fuel 0%,tank_hardware,0.960653,1.438457,1438.46,1.2423,0.08241,derived,tank shell; the annulus between tailpipe OD and body ID
+fuel 0%,wing,0.914992,1.706238,1706.24,0.255713,0.183586,derived,wing panels lumped at the MAC quarter-chord; moves with wing station
+fuel 0%,TOTAL,19.608601,0.869209,869.21,,,,CG; Ixx=0.1621 Iyy=8.3824 Izz=8.3824 kg m^2

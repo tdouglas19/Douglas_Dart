@@ -1,0 +1,11 @@
+station,x_m,x_mm,x_in,source,detail
+nose_tip,0.0,0.0,0.0,JSON,"stations_from_nose_tip_m.nose_tip"
+cowl_lip,0.15345760378621848,153.45760378621847,6.0416379443393105,ASSUMED,"spike shoulder plane = capture plane"
+centrebody_max_dia_end,0.2734576037862185,273.4576037862185,10.766047393158209,ASSUMED,"end of the centrebody barrel"
+nose_fairing_end,0.428,428.0,16.850393700787404,JSON,"nose_fairing_end__barrel_start"
+chamber_start,0.428,428.0,16.850393700787404,JSON,"combustion_chamber_start"
+chamber_end,0.817307344480882,817.3073444808821,32.17745450712134,JSON,"combustion_chamber_end__tailpipe_start"
+cone_end,0.991523114619776,991.523114619776,39.03634309526677,ASSUMED,"chamber_end + 174.2 mm at 15.0 deg"
+tailpipe_end,2.059607344480882,2059.6073444808817,81.08690332601897,JSON,"tailpipe_end / boattail_start"
+nozzle_throat,2.2630751984759105,2263.0751984759104,89.09744875889412,ASSUMED,"nozzle_exit - 10.5 mm of divergence (area ratio 1.100 at 15.0 deg)"
+nozzle_exit,2.273607344480882,2273.607344480882,89.51210017641269,JSON,"nozzle_exit__body_end"

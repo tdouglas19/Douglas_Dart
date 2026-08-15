@@ -127,12 +127,32 @@ class FpPropulsion:
         return dm >= self.mach_step or dh >= self.altitude_step_m
 
     # -- the per-timestep entry point ----------------------------------
-    def thrust_and_fuel(self, t_s: float, mach: float, altitude_m: float
+    def thrust_and_fuel(self, t_s: float, mach: float, altitude_m: float,
+                        allow_ramjet_light: bool = True,
+                        ignore_gate_mach: bool = False
                         ) -> tuple[float, float]:
-        """(total thrust N, total fuel kg/s) for both engines combined."""
+        """(total thrust N, total fuel kg/s) for both engines combined.
+
+        allow_ramjet_light (V4, 2026-08-13) vetoes a COLD light, which is
+        how flight_sim's RamjetStart enforces "light in the dive, not in the
+        climb". It does NOT stop a lit engine from being marched -- a
+        flameholder that is already alive keeps burning through a pull-out,
+        so the veto lapses the moment the engine lights. Note what this
+        argument does and does not decide: it controls whether the ramjet is
+        ASKED to cold light, not whether it can. Whether it can is the
+        first-principles answer, and the model keeps the right to refuse
+        (user decision, 2026-08-13).
+
+        ignore_gate_mach waives the Mach threshold on when to ask at all --
+        flight_sim's RamjetStart.light_at_pullout sets it once the pull-out
+        begins with the engine still unlit. Asking below `lightoff_mach` is
+        the whole point there: the alternative is never asking, which is what
+        stranded rung C.
+        """
         if self._drifted(self._last_pj_condition, mach, altitude_m):
             self._converge_pulsejet(t_s, mach, altitude_m)
-        if mach >= self.lightoff_mach and self._drifted(
+        if (mach >= self.lightoff_mach or ignore_gate_mach) and (
+                allow_ramjet_light or self._rj_lit) and self._drifted(
                 self._last_rj_condition, mach, altitude_m):
             self._converge_ramjet(t_s, mach, altitude_m)
         thrust = (self._pj.thrust_n if self._pj.valid else 0.0) \

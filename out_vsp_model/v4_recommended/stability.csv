@@ -1,0 +1,8 @@
+method,mach,source,CL_alpha_finite_difference,Cm_alpha_finite_difference,CL_alpha_stability_mode,Cm_alpha_stability_mode,CL_alpha,Cm_alpha,Cn_beta,Cl_beta,CY_beta,cg_x_m,neutral_point_x_m,static_margin_cref,pitch_stable,directionally_stable,short_period_rad_s,short_period_damping,dutch_roll_rad_s,dutch_roll_damping,roll_tau_s
+vortex_lattice,0.2,vortex_lattice: finite difference of sweep points,2.771407,-2.525592,,,2.771407,-2.525592,,,,0.94629,1.216318,0.911303,True,False,5.73699,0.066523,,,
+vortex_lattice,0.3,vortex_lattice: finite difference of sweep points,2.806969,-2.548569,,,2.806969,-2.548569,0.06356,0.114082,-1.77345,0.94629,1.215322,0.907943,True,True,8.644543,0.067073,1.830131,0.200164,
+vortex_lattice,0.4,vortex_lattice: finite difference of sweep points,2.861504,-2.568479,,,2.861504,-2.568479,,,,0.94629,1.212257,0.897598,True,False,11.57099,0.06811,,,
+vortex_lattice,0.5,vortex_lattice: finite difference of sweep points,2.935469,-2.56636,,,2.935469,-2.56636,,,,0.94629,1.205341,0.874259,True,False,14.457769,0.0699,,,
+vortex_lattice,0.6,vortex_lattice: finite difference of sweep points,3.048174,-2.522089,,,3.048174,-2.522089,-0.031069,0.133028,-1.967285,0.94629,1.191459,0.82741,True,False,17.199033,0.073218,,,
+vortex_lattice,0.7,vortex_lattice: finite difference of sweep points,3.218695,-2.339866,,,3.218695,-2.339866,,,,0.94629,1.161695,0.726961,True,False,19.327072,0.080268,,,
+vortex_lattice,0.8,vortex_lattice: finite difference of sweep points,3.784618,-2.599761,,,3.784618,-2.599761,,,,0.94629,1.149833,0.686928,True,False,23.282479,0.089539,,,
