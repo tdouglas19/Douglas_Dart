@@ -1,0 +1,184 @@
+{
+  "sizing_source": "out_medium_model\\v4_export\\structural_dimensions.json",
+  "sizing_git_sha": "d7b0670c8c39b05c40feed913a652614adf33134",
+  "openvsp_version": "OpenVSP 3.51.2",
+  "model_file": "douglas_dart_v4.vsp3",
+  "geometry_inputs": {
+    "nose_lip_half_angle_deg": 12.0,
+    "nose_station_count": 7,
+    "boattail_half_angle_deg": 8.0,
+    "boattail_station_count": 5,
+    "wing_root_le_x_m": 1.6,
+    "wing_dihedral_deg": 0.0,
+    "wing_incidence_deg": 0.0,
+    "wing_camber": 0.02,
+    "wing_camber_location": 0.4,
+    "fin_count": 4,
+    "fin_clocking_offset_deg": 45.0,
+    "fin_area_ratio": 0.8,
+    "fin_vertical_fraction": 0.5,
+    "fin_aspect_ratio": 3.0,
+    "fin_taper_ratio": 0.45,
+    "fin_le_sweep_deg": 35.0,
+    "fin_thickness_to_chord": 0.04,
+    "fin_root_te_x_m": null,
+    "min_radial_mount_overlap_m": null,
+    "reference_cg_x_m": null,
+    "fuselage_tessellation": 33,
+    "surface_tessellation": 17,
+    "sweeps": [
+      {
+        "name": "vlm_subsonic",
+        "method": "vortex_lattice",
+        "mach_values": [
+          0.2,
+          0.3,
+          0.4,
+          0.5,
+          0.6,
+          0.7,
+          0.8
+        ],
+        "alpha_deg_values": [
+          -4.0,
+          -2.0,
+          0.0,
+          2.0,
+          4.0,
+          6.0,
+          8.0,
+          10.0
+        ],
+        "beta_deg_values": [
+          0.0
+        ],
+        "wake_iterations": 3,
+        "stability": false
+      },
+      {
+        "name": "vlm_sideslip",
+        "method": "vortex_lattice",
+        "mach_values": [
+          0.3,
+          0.6
+        ],
+        "alpha_deg_values": [
+          0.0,
+          4.0
+        ],
+        "beta_deg_values": [
+          -4.0,
+          0.0,
+          4.0
+        ],
+        "wake_iterations": 3,
+        "stability": false
+      },
+      {
+        "name": "stability",
+        "method": "vortex_lattice",
+        "mach_values": [
+          0.3,
+          0.5,
+          0.8
+        ],
+        "alpha_deg_values": [
+          0.0,
+          4.0
+        ],
+        "beta_deg_values": [
+          0.0
+        ],
+        "wake_iterations": 3,
+        "stability": true
+      },
+      {
+        "name": "panel_spotcheck",
+        "method": "panel",
+        "mach_values": [
+          0.3,
+          0.6
+        ],
+        "alpha_deg_values": [
+          0.0,
+          4.0
+        ],
+        "beta_deg_values": [
+          0.0
+        ],
+        "wake_iterations": 3,
+        "stability": false
+      }
+    ],
+    "notes": {}
+  },
+  "reference_quantities": {
+    "area_m2": 0.1524987108162897,
+    "span_m": 0.532526287202532,
+    "chord_m": 0.2963093376685434,
+    "cg_x_m": 0.9462900627860219,
+    "frontal_area_m2": 0.03596809429094954
+  },
+  "mass_properties": {
+    "condition": "at release (full fuel)",
+    "mass_kg": 22.67962,
+    "cg_x_m": 0.9462900627860219,
+    "i_xx_kg_m2": 0.18299844996469616,
+    "i_yy_kg_m2": 9.648213058617578,
+    "i_zz_kg_m2": 9.648213058617578
+  },
+  "body_stations_m": [
+    {
+      "x_m": 0.0,
+      "diameter_m": 0.11563805016503446
+    },
+    {
+      "x_m": 0.07133333333333333,
+      "diameter_m": 0.14398296505900632
+    },
+    {
+      "x_m": 0.14266666666666666,
+      "diameter_m": 0.16809461742440165
+    },
+    {
+      "x_m": 0.214,
+      "diameter_m": 0.1875625771812096
+    },
+    {
+      "x_m": 0.2853333333333333,
+      "diameter_m": 0.20197641424941923
+    },
+    {
+      "x_m": 0.3566666666666667,
+      "diameter_m": 0.21092569854901966
+    },
+    {
+      "x_m": 0.428,
+      "diameter_m": 0.214
+    },
+    {
+      "x_m": 1.243803672240441,
+      "diameter_m": 0.214
+    },
+    {
+      "x_m": 2.0596073444808822,
+      "diameter_m": 0.214
+    },
+    {
+      "x_m": 2.1131073444808823,
+      "diameter_m": 0.2074209321754943
+    },
+    {
+      "x_m": 2.1666073444808824,
+      "diameter_m": 0.19144319603026616
+    },
+    {
+      "x_m": 2.220107344480882,
+      "diameter_m": 0.17170599255674907
+    },
+    {
+      "x_m": 2.273607344480882,
+      "diameter_m": 0.15384852274737645
+    }
+  ]
+}

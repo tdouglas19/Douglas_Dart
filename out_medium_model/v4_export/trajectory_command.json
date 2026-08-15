@@ -1,0 +1,63 @@
+{
+  "how_to_regenerate": "PYTHONPATH=. .venv/Scripts/python scripts/fly_frozen_v4_medium.py   -- ~35 minutes, because every propulsion re-convergence is a first-principles transient. tests/test_v4_medium_frozen.py therefore does NOT re-fly it by default: it checks the recorded numbers against the stored per-step trace (out_medium_model/v4_rungc_lap_states.json.gz). Set DOUGLAS_DART_REFLY_FP_RUNGS=1 to force the full re-fly.",
+  "commanded": {
+    "ramjet_gate_mach": 0.5,
+    "ramjet_require_descending": true,
+    "top_altitude_m": 1100.0,
+    "initial_climb_angle_deg": 6.0,
+    "spiral_climb": true,
+    "spiral_bank_deg": 30.0,
+    "dive_angle_deg": 14.0,
+    "floor_altitude_m": 121.92,
+    "pushover_load_factor": 0.0,
+    "pullout_load_factor": 3.0,
+    "pullout_max_load_factor": 6.0,
+    "dive_end_mach": 0.6,
+    "ramjet_light_at_pullout": true
+  },
+  "fidelity": {
+    "drag_model": "buildup",
+    "propulsion": "FP",
+    "n_cells": 324,
+    "tier": "CONFIRM (324 cells)",
+    "chamber_diameter_fraction": 1.0,
+    "mach_step": 0.05,
+    "altitude_step_m": 76.2,
+    "dt_s": 0.02,
+    "fp_solves": 73
+  },
+  "release": {
+    "velocity_m_s": 40.0,
+    "note": "rail/catapult launch; the vehicle leaves the rail BELOW its full-mass stall speed. There is no ground-roll model."
+  },
+  "motor_cutoff_mach": 1.1,
+  "phase_order": [
+    "v3_climb",
+    "v4_pushover",
+    "v3_dive",
+    "v4_pullout",
+    "drag_strip",
+    "loop",
+    "return"
+  ],
+  "outcome": {
+    "peak_mach": 1.1,
+    "cutoff": true,
+    "dive_exit_mach": 0.4881,
+    "ramjet_lightoff_mach": 0.4881,
+    "ramjet_lightoff_altitude_m": 163.4763,
+    "ramjet_lightoff_time_s": 137.72,
+    "ramjet_lightoff_mode": "v4_pullout",
+    "ramjet_lit_in_dive": false,
+    "fuel_kg": 2.1248,
+    "flight_s": 246.34,
+    "safe_landing": false,
+    "stalled": true,
+    "lands_from_launch_m": 4118.3844
+  },
+  "engine_events": [
+    "100.9s pulsejet_quenched_M0.333",
+    "114.9s pulsejet_quenched_M0.356",
+    "137.7s ramjet_lit_M0.488_alt163_phi0.863"
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "name": "Douglas Dart V4 -- VSP aero/stability freeze: 45 deg V-tail, all-CFRP, bonded roots",
+  "frozen_utc_date": "2026-08-14",
+  "git_sha": "8df8b12be73a4191a706a42566847de4fa1140f1",
+  "sizing_source": "out_medium_model\\v4_export\\structural_dimensions.json",
+  "sizing_git_sha": "d7b0670c8c39b05c40feed913a652614adf33134",
+  "how_to_rebuild": "PYTHONPATH=scripts/vsp_model .venv/Scripts/python scripts/vsp_model/run_vsp_model.py --wing-le 1.60 --fin-area-ratio 0.80 --fin-aspect-ratio 2.1 --fin-thickness-to-chord 0.08 --output-dir out_vsp_model/v4_final --geometry-only   (then set fin_clocking_deg_explicit=(45,135) for the V-tail)",
+  "geometry_inputs": {
+    "nose_lip_half_angle_deg": 12.0,
+    "nose_station_count": 7,
+    "boattail_half_angle_deg": 8.0,
+    "boattail_station_count": 5,
+    "wing_root_le_x_m": 1.6,
+    "wing_dihedral_deg": 0.0,
+    "wing_incidence_deg": 0.0,
+    "wing_camber": 0.02,
+    "wing_camber_location": 0.4,
+    "fin_count": 4,
+    "fin_clocking_offset_deg": 45.0,
+    "fin_area_ratio": 0.8,
+    "fin_clocking_deg_explicit": [
+      45.0,
+      135.0
+    ],
+    "fin_vertical_fraction": 0.5,
+    "fin_aspect_ratio": 2.1,
+    "fin_taper_ratio": 0.45,
+    "fin_le_sweep_deg": 35.0,
+    "fin_thickness_to_chord": 0.08,
+    "fin_root_te_x_m": null,
+    "min_radial_mount_overlap_m": null,
+    "reference_cg_x_m": null,
+    "fuselage_tessellation": 33,
+    "surface_tessellation": 17,
+    "sweeps": [
+      {
+        "name": "vlm_subsonic",
+        "method": "vortex_lattice",
+        "mach_values": [
+          0.2,
+          0.3,
+          0.4,
+          0.5,
+          0.6,
+          0.7,
+          0.8
+        ],
+        "alpha_deg_values": [
+          -4.0,
+          -2.0,
+          0.0,
+          2.0,
+          4.0,
+          6.0,
+          8.0,
+          10.0
+        ],
+        "beta_deg_values": [
+          0.0
+        ],
+        "wake_iterations": 3,
+        "stability": false
+      },
+      {
+        "name": "vlm_sideslip",
+        "method": "vortex_lattice",
+        "mach_values": [
+          0.3,
+          0.6
+        ],
+        "alpha_deg_values": [
+          0.0,
+          4.0
+        ],
+        "beta_deg_values": [
+          -4.0,
+          0.0,
+          4.0
+        ],
+        "wake_iterations": 3,
+        "stability": false
+      },
+      {
+        "name": "stability",
+        "method": "vortex_lattice",
+        "mach_values": [
+          0.3,
+          0.5,
+          0.8
+        ],
+        "alpha_deg_values": [
+          0.0,
+          4.0
+        ],
+        "beta_deg_values": [
+          0.0
+        ],
+        "wake_iterations": 3,
+        "stability": true
+      },
+      {
+        "name": "panel_spotcheck",
+        "method": "panel",
+        "mach_values": [
+          0.3,
+          0.6
+        ],
+        "alpha_deg_values": [
+          0.0,
+          4.0
+        ],
+        "beta_deg_values": [
+          0.0
+        ],
+        "wake_iterations": 3,
+        "stability": false
+      }
+    ],
+    "notes": {}
+  },
+  "tail": {
+    "kind": "V-tail",
+    "panels": 2,
+    "clocking_deg": [
+      45.0,
+      135.0
+    ],
+    "half_angle_from_vertical_deg": 45.0,
+    "total_area_m2": 0.1219989686530318,
+    "area_each_m2": 0.0609994843265159,
+    "root_chord_m": 0.23507986241861104,
+    "tip_chord_m": 0.10578593808837497,
+    "semispan_m": 0.3579090905323353,
+    "aspect_ratio": 2.1,
+    "taper_ratio": 0.45,
+    "le_sweep_deg": 35.0,
+    "thickness_to_chord": 0.08,
+    "material": "cfrp",
+    "attachment": "bonded and filleted to skin, NO through spar",
+    "control": "40% chord ruddervator (flap), not all-moving -- an all-moving fin needs a pivot spindle through the skin",
+    "mass_kg": 0.7319938119181908,
+    "lowest_point_below_axis_mm": 0.0,
+    "ground_clearance_note": "both panels in the upper half; nothing projects below the body"
+  },
+  "wing": {
+    "planform": "V4 sizing export, unchanged",
+    "root_le_x_m": 1.6,
+    "root_chord_m": 0.30873523663021757,
+    "tip_chord_m": 0.19395469855116376,
+    "semispan_m": 0.16535329831376028,
+    "quarter_chord_x_m": 1.7062377557852597,
+    "thickness_to_chord": 0.04,
+    "camber": 0.02
+  },
+  "mass": {
+    "release_kg": 22.67962,
+    "release_cg_x_m": 0.9462900627860219,
+    "burnout_kg": 19.608601,
+    "burnout_cg_x_m": 0.8692088333161954,
+    "i_xx": 0.18299844996469616,
+    "i_yy": 9.648213058617578,
+    "caveat": "7.18 kg (32% of wet mass) sits at stations CHOSEN here, not modelled anywhere. The 4.68 kg ballast at 214 mm is what makes the CG forward enough for these margins."
+  },
+  "stability_barrowman": {
+    "release": {
+      "pitch_cal": 3.0066827040878823,
+      "yaw_cal": 2.61390814912456,
+      "x_cp_pitch_m": 1.5897201614608287,
+      "x_cp_yaw_m": 1.5056664066986778
+    },
+    "burnout": {
+      "pitch_cal": 3.3668753651618384,
+      "yaw_cal": 2.9741008101985162
+    }
+  },
+  "flutter": [
+    {
+      "surface": "Wing_Panel",
+      "mach": 4.474933666871696,
+      "margin": 4.0681215153379044,
+      "verdict": "PASS"
+    },
+    {
+      "surface": "Fin_1",
+      "mach": 2.9208845422693064,
+      "margin": 2.6553495838811876,
+      "verdict": "PASS"
+    },
+    {
+      "surface": "Fin_2",
+      "mach": 2.9208845422693064,
+      "margin": 2.6553495838811876,
+      "verdict": "PASS"
+    }
+  ],
+  "roll": {
+    "cl_p": -1.6006484442540245,
+    "tau_s": 0.051803791680599176,
+    "steady_rate_deg_s": 119.44079521290021,
+    "misalignment_deg": 0.25
+  },
+  "control_deflections_all_moving_deg": {
+    "pull-out 3 g @ M0.49": 6.899893340801567,
+    "spiral climb 30 deg bank": 8.70444112595427,
+    "pull-out 6 g (structural cap)": 13.799786681603134,
+    "glide trim, 10.8 deg alpha": 12.600521495943315
+  },
+  "known_problems": [
+    "Barrowman and VSPAERO disagree ~2x on the body destabilising term. Barrowman is used as primary because the VSPAERO VLM does not converge at the fin/body junction (0 of 4 mount depths at the finest mesh) and its panel mode returns intermittent outliers. Absolute margins are uncertain; the wing/fin SPLIT is robust.",
+    "Barrowman is inviscid: no viscous body crossflow, which is destabilising on a fineness-10.6 body. Margins here are OPTIMISTIC.",
+    "Static margin ~3 calibres is a DART, not a glider. Trim alpha is -0.33 deg, L/D -0.44, glide angle 90 deg, terminal 295 m/s nose-down. Recovery needs a parachute, a moving CG, or sustained control deflection.",
+    "0.25 deg of fin misalignment gives 119 deg/s of steady roll. With bonded fins and no jig feature, build tolerance drives roll, not aerodynamics.",
+    "Fin root bending passes entirely through the bond and fillet. Nothing in this project sizes that joint.",
+    "Fin drag: 0.122 m2 sits at the V4 sim measured mission ceiling (cutoff achieved on 1.8% fuel margin). Side valve runner fairings draw from the same budget and are still un-costed.",
+    "V-tail couples roll and yaw at sideslip in a way the cruciform did not."
+  ]
+}

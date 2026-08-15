@@ -1,0 +1,85 @@
+{
+  "name": "V3b: V3a geometry unchanged; the ramjet lightoff gate is what moved",
+  "frozen_utc_date": "2026-08-13",
+  "git_sha": "d7b0670c8c39b05c40feed913a652614adf33134",
+  "how_to_refly": "MEDIUM_MODEL_CD0_FRONTAL=0.1 PYTHONPATH=. .venv/Scripts/python scripts/medium_model_v3b_final.py --climb 10 --dive 9.890 --floor 133.14 --lightoff 0.30 --tag v3b   (omit --span/--ar: they default to the frozen wing, and re-typing them rounded is how the 0.376/0.389 confusion started)",
+  "vehicle_candidate": {
+    "diameter_m": 0.22521729709177246,
+    "throat_diameter_m": 0.12161734042955713,
+    "chamber_length_m": 0.38930734448088206,
+    "throat_length_m": 1.2423,
+    "wingspan_m": 0.8033145899324761,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane",
+    "initial_climb_angle_deg": 10.0,
+    "dive_angle_deg": 9.890058542648028,
+    "floor_altitude_m": 133.1432273621529
+  },
+  "wing_concept": {
+    "span_m": 0.532526287202532,
+    "aspect_ratio": 1.8595845502152375,
+    "taper_ratio": 0.5120481632935137,
+    "sweep_deg": 13.4220600837535,
+    "airfoil_key": "thin_cambered"
+  },
+  "propulsion": {
+    "model": "first-principles (pulsejet-fp + ramjet-fp), marched",
+    "fuel": "propane",
+    "n_cells": 162,
+    "ramjet_lightoff_mach": 0.3,
+    "lightoff_rule": "set the gate to the Mach reached at top of climb, approached from above. Top-of-climb altitude is 589 m for every climb angle (it is fixed by dive angle + floor); top-of-climb MACH falls with climb angle: 0.369 at 8 deg, 0.336 at 10 deg, 0.305 at 12 deg, 0.274 at 14 deg (closed-form). At climb 10 deg the 0.30 gate fires at 581 m -- 98.6% of top of climb -- which is the best result measured.",
+    "note": "lightoff_mach is passed explicitly to FpPropulsion; medium_model/constants.py still reads RAMJET_MIN_LIGHTOFF_MACH = 0.45 for the closed-form path. See task #42."
+  },
+  "optimizer_results": {
+    "note": "carried over from V3a unchanged -- V3b changes no geometry, so the mass build-up is identical. Consumers derive loaded fuel as wet - dry - margin = 22.68 - 12.57 - 7.42 = 2.69 kg.",
+    "vehicle_score": 1.3507127377692438,
+    "wing_score": 1.3179175424911405,
+    "dry_mass_kg": 12.569615400692696,
+    "mass_margin_kg": 7.4167464526123235
+  },
+  "constants_at_freeze": {
+    "CD0_FRONTAL": 0.1,
+    "MIN_POWERED_ACCELERATION_G": 0.25,
+    "MIN_POWERED_THRUST_MARGIN_FRACTION": 0.15,
+    "PULSEJET_MAX_THROAT_AREA_FRACTION": 0.3,
+    "RAMJET_MIN_LIGHTOFF_MACH": 0.45,
+    "V3_FLOOR_ALTITUDE_M": 121.92,
+    "FUEL_BURN_FRACTION_OF_LOADED": 0.9
+  },
+  "verified_mission": {
+    "propulsion": "FP, 78 engine solves",
+    "drag_model": "buildup",
+    "peak_mach": 1.1002,
+    "motor_cutoff_reached": true,
+    "min_traverse_accel_g": 0.3893,
+    "min_powered_accel_g": 0.0489,
+    "min_powered_thrust_margin": 1.0783,
+    "fuel_burned_kg": 1.845,
+    "burn_limit_kg": 2.424,
+    "loaded_fuel_kg": 2.693,
+    "ramjet_lit": "46.9s ramjet_lit_M0.300_alt581_phi0.847",
+    "gates": {
+      "mach_above_1": "PASS (1.100)",
+      "traverse_accel_0.26g": "PASS (0.389)",
+      "powered_accel_0.25g": "FAIL (0.049) -- climb-limited, never met in any config",
+      "powered_thrust_margin_1.15": "FAIL (1.078) -- never met in any config"
+    },
+    "ramjet_phi_range": [
+      0.796875,
+      0.909375
+    ],
+    "reproducibility": "traverse is +/-0.02 g run-to-run: the FP snapshot store warm-starts each engine solve from prior converged cycles, so the same config reached via a different sequence of flights converges slightly differently (0.376 from the joint sweep, 0.389 standalone)."
+  },
+  "derived_from": "docs/v3a_medium_model/design.json",
+  "change": "NO GEOMETRY CHANGE. initial_climb_angle_deg 16.657 -> 10.0 and the ramjet lightoff gate 0.45 -> 0.30. Traverse 0.167 -> 0.389 g (2.3x) on the same airframe. The FP engine cannot hold the frozen 16.657 deg climb -- it decelerates into a stall at M 0.118. The lightoff gate is NON-MONOTONE and interacts with climb angle: at climb 8 deg the same 0.30 gate gives 0.052 g because it fires mid-climb. Rule: set the gate to the Mach reached at top of climb.",
+  "alternative_not_flight_verified": {
+    "status": "RETRACTED 2026-08-13 -- do not use",
+    "what": "chamber 235 mm (+9.8%) at tail/chamber-dia 4.00",
+    "why_retracted": "the +21% thrust was measured at ONE point, M 0.15 / 60 m (launch). Across the flight envelope the duct is DEAD: 0.94 N at M 0.25/300 m, 0.95 at M 0.35/300, 0.96 at M 0.45/300, 1.10 at M 0.54/300, 1.36 at M 0.54/900. It sustains only at launch. t/D 4.00 is below the repo's own >= ~4.5 rule, and that rule was itself derived at M 0.15 -- the sustain boundary MOVES WITH MACH and no launch-condition test can see it.",
+    "generalisable_lesson": "a pulsejet sustain check at one operating point is not a sustain check; verify alive at top-of-climb AND at the lightoff condition",
+    "consolation": "235 mm chamber held at V3a's t/D 4.80 gives +36% FP thrust, but is 188 mm LONGER, not 39 mm shorter"
+  },
+  "known_issues": {
+    "stale_dry_mass": "design.json dry_mass_kg 12.5696 is STALE: recomputing vehicle_dry_mass from this file's own geometry gives 15.4965 kg (+2.927 kg). Independently confirmed by two agents. Inherited from docs/v3_frozen; affects V3a/V3b/V3c equally since loaded fuel is derived as wet - dry - margin. The 235 mm design built during the V3c campaign recomputes correctly (machine-zero agreement)."
+  }
+}

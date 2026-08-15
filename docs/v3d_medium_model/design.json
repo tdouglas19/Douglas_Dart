@@ -1,0 +1,98 @@
+{
+  "name": "V3d: latest ramjet ignition that survives CONFIRM-tier fidelity",
+  "frozen_utc_date": "2026-08-13",
+  "git_sha": "d7b0670c8c39b05c40feed913a652614adf33134",
+  "how_to_refly": "MEDIUM_MODEL_CD0_FRONTAL=0.1 PYTHONPATH=. .venv/Scripts/python scripts/medium_model_v3b_final.py --climb 8 --dive 14 --floor 122 --lightoff 0.40 --n-cells 324 --tag v3d_g40",
+  "supersedes": "docs/v3c_medium_model/design.json -- V3c (gate 0.44) was verified only at MARCH tier (n_cells 162) and does NOT fly at CONFIRM tier (n_cells 324): peak M 0.257, no cutoff, the 12 deg climb decelerates from M 0.118 to 0.111.",
+  "vehicle_candidate": {
+    "diameter_m": 0.22521729709177246,
+    "throat_diameter_m": 0.12161734042955713,
+    "chamber_length_m": 0.38930734448088206,
+    "throat_length_m": 1.2423,
+    "wingspan_m": 0.8033145899324761,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane",
+    "initial_climb_angle_deg": 8.0,
+    "dive_angle_deg": 14.0,
+    "floor_altitude_m": 122.0
+  },
+  "wing_concept": {
+    "span_m": 0.532526287202532,
+    "aspect_ratio": 1.8595845502152375,
+    "taper_ratio": 0.5120481632935137,
+    "sweep_deg": 13.4220600837535,
+    "airfoil_key": "thin_cambered"
+  },
+  "propulsion": {
+    "model": "first-principles (pulsejet-fp + ramjet-fp), marched",
+    "fuel": "propane",
+    "n_cells": 324,
+    "fidelity_tier": "CONFIRM",
+    "ramjet_lightoff_mach": 0.4,
+    "why_0.40": "latest gate with real margin. 0.42 on the same trajectory also passes but at traverse 0.262 -- 0.8% over the 0.26 gate, inside the +/-0.02 g run-to-run reproducibility, so it is not a margin. 0.40 gives 0.283 (9% over) at the same climb margin (0.019 g) and the same fuel."
+  },
+  "optimizer_results": {
+    "note": "carried over from V3a unchanged -- no geometry change. SEE known_issues.stale_dry_mass.",
+    "dry_mass_kg": 12.569615400692696,
+    "mass_margin_kg": 7.4167464526123235
+  },
+  "constants_at_freeze": {
+    "CD0_FRONTAL": 0.1,
+    "MIN_POWERED_ACCELERATION_G": 0.25,
+    "MIN_POWERED_THRUST_MARGIN_FRACTION": 0.15,
+    "PULSEJET_MAX_THROAT_AREA_FRACTION": 0.3,
+    "V3_FLOOR_ALTITUDE_M": 121.92,
+    "FUEL_BURN_FRACTION_OF_LOADED": 0.9
+  },
+  "verified_mission": {
+    "propulsion": "FP, 68 engine solves, n_cells 324 (CONFIRM)",
+    "drag_model": "buildup",
+    "peak_mach": 1.1,
+    "motor_cutoff_reached": true,
+    "min_traverse_accel_g": 0.283,
+    "min_powered_accel_g": 0.019,
+    "min_powered_thrust_margin": 1.045,
+    "fuel_burned_kg": 1.779,
+    "burn_limit_kg": 2.424,
+    "ramjet_lit": "68.1s ramjet_lit_M0.400_alt424_phi0.847",
+    "gates": {
+      "mach_above_1": "PASS (1.100)",
+      "traverse_accel_0.26g": "PASS (0.283, 9% over)",
+      "powered_accel_0.25g": "FAIL (0.019) -- climb-limited, never met in any config in any campaign",
+      "powered_thrust_margin_1.15": "FAIL (1.045) -- never met in any config in any campaign"
+    }
+  },
+  "confirm_tier_sweep": {
+    "note": "every one of these is n_cells 324. Gate, climb, dive -> traverse / climb-g / verdict",
+    "results": [
+      "0.30 / 10 / 9.89 -> 0.352 / 0.036 / PASS (V3b, most margin)",
+      "0.38 /  8 / 9.89 -> 0.244 / 0.040 / FAIL -- dive too shallow to help the gate",
+      "0.40 /  8 / 14   -> 0.283 / 0.019 / PASS  <-- RECOMMENDED",
+      "0.42 /  8 / 14   -> 0.262 / 0.019 / pass, but only 0.8% over the gate",
+      "0.42 /  8 / 16   -> 0.271 / -0.014 / climb margin NEGATIVE, thrust margin 0.966",
+      "0.42 / 10 / 18   -> 0.195 / 0.017 / FAIL",
+      "0.44 / 12 / 20   -> peak M 0.257, no cutoff / FAIL outright"
+    ]
+  },
+  "the_fidelity_finding": {
+    "headline": "the answer to 'how late can the ramjet light' DEPENDS ON GRID RESOLUTION, and the MARCH-tier answer is wrong.",
+    "march_answer": "M 0.44 (traverse 0.368 at climb 12 / dive 20, n_cells 162)",
+    "confirm_answer": "M 0.40 (traverse 0.283 at climb 8 / dive 14, n_cells 324)",
+    "mechanism": "the pulsejet loses 3.8-5.5% thrust going 162 -> 324 cells, roughly CONSTANT across the mission Mach range (127.6->120.5 N at M 0.118; 107.8->102.9 at M 0.30; 114.3->109.6 at M 0.44; 111.1->106.8 at M 0.60). The duct sustains at every condition on both grids -- it is not a flame-out, just ~5 N weaker. But late ignition had spent the climb margin down to 0.012 g = 2.7 N, which is SMALLER THAN THE GRID UNCERTAINTY. V3b, carrying 0.049 g = 10.9 N, absorbs the same hit and still passes (0.389 -> 0.352).",
+    "lesson": "a margin thinner than the discretisation error of the model that produced it is not a margin. Late ignition is precisely the lever that spends climb margin, so it is the question most likely to be answered wrongly at screening fidelity.",
+    "propulsion_step_refinement": "separately, refining the drift triggers at fixed n_cells 162 (dM 0.05 -> 0.03 -> 0.02 -> 0.01) moves traverse MONOTONICALLY 0.3685 -> 0.3795 (+3.0%, a real bias: the staircase UNDERSTATES traverse) while climb margin falls 0.0115 -> -0.0007 and peak Mach and fuel converge. So the staircase flatters climb margin and penalises traverse."
+  },
+  "pullout_not_modelled": {
+    "issue": "flight_sim latches v3_dive_done and switches gamma from the dive angle to +1 deg in ONE TIMESTEP. No pull-out arc, no load factor, no g limit.",
+    "cost_at_dive_14": "5.2 g with a 30 m arc, 9.4 g with a 15 m arc, against 15.4 g available at the dive exit (M 0.60, 122 m, q 25167 Pa, CL_max 0.890 section-stall-limited from medium_model/lift.py).",
+    "why_dive_14_not_20": "dive 20 needs 9.5 g at a 30 m arc and 18.0 g at 15 m -- the latter exceeds what the wing can produce. Dive 14 is comfortably inside the envelope at either allowance.",
+    "structural": "NOT MODELLED ANYWHERE IN THE REPO. At dive 14 / 30 m arc, 5.2 g on a 22.68 kg vehicle is 1157 N (260 lbf) through the wing joint."
+  },
+  "known_issues": {
+    "stale_dry_mass": "design.json dry_mass_kg 12.5696 is STALE: recomputing vehicle_dry_mass from this file's own geometry gives 15.4965 kg (+2.927 kg). Independently confirmed by two agents. Inherited from docs/v3_frozen; affects V3a/V3b/V3c/V3d equally since loaded fuel is derived as wet - dry - margin.",
+    "retracted_235mm": "the 235 mm / t-D 4.00 duct recommended in the first V3b report is RETRACTED -- it makes 153 N at M 0.15/60 m but is DEAD (0.94-1.36 N) everywhere the vehicle actually flies. A sustain check at one operating point is not a sustain check."
+  },
+  "derived_from": "docs/v3b_medium_model/design.json",
+  "change": "NO GEOMETRY CHANGE from V3a. climb 10 -> 8 deg, dive 9.89 -> 14 deg, floor 133.14 -> 122 m, lightoff gate 0.30 -> 0.40. Ignition is 33% later in Mach than V3b, verified at CONFIRM tier, at traverse 0.283 vs V3b's 0.352 (both CONFIRM). Later ignition buys ignition RELIABILITY: the ramjet lights on ~163 N of thrust at M 0.40 versus ~95 N at M 0.30.",
+  "cost_of_late_ignition": "climb margin: 0.036 g (gate 0.30) -> 0.019 g (gate 0.40) at CONFIRM tier, because a later gate leaves the pulsejet carrying the vehicle alone for longer."
+}

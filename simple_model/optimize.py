@@ -61,8 +61,33 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from math import pi
 
-from .constants import FUELS, KG_PER_LB
-from .flight_sim import VehicleGeometry, run_flight
+from .constants import (
+    FUELS, KG_PER_LB, MIN_POWERED_ACCELERATION_G,
+    MIN_POWERED_THRUST_MARGIN_FRACTION,
+    NOSE_TAIL_LENGTH_DIAMETERS,
+    OBJECTIVE_DIAMETER_SCALE_M, OBJECTIVE_LENGTH_SCALE_M,
+    OBJECTIVE_SPAN_SCALE_M, OBJECTIVE_TW_SCALE,
+    OBJECTIVE_WEIGHT_DIAMETER, OBJECTIVE_WEIGHT_LENGTH,
+    OBJECTIVE_WEIGHT_SPAN, OBJECTIVE_WEIGHT_TW,
+)
+from .mass_model import vehicle_dry_mass
+
+
+def design_score(candidate, peak_thrust_to_weight: float, span_m: float | None = None) -> float:
+    """Composite objective (constants.py's OBJECTIVE_* block): lower is
+    better. span_m overrides candidate.wingspan_m when a wing concept owns
+    the span (wing_optimize)."""
+    body_length = (candidate.chamber_length_m + candidate.throat_length_m
+                   + NOSE_TAIL_LENGTH_DIAMETERS * candidate.diameter_m)
+    b = candidate.wingspan_m if span_m is None else span_m
+    return (
+        OBJECTIVE_WEIGHT_TW * peak_thrust_to_weight / OBJECTIVE_TW_SCALE
+        + OBJECTIVE_WEIGHT_DIAMETER * candidate.diameter_m / OBJECTIVE_DIAMETER_SCALE_M
+        + OBJECTIVE_WEIGHT_LENGTH * body_length / OBJECTIVE_LENGTH_SCALE_M
+        + OBJECTIVE_WEIGHT_SPAN * b / OBJECTIVE_SPAN_SCALE_M
+    )
+from .flight_sim import (ClimbDiveProfile, V3_FLOOR_ALTITUDE_M,
+                         VehicleGeometry, run_flight)
 
 MAX_WET_MASS_KG = 50.0 * KG_PER_LB
 FUEL_RESERVE_MARGIN = 0.25
@@ -73,7 +98,16 @@ MOTOR_CUTOFF_MACH = 1.1
 # satisfied by construction, per the user's explicit constraint, rather
 # than sampled independently and rejected/clipped after the fact.
 DIAMETER_BOUNDS_M = (0.08, 0.30)
-THROAT_FRACTION_BOUNDS = (0.30, 0.85)
+# Upper bound capped at the pulsejet operability boundary (2026-08-12):
+# diameter fraction 0.54 = throat/chamber AREA fraction 0.29, the largest
+# ratio the first-principles pulsejet-fp model sustains (0.43 is stone
+# dead -- the previous (0.30, 0.85) bounds let the optimizer pick exactly
+# such a dead engine: the 81/123 mm "T/W optimum"). Keeps every sampled
+# candidate inside the operable resonator regime instead of wasting
+# evaluations on designs the operability gate now zeroes anyway. Note the
+# honest design tension this exposes: the ramjet WANTS a bigger shared
+# throat -- the optimizer now has to trade that against pulsejet viability.
+THROAT_FRACTION_BOUNDS = (0.30, 0.54)
 CHAMBER_LENGTH_BOUNDS_M = (0.15, 0.70)
 THROAT_LENGTH_BOUNDS_M = (0.08, 1.00)  # widened after adding the fuel-volume-fits-in-the-annulus constraint: longer throat_length gives more annular volume *and* a lower pulsejet cycle frequency (so less fuel burned per unit thrust -- see pulsejet_simple.py), so the search kept pushing against the old 0.60 m bound
 WINGSPAN_BOUNDS_M = (0.50, 3.00)  # see MAX_ACCEPTABLE_STALL_SPEED_M_PER_S: below ~0.7 m, stall speed can't reach the (45 m/s) cap for this mass class regardless of anything else, so sampling well below that just wastes search budget
@@ -85,8 +119,30 @@ WINGSPAN_BOUNDS_M = (0.50, 3.00)  # see MAX_ACCEPTABLE_STALL_SPEED_M_PER_S: belo
 # weight-along-path term (m*g*sin(gamma)) working directly against thrust.
 # Bounded well short of vertical (90 deg) -- the quasi-steady-lift drag
 # model this module relies on throughout is not meant to cover a
-# near-vertical launch.
-CLIMB_ANGLE_BOUNDS_DEG = (5.0, 45.0)
+# near-vertical launch. Lower bound dropped 5 -> 1 deg (2026-08-12): with
+# the calibrated pulsejet thrust (T/W ~ 0.2 at release), only near-level
+# acceleration can gain speed at all -- the old 5-deg floor excluded the
+# entire remaining feasible corner (diagnosed: 250/250 random candidates
+# failed to reach cutoff, best max-Mach 0.44, all bleeding energy into
+# climb they could not afford).
+CLIMB_ANGLE_BOUNDS_DEG = (1.0, 45.0)
+
+# --- V3 climb-dive search (enabled per-campaign via SIMPLE_MODEL_V3=1) -----
+# Three extra variables on top of the seven vehicle ones. The top-of-climb
+# altitude is NOT searched -- it is derived from how much altitude the dive
+# actually spends crossing the lightoff notch
+# (flight_sim.derive_top_altitude), which keeps climb, dive and floor
+# mutually consistent instead of letting the search pick three numbers that
+# do not add up. climb_angle_deg keeps its meaning: the post-pullout "drag
+# strip" angle.
+V3_ENABLED = os.environ.get("SIMPLE_MODEL_V3") == "1"
+V3_CLIMB_ANGLE_BOUNDS_DEG = (5.0, 35.0)
+V3_DIVE_ANGLE_BOUNDS_DEG = (3.0, 25.0)
+# Floor is searched, not pinned: being low is aerodynamically GOOD for the
+# ramjet (+3.21 g at 500 ft vs +2.65 g at 5000 ft at M 1.05), so the search
+# should be free to sit near the floor -- but never below the user's hard
+# 400 ft minimum (V3_FLOOR_ALTITUDE_M).
+V3_FLOOR_BOUNDS_M = (V3_FLOOR_ALTITUDE_M, 1500.0 * 0.3048)
 
 # A real safety requirement, not just a search knob -- see this module's
 # docstring for why "lands at stall speed" is only actually safe once
@@ -160,6 +216,26 @@ class Candidate:
     wingspan_m: float
     climb_angle_deg: float
     fuel_key: str
+    # V3 climb-dive variables. Defaulted so every pre-V3 Candidate (and the
+    # 7-field dicts in docs/v2_frozen/design.json and the old campaign
+    # summaries) still constructs and flies exactly as before: a zero dive
+    # angle means no ClimbDiveProfile is built at all.
+    initial_climb_angle_deg: float = 0.0
+    dive_angle_deg: float = 0.0
+    floor_altitude_m: float = V3_FLOOR_ALTITUDE_M
+
+    @property
+    def uses_climb_dive(self) -> bool:
+        return self.dive_angle_deg > 0.0 and self.initial_climb_angle_deg > 0.0
+
+    def to_climb_dive(self) -> ClimbDiveProfile | None:
+        if not self.uses_climb_dive:
+            return None
+        return ClimbDiveProfile(
+            initial_climb_angle_deg=self.initial_climb_angle_deg,
+            dive_angle_deg=self.dive_angle_deg,
+            floor_altitude_m=max(self.floor_altitude_m, V3_FLOOR_ALTITUDE_M),
+        )
 
     def to_geometry(self) -> VehicleGeometry:
         return VehicleGeometry(
@@ -179,6 +255,13 @@ class EvaluatedCandidate:
     max_thrust_to_weight: float | None
     fuel_loaded_kg: float | None
     result: object
+    score: float | None = None
+    """Composite design objective (design_score) -- what the search now
+    minimizes. max_thrust_to_weight is retained for reporting."""
+    dry_mass_kg: float | None = None
+    mass_margin_kg: float | None = None
+    """50 lb wet budget minus (dry structure + fuel loaded): payload/ballast
+    slack. Negative would be infeasible (gated in evaluate())."""
 
 
 def _random_candidate(rng: random.Random) -> Candidate:
@@ -192,6 +275,12 @@ def _random_candidate(rng: random.Random) -> Candidate:
         wingspan_m=rng.uniform(*WINGSPAN_BOUNDS_M),
         climb_angle_deg=rng.uniform(*CLIMB_ANGLE_BOUNDS_DEG),
         fuel_key=rng.choice(list(FUELS.keys())),
+        initial_climb_angle_deg=(rng.uniform(*V3_CLIMB_ANGLE_BOUNDS_DEG)
+                                 if V3_ENABLED else 0.0),
+        dive_angle_deg=(rng.uniform(*V3_DIVE_ANGLE_BOUNDS_DEG)
+                        if V3_ENABLED else 0.0),
+        floor_altitude_m=(rng.uniform(*V3_FLOOR_BOUNDS_M)
+                          if V3_ENABLED else V3_FLOOR_ALTITUDE_M),
     )
 
 
@@ -200,7 +289,13 @@ def evaluate(
     dt_s: float = SEARCH_DT_S,
     max_time_s: float = SEARCH_MAX_TIME_S,
     return_result: bool = True,
+    wing_airfoil_key: str | None = None,
 ) -> EvaluatedCandidate:
+    """wing_airfoil_key (e.g. from SIMPLE_MODEL_WING_AIRFOIL): fly a real
+    rectangular AR-3 wing CONCEPT of that airfoil at the candidate's span
+    instead of the legacy wave-drag-free fixed wing -- keeps the vehicle
+    stage consistent with the wing stage's physics (a vehicle optimized
+    without wing wave drag leaves no margin for any real wing)."""
     """`return_result=False` drops the (potentially many-thousand-state)
     FlightResult from the returned object once feasibility/objective are
     known. That matters specifically for the parallel search below: every
@@ -211,6 +306,17 @@ def evaluate(
     with return_result=True (the default, for any standalone/direct use of
     this function) to reconstruct its full trajectory."""
 
+    wing_concept = None
+    if wing_airfoil_key is not None:
+        from .constants import AIRFOILS, WING_ASPECT_RATIO as _AR
+        from .drag import WingConcept as _WC
+        wing_concept = _WC(candidate.wingspan_m, _AR, 1.0, 0.0,
+                           AIRFOILS[wing_airfoil_key])
+    tank_capacity_kg = (FUEL_VOLUME_FRACTION_OF_ANNULUS
+                        * _annular_volume_m3(candidate.diameter_m,
+                                             candidate.throat_diameter_m,
+                                             candidate.throat_length_m)
+                        * FUELS[candidate.fuel_key].density_kg_per_m3)
     result = run_flight(
         candidate.to_geometry(),
         MAX_WET_MASS_KG,
@@ -218,10 +324,38 @@ def evaluate(
         motor_cutoff_mach=MOTOR_CUTOFF_MACH,
         dt_s=dt_s,
         max_time_s=max_time_s,
+        wing_concept=wing_concept,
+        max_fuel_burn_kg=tank_capacity_kg / (1.0 + FUEL_RESERVE_MARGIN),
+        # gates must judge the SAME profile the reports fly (2026-08-12):
+        # optimizing straight-out then reporting return-to-launch produced
+        # a "feasible" winner whose reported flight failed its landing.
+        return_to_launch=True,
+        climb_dive=candidate.to_climb_dive(),
     )
     final_state = result.states[-1]
     kept_result = result if return_result else None
     if not result.safe_landing or final_state.stall_speed_m_per_s > MAX_ACCEPTABLE_STALL_SPEED_M_PER_S:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+    # Minimum powered thrust margin (user requirement, 2026-08-12): the
+    # mission must close with headroom at EVERY powered velocity regime,
+    # not just barely -- see MIN_POWERED_THRUST_MARGIN_FRACTION.
+    if result.min_powered_thrust_margin < 1.0 + MIN_POWERED_THRUST_MARGIN_FRACTION:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+    # Minimum acceleration (user requirement, 2026-08-12): the margin above
+    # is multiplicative and still admits near-zero absolute acceleration at
+    # the pinch -- see MIN_POWERED_ACCELERATION_G. Gated on the TRAVERSE
+    # figure (excludes the commanded V3 climb, which is not a regime the
+    # vehicle can be stranded in -- see flight_sim); identical to
+    # min_powered_accel_g for any non-V3 candidate.
+    if result.min_traverse_accel_g < MIN_POWERED_ACCELERATION_G:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+    # ...but the vehicle must still be ACCELERATING everywhere under power,
+    # climb included: a climb angle so steep the vehicle decelerates is
+    # trading speed for altitude, not banking surplus thrust.
+    if result.min_powered_accel_g <= 0.0:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+    # Competition rule: flight path angle >= 0 from M 0.80 through cutoff.
+    if result.rule_violated:
         return EvaluatedCandidate(candidate, False, None, None, kept_result)
 
     fuel_loaded_kg = (1.0 + FUEL_RESERVE_MARGIN) * final_state.fuel_burned_kg
@@ -232,8 +366,30 @@ def evaluate(
         # fuel it needs -- infeasible for a real reason, not a numerical one.
         return EvaluatedCandidate(candidate, False, None, None, kept_result)
 
+    # Parametric mass budget (2026-08-12): structure + auxiliaries + fuel
+    # must fit inside the fixed 50 lb wet mass. This is what stops "buy
+    # thrust with diameter" -- an oversized airframe cannot hit the overall
+    # density target. Wing area from the legacy fixed-AR wing here (the
+    # wing optimizer re-checks with its own concept's real area).
+    from .constants import WING_ASPECT_RATIO
+    mass = vehicle_dry_mass(
+        candidate.diameter_m, candidate.chamber_length_m,
+        candidate.throat_diameter_m, candidate.throat_length_m,
+        candidate.wingspan_m ** 2 / WING_ASPECT_RATIO, fuel_loaded_kg,
+    )
+    mass_margin_kg = MAX_WET_MASS_KG - mass.dry_mass_kg - fuel_loaded_kg
+    if mass_margin_kg < 0.0:
+        return EvaluatedCandidate(candidate, False, None, None, kept_result)
+
     max_thrust_to_weight = max(s.thrust_to_weight for s in result.states)
-    return EvaluatedCandidate(candidate, True, max_thrust_to_weight, fuel_loaded_kg, kept_result)
+    return EvaluatedCandidate(
+        candidate, True, max_thrust_to_weight, fuel_loaded_kg, kept_result,
+        score=design_score(candidate, max_thrust_to_weight),
+        dry_mass_kg=mass.dry_mass_kg, mass_margin_kg=mass_margin_kg,
+    )
+
+
+_ENV_WING_AIRFOIL = os.environ.get("SIMPLE_MODEL_WING_AIRFOIL") or None
 
 
 def _evaluate_no_result(args: tuple) -> EvaluatedCandidate:
@@ -242,7 +398,10 @@ def _evaluate_no_result(args: tuple) -> EvaluatedCandidate:
     plain function reference, not a lambda/closure, to pickle the task."""
 
     candidate, dt_s, max_time_s = args
-    return evaluate(candidate, dt_s=dt_s, max_time_s=max_time_s, return_result=False)
+    # workers re-read the env themselves (spawned processes re-import this
+    # module, so _ENV_WING_AIRFOIL is evaluated in each worker too)
+    return evaluate(candidate, dt_s=dt_s, max_time_s=max_time_s,
+                    return_result=False, wing_airfoil_key=_ENV_WING_AIRFOIL)
 
 
 def _perturb(candidate: Candidate, rng: random.Random) -> Candidate:
@@ -263,6 +422,13 @@ def _perturb(candidate: Candidate, rng: random.Random) -> Candidate:
         wingspan_m=step(candidate.wingspan_m, WINGSPAN_BOUNDS_M),
         climb_angle_deg=step(candidate.climb_angle_deg, CLIMB_ANGLE_BOUNDS_DEG),
         fuel_key=fuel_key,
+        initial_climb_angle_deg=(
+            step(candidate.initial_climb_angle_deg, V3_CLIMB_ANGLE_BOUNDS_DEG)
+            if candidate.uses_climb_dive else candidate.initial_climb_angle_deg),
+        dive_angle_deg=(step(candidate.dive_angle_deg, V3_DIVE_ANGLE_BOUNDS_DEG)
+                        if candidate.uses_climb_dive else candidate.dive_angle_deg),
+        floor_altitude_m=(step(candidate.floor_altitude_m, V3_FLOOR_BOUNDS_M)
+                          if candidate.uses_climb_dive else candidate.floor_altitude_m),
     )
 
 
@@ -273,6 +439,7 @@ def optimize(
     log=print,
     max_workers: int = DEFAULT_WORKERS,
     refine_batch_size: int = REFINE_BATCH_SIZE,
+    seed_candidates: list[Candidate] | None = None,
 ) -> EvaluatedCandidate:
     """Broad coarse-dt random search (parallel across max_workers processes)
     to find the feasible region cheaply, then re-validate the best
@@ -293,7 +460,15 @@ def optimize(
     """
 
     rng = random.Random(seed)
-    candidates = [_random_candidate(rng) for _ in range(n_random)]
+    # Warm-start seeds evaluated alongside the random pool (2026-08-12):
+    # under calibrated physics the feasible region is a corner occupying
+    # ~4e-6 of the 7-D search volume (large diameter x max operable throat
+    # x narrow span band x near-level climb) -- random draws alone expect
+    # ~0.1 hits per 20k evaluations, so hand-derived seeds near the known
+    # feasible corner give the refinement stage something to walk from.
+    candidates = list(seed_candidates or []) + [
+        _random_candidate(rng) for _ in range(n_random)
+    ]
     tasks = [(c, SEARCH_DT_S, SEARCH_MAX_TIME_S) for c in candidates]
 
     feasible_candidates: list[EvaluatedCandidate] = []
@@ -306,7 +481,7 @@ def optimize(
             if evaluated.feasible:
                 feasible_candidates.append(evaluated)
             if completed % 500 == 0:
-                best_so_far = min(feasible_candidates, key=lambda e: e.max_thrust_to_weight) if feasible_candidates else None
+                best_so_far = min(feasible_candidates, key=lambda e: e.score) if feasible_candidates else None
                 log(
                     f"[random search, {max_workers} workers] {completed}/{n_random} candidates, "
                     f"{len(feasible_candidates)} feasible at search resolution, "
@@ -320,7 +495,7 @@ def optimize(
             f"motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or "
             f"increase n_random."
         )
-    feasible_candidates.sort(key=lambda e: e.max_thrust_to_weight)
+    feasible_candidates.sort(key=lambda e: e.score)
     log(
         f"Random search done: {len(feasible_candidates)} feasible at search resolution. "
         f"Validating top candidates at final resolution (dt={FINAL_DT_S}s)..."
@@ -328,7 +503,7 @@ def optimize(
 
     verified: EvaluatedCandidate | None = None
     for checked, candidate_evaluation in enumerate(feasible_candidates, start=1):
-        validated = evaluate(candidate_evaluation.candidate, dt_s=FINAL_DT_S, max_time_s=FINAL_MAX_TIME_S)
+        validated = evaluate(candidate_evaluation.candidate, dt_s=FINAL_DT_S, max_time_s=FINAL_MAX_TIME_S, wing_airfoil_key=_ENV_WING_AIRFOIL)
         if validated.feasible:
             verified = validated
             log(f"Verified starting point after checking {checked} candidate(s): "
@@ -350,7 +525,7 @@ def optimize(
             tasks = [(tc, FINAL_DT_S, FINAL_MAX_TIME_S) for tc in trial_candidates]
             trials = list(executor.map(_evaluate_no_result, tasks))
             for trial in trials:
-                if trial.feasible and trial.max_thrust_to_weight < current.max_thrust_to_weight:
+                if trial.feasible and trial.score < current.score:
                     current = trial
             log(
                 f"[refine, final dt, batch={refine_batch_size}] round {round_i + 1}/{n_rounds}, "
@@ -359,7 +534,7 @@ def optimize(
 
     # The refinement loop above ran with return_result=False throughout for
     # speed -- reconstruct the winner's full trajectory once at the end.
-    current = evaluate(current.candidate, dt_s=FINAL_DT_S, max_time_s=FINAL_MAX_TIME_S, return_result=True)
+    current = evaluate(current.candidate, dt_s=FINAL_DT_S, max_time_s=FINAL_MAX_TIME_S, return_result=True, wing_airfoil_key=_ENV_WING_AIRFOIL)
 
     log(
         f"Local refinement done: best max T/W={current.max_thrust_to_weight:.2f} "

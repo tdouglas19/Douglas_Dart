@@ -1,0 +1,108 @@
+{
+  "wing_area_m2": 0.1524987108162897,
+  "weight_n": 222.41108076302498,
+  "clmax_alpha_limited": 0.8904503624881318,
+  "clmax_legacy": 1.1353430154730477,
+  "clmax_source": "medium_model.lift.wing_clmax, section-stall (2D x sweep)",
+  "floor_m": 121.92,
+  "rows": [
+    {
+      "dive_deg": 9.89,
+      "exit_mach": 0.6,
+      "V_m_s": 203.8954330517717,
+      "q_pa": 25166.96361154919,
+      "n_demanded": {
+        "15m": 5.199927466782052,
+        "30m": 3.099963733391026,
+        "60m": 2.049981866695513
+      },
+      "n_available": 15.36562705431555,
+      "n_available_legacy": 19.591498964338257,
+      "flyable_at_some_allowance": true
+    },
+    {
+      "dive_deg": 14.0,
+      "exit_mach": 0.6,
+      "V_m_s": 203.8954330517717,
+      "q_pa": 25166.96361154919,
+      "n_demanded": {
+        "15m": 9.395025126207914,
+        "30m": 5.197512563103957,
+        "60m": 3.0987562815519785
+      },
+      "n_available": 15.36562705431555,
+      "n_available_legacy": 19.591498964338257,
+      "flyable_at_some_allowance": true
+    },
+    {
+      "dive_deg": 16.0,
+      "exit_mach": 0.6,
+      "V_m_s": 203.8954330517717,
+      "q_pa": 25166.96361154919,
+      "n_demanded": {
+        "15m": 11.948223779721602,
+        "30m": 6.474111889860801,
+        "60m": 3.7370559449304004
+      },
+      "n_available": 15.36562705431555,
+      "n_available_legacy": 19.591498964338257,
+      "flyable_at_some_allowance": true
+    },
+    {
+      "dive_deg": 18.0,
+      "exit_mach": 0.6,
+      "V_m_s": 203.8954330517717,
+      "q_pa": 25166.96361154919,
+      "n_demanded": {
+        "15m": 14.83241277952226,
+        "30m": 7.91620638976113,
+        "60m": 4.4581031948805645
+      },
+      "n_available": 15.36562705431555,
+      "n_available_legacy": 19.591498964338257,
+      "flyable_at_some_allowance": true
+    },
+    {
+      "dive_deg": 20.0,
+      "exit_mach": 0.6,
+      "V_m_s": 203.8954330517717,
+      "q_pa": 25166.96361154919,
+      "n_demanded": {
+        "15m": 18.044078185588816,
+        "30m": 9.522039092794408,
+        "60m": 5.261019546397204
+      },
+      "n_available": 15.36562705431555,
+      "n_available_legacy": 19.591498964338257,
+      "flyable_at_some_allowance": true
+    },
+    {
+      "dive_deg": 25.0,
+      "exit_mach": 0.6,
+      "V_m_s": 203.8954330517717,
+      "q_pa": 25166.96361154919,
+      "n_demanded": {
+        "15m": 27.479303593332762,
+        "30m": 14.239651796666381,
+        "60m": 7.619825898333191
+      },
+      "n_available": 15.36562705431555,
+      "n_available_legacy": 19.591498964338257,
+      "flyable_at_some_allowance": true
+    },
+    {
+      "dive_deg": 30.0,
+      "exit_mach": 0.6,
+      "V_m_s": 203.8954330517717,
+      "q_pa": 25166.96361154919,
+      "n_demanded": {
+        "15m": 38.86391520471108,
+        "30m": 19.93195760235554,
+        "60m": 10.46597880117777
+      },
+      "n_available": 15.36562705431555,
+      "n_available_legacy": 19.591498964338257,
+      "flyable_at_some_allowance": true
+    }
+  ]
+}

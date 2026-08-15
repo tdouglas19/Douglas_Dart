@@ -1597,3 +1597,268 @@ under `results/generated/design_optimize_v12/` for the result; treat
 conclusion touching lightoff Mach, inlet recovery, or real-gas effects,
 the same way this document has repeatedly flagged earlier runs stale
 after each physics correction.
+
+## 2026-08-12: ramjet-fp becomes RAMJET_MODE's guarded primary (Gate 2) and the mission solver's ramjet source (Gate 3)
+
+**What changed.** The sibling first-principles ramjet model (`ramjet-fp`,
+unsteady quasi-1D HLLC relaxation: Rankine-Hugoniot inlet, WSR flameholder
+with emergent Damkohler blow-off, resolved choking/thermal choking,
+eq.30/32 dual-thrust verification -- see `ramjet-fp/architecture.md` and
+`docs/derivation.md` there) is now:
+
+1. **Gate 2**: `propulsion_map._ramjet_point` dispatches to ramjet-fp as
+   its guarded PRIMARY via the new `ramjet_fp_bridge.py` (direct flowpath
+   geometry mapping from the case config; flameholder scaled from the
+   validated RJ-1 proportions and capped so the gutter never chokes ahead
+   of the shared nozzle throat -- both flagged). ``blown_off`` is a USABLE
+   answer: the point carries the cold-throughflow drag,
+   `self_sustaining_status=False`, and visible flags. Fallback to the
+   native 0D `evaluate_ramjet` is flagged
+   (`ramjet_fp_primary_rejected_fell_back_to_native`), and
+   `DOUGLAS_DART_DISABLE_RAMJET_FP=1` is the documented kill-switch (the
+   legacy test suite sets it in conftest, exactly like the pulsejet one).
+   The native model's MIL-E-5008B recovery schedule, configured combustor
+   efficiency, and discharge coefficients are exactly what the primary
+   replaces with derived physics; achieved recovery is now an OUTPUT
+   (scenario recovery overrides do not apply to FP points -- flagged).
+2. **Gate 3**: `trajectory.simulate_mission`'s ramjet_accel/mach_hold
+   phases read a lazy 0.1-Mach x 1500-m bilinear table over the memoized
+   FP query (~12-16 transient runs per unique engine geometry, shared
+   across scenarios in-process) instead of a per-step call -- the same
+   table-not-per-step pattern as the pulsejet static table. Blown-off
+   cells surface as `ramjet_fp_flame_unstable_during_ramjet_phase` in the
+   run status.
+
+**Model-fidelity change, and a design-relevant one.** ramjet-fp's campaign
+(sibling architecture.md #3-#8) found: (a) at the configs' ramjet
+`target_equivalence_ratio: 0.60` a fully-premixed flame holds at NO Mach --
+every FP-sourced RAMJET_MODE point at phi 0.60 is `blown_off` with
+negative (drag-only) thrust, so Gate 3 missions now fail in the ramjet
+phase for the honest reason that the engine as configured cannot burn;
+(b) near-stoich fueling is required, with a Mach- and altitude-dependent
+lean limit (phi_min 0.87 at M 0.4 SL, ~1.00 in the M 0.6-0.9 oscillation
+pinch); (c) cold relight has an altitude-dependent no-go hole (M 0.7-0.8
+at 1500 m widening to M 0.8-1.1 at 6000 m) while a continuously carried
+flame transits the band at <=~1000 m and survives climb at M >= 1.1 --
+i.e. the mission profile wants transonic acceleration LOW, then a lit
+supersonic climb to the 4500 m speed run; and (d) every lit point is a
+bounded chugging limit cycle (cycle-mean reported; amplitude flagged).
+The phi finding means the ramjet `target_equivalence_ratio` config value
+is now a live design decision with a physics-backed viability boundary
+(`ramjet_fp.minimum_stable_phi` is the queryable schedule); 0.60 was
+backed out of a fixed-1900K-exit-temperature assumption that the
+first-principles model does not support.
+
+**Verification.** 10 new bridge unit tests (spec round-trip against the
+live sibling RJ-1 reference, gutter/throat cap on candidate B, usability
+guard incl. blown-off-is-usable, dispatch prefer/fallback/crash/kill-switch
+paths) + 2 live end-to-end tests (Gate 2 point and Gate 3 table at fast
+fidelity); full legacy regression suite green with the kill-switch
+defaulted in conftest (native path byte-identical). `gate3_check.py` now
+reports its ramjet source and runs the FP table at full fidelity.
+
+## 2026-08-12 (later): phi is now an OUTPUT of the ramjet query (user directive)
+
+"Fly a ramjet of this size and output the fuel consumption and mixture
+ratio." The FP primary no longer reads `ramjet.target_equivalence_ratio`
+at all: `run_ramjet_fp_operating_query` calls the sibling's
+`ramjet_operating_point`, which bisects the leanest viable mixture at the
+queried (M, alt), adds a stability margin, caps at stoichiometric, and
+VERIFIES the selection with its own transient run (4-9 transients per
+point, memoized). `PropulsionMapPoint` gains
+`ramjet_required_equivalence_ratio` -- the fuel-control design value; the
+Gate 3 lazy table's corners are now operating points, so the mission
+solver flies the self-selected mixture schedule. Engine-out (no viable
+mixture at any phi in [0.5, 1.0]) reports fuel CUT to zero plus
+cold-throughflow drag -- previously a blown-off point still carried the
+configured phi's fuel flow, which double-charged a dead engine.
+The configured `target_equivalence_ratio` now feeds only the native 0D
+fallback path. The throttle-schedule design curves (required phi + fuel
+flow vs M at 0/900/1500/3000/4500 m) are generated by
+`ramjet-fp/scripts/throttle_schedule.py` (out/throttle_schedule_rj1.*).
+Verification: 10 bridge unit tests updated (phi-as-output mapping,
+engine-out fuel cut, dispatch paths), 2 live end-to-end tests (the M=1.1
+SL point self-selects phi in [0.90, 1.00] and lights -- positive thrust
+from a config whose 0.60 setting could never burn), full regression
+suite re-run.
+
+### Finding (2026-08-12): the shared nozzle throat sizes the flameholder, which decides whether the ramjet can burn at all
+
+Gate 3 on `shared_nozzle_candidate_b.yaml` with phi self-selected still
+fails in `ramjet_accel` -- but for a NEW and more specific reason than
+the phi=0.60 finding it replaces. Candidate B's ramjet is blown off at
+EVERY table corner (M 0.4-0.5 x 0-6000 m), while the same query on
+candidate A's geometry lights at all of them.
+
+Isolated by direct A/B (`run_ramjet_fp_operating_query`, M 0.5, 1500 m):
+
+| geometry | throat | gutter width | result |
+|---|---|---|---|
+| candidate A | 0.130 m | 25.0 mm | lights, phi 0.995, **+253 N** |
+| candidate B | 0.170 m | 9.7 mm (capped) | **ENGINE OUT**, -14 N |
+| candidate B + A's gutter | 0.170 m | 25.0 mm (margin violated) | lights, phi 1.000, **+412 N** |
+
+Mechanism: the bridge caps the annular V-gutter so the flow area past it
+keeps a 15% margin over the nozzle throat (a gutter that chokes ahead of
+the throat is a different engine). Candidate B's 0.170 m throat consumes
+so much of the 0.195 m combustor annulus that only a 9.7 mm gutter fits,
+and flameholder residence time scales with gutter width
+(L_rz = 4 w_g, V_rz proportional to A_g L_rz, entrainment to P_g L_rz),
+so tau_res collapses below the Damkohler fold. **The shared nozzle
+throat diameter is therefore a ramjet flame-stability variable, not just
+a nozzle-matching one** -- a coupling neither the native 0D ramjet model
+nor the pulsejet sizing that chose 0.170 m could express.
+
+Note the third row is a DIAGNOSTIC, not a fix: it deliberately violates
+the throat-margin guard. Real fixes are design choices -- smaller shared
+throat (candidate A's 0.130 m), a larger combustor diameter to free
+annulus area, a different flameholder concept (multiple small gutters,
+dump/step, or a piloted zone), or separate nozzles. The model can screen
+any of them cheaply; the trade against pulsejet nozzle matching is the
+vehicle team's call.
+
+### Consequence: the ramjet fuel budget was sized for a mixture the engine cannot use
+
+Gate 3 on `shared_nozzle_candidate_a.yaml` (0.130 m throat, 25 mm gutter
+-- the flameable geometry) with phi self-selected: the ramjet lights and
+accelerates, **peak Mach 0.652 nominal / 0.639 adverse** (vs 0.495 for
+candidate B, whose ramjet never burns), and the run now ends on
+`ramjet_fuel_exhausted_before_reaching_peak_mach` instead of
+non-positive thrust. The adverse scenario does not even raise a flame
+flag -- it accelerated cleanly until the tank ran dry.
+
+Arithmetic behind it: the configs budget 1.40 kg of ramjet fuel at
+`target_equivalence_ratio: 0.60` (f = 0.0409 kg fuel/kg air). The
+first-principles engine requires phi ~ 0.93-1.00 in this Mach band
+(f = 0.063-0.068), i.e. **~1.6x the fuel per kg of air**, so the 1.40 kg
+budget buys roughly what 0.85 kg would have bought at the assumed
+mixture -- about 20 s of burn at the 0.05-0.10 kg/s flows the throttle
+schedule reports for M 0.5-0.7 near sea level.
+
+Both Gate 3 candidates therefore still FAIL, and the stall-margin
+violation (-37.7% / -41.6%, unchanged and independent of propulsion)
+remains a separate blocker. But the ramjet failure mode is now a
+quantified fuel/mixture budgeting problem rather than an unmodelled
+combustion assumption. Open design levers, in the order the model says
+they matter: (1) shared throat 0.130 m (or otherwise free annulus area)
+so the flame can hold at all; (2) re-budget ramjet fuel for the required
+near-stoich mixture, or reduce the burn requirement by lighting later
+and higher; (3) a piloted/stratified flameholder, which is the one
+change that could restore genuinely lean overall fueling (A13 note --
+the model's uniform-premix assumption is what makes lean fueling
+impossible here, and it is deliberately conservative).
+
+### FINDING (2026-08-13, medium_model): the V2 pulsejet duct cannot sustain a cycle
+
+The frozen V2 duct, run through the first-principles pulsejet
+(pulsejet-fp, propane, sea level, M 0.15), **starts and then dies**: it
+pulses ~12 times with the valve opening strongly and T/T0 cycling 3-8.2,
+then decays monotonically to a flat dead state by ~150 ms -- 3.5 N and
+ZERO fuel flow, p/p0 settling to 0.98-1.03 (a +-2% acoustic ripple, i.e.
+passive ringing, not pulsing).
+
+**Control experiment (this is what makes it a finding rather than a bug).**
+The same chamber VOLUME (29.35 L), flown with the validated FP-1 shape
+scaled isometrically:
+
+    V2 proportions   (chamber 266 x 342, tail 151 x  680 mm):    3.5 N, dead
+    isometric        (chamber 233 x 449, tail 126 x 1855 mm):  172.8 N, p/p0 0.76-1.60
+    isometric N=300  (grid check)                             175.4 N  (1.5% -- converged)
+
+Same code, same scale, same valve-scaling rule, same fuel. Only the duct
+PROPORTIONS differ. And the failure is not the valve: easing it makes no
+difference (preload halved 7.4 N, port area doubled 13.7 N) and removing
+the preload entirely is WORSE (0.3 N), which independently reproduces
+pulsejet-fp's own finding that a soft valve is an acoustic absorber at
+the head antinode and destroys the resonator Q.
+
+Mechanism: with only a 680 mm tailpipe on a 266 mm chamber, the returning
+compression wave does not arrive in phase with heat release, so the
+Rayleigh coupling that sustains a pulsejet never establishes. The
+oscillation is damped rather than driven.
+
+**Why the selection missed it.** `simple_model/pulsejet_simple.py` sizes
+thrust from chamber volume, throat area and an assumed burn duration. It
+contains no acoustic tuning whatsoever, so it cannot distinguish a tuned
+duct from an untuned one -- it reports ~228 N for this geometry. During
+the V2 campaign, shortening the duct was therefore pure profit (lighter,
+better composite score, zero modeled penalty). This is exactly the
+"optimizer exploits missing physics" failure mode design_workflow.md
+warns about, and it selected a duct that cannot run.
+
+Note the closed form is not wrong about MAGNITUDE: the isometric engine
+of the same volume makes 172.8 N against its 228 N estimate, the same
+order. It is wrong about WHICH GEOMETRIES ACHIEVE IT.
+
+**Consequence for the vehicle.** A properly-proportioned pulsejet holding
+V2's 29.4 L needs ~2.7 m of duct; the entire V2 airframe is 1.87 m.
+Scaling down to fit gives ~1.6 L and order-25 N -- nowhere near enough to
+accelerate 22.68 kg to the M 0.45 ramjet lightoff. On this evidence there
+is no pulsejet that both fits this airframe and does its job, so the
+pulsejet -> ramjet handoff is currently unsupported.
+
+**Stated uncertainty.** pulsejet-fp is validated near FP-1's proportions
+(fineness ~11.5); V2's L/D ~ 5.0 is actually closer to a real Argus
+As-014 (~6.4). So "FP-1 proportions are the only workable ones" is NOT
+established -- the model has not been validated across shapes. What IS
+established is that V2's shape decays in this model while an equal-volume
+FP-1-shaped engine sustains. How far outside the workable envelope V2
+sits is less certain than the fact that it is outside it. Resolving that
+properly needs either a shape sweep in pulsejet-fp or real engine data.
+
+### DESIGN RULE (2026-08-13): a sustaining pulsejet needs tail/chamber-diameter >= ~4.5
+
+Established across 16 first-principles runs while checking whether the V3
+duct can sustain a cycle before modelling anything on it. **Both V2 and
+V3 are dead as designed:**
+
+    V2: chamber 266 mm, duct 1022, tail 562  -> tail/D 2.11 ->   3.0 N  (p/p0 0.98-1.03)
+    V3: chamber 214 mm, duct 1078, tail 570  -> tail/D 2.66 ->   0.8 N  (p/p0 0.99-1.01)
+
+Two hypotheses were tested and FALSIFIED before the right one was found:
+chamber LENGTH (every ratio from 342 down to 100 mm stays dead, including
+at FP-1's exact 4.13 tail/chamber-length ratio), and a chamber-diameter /
+cycle-period figure (V3 is dead at D/T 20.6 where a V2 variant sustained
+at 20.4).
+
+**The predictor that separates all 16 runs is TAIL LENGTH / CHAMBER
+DIAMETER**, with a sharp threshold between 3.50 and 4.50:
+
+    V3 tail  569 (t/D 2.66):    0.8 N   dead
+    V3 tail  749 (t/D 3.50):    0.8 N   dead
+    V3 tail  963 (t/D 4.50):  128.5 N   SUSTAINS   <- 214 mm extension
+    V3 tail 1177 (t/D 5.50):  161.5 N
+    V3 tail 1391 (t/D 6.50):  191.3 N
+
+Physically this is the right variable: the tailpipe gas column is the
+inertia that drives the cycle (the "liquid piston"), so it must be long
+relative to the chamber it breathes from -- not merely long in absolute
+terms, which is why lengthening the chamber never helped.
+
+**Scale-invariant consequence.** With chamber ~ 0.95 x body and the
+model's 3-diameter nose/tail allowance, tail/D >= 4.5 forces
+**vehicle slenderness >= ~9.2 AT ANY SIZE** -- both sides of the ratio
+scale with body diameter, which is why shrinking or growing the whole
+vehicle never fixed it. Confirmed by the sweep: fineness 8.58 dead, 9.53
+alive.
+
+**Minimum V3 fix:** tail 570 -> 963 mm, duct 1078 -> 1472 mm, body
+1754 -> 2147 mm (+22%), slenderness 7.79 -> 9.53, giving 128.5 N. Longer
+buys more (161 N at t/D 5.5, 191 N at 6.5) with diminishing returns.
+
+**Why both campaigns missed it.** `pulsejet_simple.py` sizes thrust from
+chamber volume, throat area and an assumed burn duration -- there is no
+acoustic tuning in it at all, so a short tail costs nothing in the score
+while saving length and mass. The optimizer took that trade in both V2
+and V3. The closed form is not wrong about MAGNITUDE (a sustaining
+engine of similar volume makes 128-190 N against its ~200 N estimates);
+it is wrong about WHICH GEOMETRIES ACHIEVE IT.
+
+**Uncertainty.** pulsejet-fp is validated near FP-1's proportions
+(fineness ~11.5), and every sustaining case found here is FP-1-like, so
+"only these shapes work" and "the model only knows these shapes" are not
+yet distinguishable. Real Argus-class engines ran at fineness ~6.4, which
+is circumstantial evidence against the model's envelope rather than
+against the designs. The threshold's EXISTENCE is solid; its exact
+location should be treated as model-class guidance until checked against
+engine data or a shape sweep with a validated alternative.

@@ -1,0 +1,54 @@
+[
+  {
+    "lightoff_mach": 0.42,
+    "min_traverse_g": 0.20923046617108468,
+    "min_powered_g": 0.04047970519133141,
+    "margin": 1.0876125908485572,
+    "fuel_kg": 1.751067280359706,
+    "peak_mach": 1.1003204841972696,
+    "cutoff": true,
+    "fp_runs": 67,
+    "events": [
+      "61.6s ramjet_lit_M0.420_alt350_phi0.863"
+    ]
+  },
+  {
+    "lightoff_mach": 0.4,
+    "min_traverse_g": 0.2439125060984459,
+    "min_powered_g": 0.04047970519133141,
+    "margin": 1.0862151610295483,
+    "fuel_kg": 1.7705597400869202,
+    "peak_mach": 1.100225613597883,
+    "cutoff": true,
+    "fp_runs": 66,
+    "events": [
+      "58.5s ramjet_lit_M0.400_alt424_phi0.855"
+    ]
+  },
+  {
+    "lightoff_mach": 0.38,
+    "min_traverse_g": 0.27671447067927185,
+    "min_powered_g": 0.04047970519133141,
+    "margin": 1.0934981931951129,
+    "fuel_kg": 1.7967348828625378,
+    "peak_mach": 1.100386092022595,
+    "cutoff": true,
+    "fp_runs": 68,
+    "events": [
+      "55.8s ramjet_lit_M0.380_alt485_phi0.855"
+    ]
+  },
+  {
+    "lightoff_mach": 0.33,
+    "min_traverse_g": 0.4690788174488671,
+    "min_powered_g": 0.04397347934787027,
+    "margin": 1.0980480177407352,
+    "fuel_kg": 1.8625357135790006,
+    "peak_mach": 1.1002703024673592,
+    "cutoff": true,
+    "fp_runs": 70,
+    "events": [
+      "47.6s ramjet_lit_M0.330_alt540_phi0.855"
+    ]
+  }
+]

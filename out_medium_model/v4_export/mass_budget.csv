@@ -1,0 +1,11 @@
+item,mass_kg,mass_lb,basis
+engine_duct_steel,5.597395,12.34014,steel duct: chamber + tailpipe wetted area x wall gauge x density
+airframe_skin_cfrp,4.952496,10.91838,body skin area x gauge x density x (1 + 0.35 overhead)
+wing,0.914992,2.01721,6.0 kg/m^2 x 0.15250 m^2 reference area
+avionics,2.0,4.40925,fixed allowance
+tank_hardware,0.960653,2.11788,fixed + fraction of fuel mass
+landing_hardware,0.5,1.10231,fixed allowance
+DRY_MASS,14.925535,32.90517,sum of the above
+fuel_loaded,3.071019,6.77044,wet - dry - payload margin
+payload_ballast_margin,4.683065,10.32439,what is left inside the 50 lb cap
+WET_MASS_AT_RELEASE,22.679619,50.0,"50 lb, fixed by requirement"

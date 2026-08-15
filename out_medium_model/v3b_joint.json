@@ -1,0 +1,98 @@
+[
+  {
+    "climb_deg": 12.0,
+    "lightoff_mach": 0.35,
+    "min_traverse_g": 0.32720598571050824,
+    "min_powered_g": 0.045406272850913296,
+    "margin": 1.0851978416196901,
+    "fuel_kg": 1.7525405820117783,
+    "peak_mach": 1.100250251341439,
+    "cutoff": true,
+    "tank_dry": false,
+    "fp_runs": 77,
+    "passes": true,
+    "events": [
+      "53.6s ramjet_lit_M0.350_alt433_phi0.855"
+    ]
+  },
+  {
+    "climb_deg": 10.0,
+    "lightoff_mach": 0.35,
+    "min_traverse_g": 0.31980120840058124,
+    "min_powered_g": 0.04890062355648681,
+    "margin": 1.1037909444052039,
+    "fuel_kg": 1.792267489153307,
+    "peak_mach": 1.100066285221004,
+    "cutoff": true,
+    "tank_dry": false,
+    "fp_runs": 76,
+    "passes": true,
+    "events": [
+      "51.7s ramjet_lit_M0.350_alt490_phi0.855"
+    ]
+  },
+  {
+    "climb_deg": 12.0,
+    "lightoff_mach": 0.4,
+    "min_traverse_g": 0.251827467283456,
+    "min_powered_g": 0.045406272850913296,
+    "margin": 1.0837521531659047,
+    "fuel_kg": 1.7680825812102163,
+    "peak_mach": 1.1000935449270675,
+    "cutoff": true,
+    "tank_dry": false,
+    "fp_runs": 68,
+    "passes": false,
+    "events": [
+      "59.6s ramjet_lit_M0.400_alt301_phi0.847"
+    ]
+  },
+  {
+    "climb_deg": 10.0,
+    "lightoff_mach": 0.3,
+    "min_traverse_g": 0.3758474235556132,
+    "min_powered_g": 0.04890062355648681,
+    "margin": 1.0723175559164784,
+    "fuel_kg": 1.843396875413031,
+    "peak_mach": 1.1001024720241035,
+    "cutoff": true,
+    "tank_dry": false,
+    "fp_runs": 78,
+    "passes": true,
+    "events": [
+      "46.9s ramjet_lit_M0.300_alt581_phi0.847"
+    ]
+  },
+  {
+    "climb_deg": 14.0,
+    "lightoff_mach": 0.3,
+    "min_traverse_g": 0.39188479567686973,
+    "min_powered_g": 0.01599785658481909,
+    "margin": 1.0284477449876814,
+    "fuel_kg": 1.8645174040046537,
+    "peak_mach": 1.1002991332841192,
+    "cutoff": true,
+    "tank_dry": false,
+    "fp_runs": 73,
+    "passes": true,
+    "events": [
+      "55.7s ramjet_lit_M0.300_alt466_phi0.839"
+    ]
+  },
+  {
+    "climb_deg": 12.0,
+    "lightoff_mach": 0.45,
+    "min_traverse_g": 0.010715165075998831,
+    "min_powered_g": 0.010715165075998831,
+    "margin": 1.021011884302984,
+    "fuel_kg": 1.8601264159928548,
+    "peak_mach": 1.1000458813526899,
+    "cutoff": true,
+    "tank_dry": false,
+    "fp_runs": 68,
+    "passes": false,
+    "events": [
+      "80.6s ramjet_lit_M0.450_alt171_phi0.863"
+    ]
+  }
+]

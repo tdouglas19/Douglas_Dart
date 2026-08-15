@@ -1,0 +1,63 @@
+{
+  "name": "V3c-235mm: V3a body enlarged to a 235 mm pulsejet chamber at t/D 4.00",
+  "frozen_utc_date": "2026-08-13",
+  "derived_from": "docs/v3a_medium_model/design.json",
+  "how_to_refly": "MEDIUM_MODEL_CD0_FRONTAL=0.1 PYTHONPATH=. then medium_model.design.load_frozen_design(this file) -> fly(d, drag_model='buildup', climb_dive=...).",
+  "vehicle_candidate": {
+    "diameter_m": 0.24736842105263154,
+    "throat_diameter_m": 0.13357894736842105,
+    "chamber_length_m": 0.38930734448088206,
+    "throat_length_m": 1.1370967741935483,
+    "wingspan_m": 0.8033145899324761,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane",
+    "initial_climb_angle_deg": 16.657202241425463,
+    "dive_angle_deg": 9.890058542648028,
+    "floor_altitude_m": 133.1432273621529
+  },
+  "wing_concept": {
+    "span_m": 0.532526287202532,
+    "aspect_ratio": 1.8595845502152375,
+    "taper_ratio": 0.5120481632935137,
+    "sweep_deg": 13.4220600837535,
+    "airfoil_key": "thin_cambered"
+  },
+  "constants_at_freeze": {
+    "CD0_FRONTAL": 0.1,
+    "MIN_POWERED_ACCELERATION_G": 0.25,
+    "MIN_POWERED_THRUST_MARGIN_FRACTION": 0.15,
+    "PULSEJET_MAX_THROAT_AREA_FRACTION": 0.3,
+    "RAMJET_MIN_LIGHTOFF_MACH": 0.45,
+    "V3_FLOOR_ALTITUDE_M": 121.92,
+    "OBJECTIVE_WEIGHT_TW": 1.0,
+    "OBJECTIVE_WEIGHT_DIAMETER": 0.5,
+    "OBJECTIVE_WEIGHT_LENGTH": 0.3,
+    "OBJECTIVE_WEIGHT_SPAN": 0.2
+  },
+  "optimizer_results": {
+    "dry_mass_kg": 16.15171930226012,
+    "mass_margin_kg": 3.8346425510449,
+    "loaded_fuel_kg_derived": 2.693256646694981,
+    "burn_limit_kg_derived": 2.423930982025483,
+    "provenance": "dry_mass_kg = medium_model.mass_model.vehicle_dry_mass(d=0.247368, L_ch=0.389307, d_th=0.133579, L_th=1.137097, S_wing=0.152499, fuel_loaded=2.693257) -- recomputed for THIS geometry, not copied. mass_margin_kg = 22.6796 - dry - loaded. Loaded fuel HELD at V3a's 2.693257 kg so the 2.423931 kg burn cap is identical on both vehicles and the screen compares engines, not tanks; it is not volume-limited (annulus holds 7.63 kg usable). No vehicle_score/wing_score: this design was not produced by the optimizer's objective."
+  },
+  "geometry_derivation": {
+    "chamber_diameter_m": 0.235,
+    "body_over_chamber": 1.0526315789473684,
+    "throat_over_body": 0.54,
+    "throat_area_fraction": 0.2916,
+    "tail_over_chamber_diameter": 4.0,
+    "cone_fraction_of_tail_section": 0.17333333333333334,
+    "cone_length_m": 0.19709677419354837,
+    "tailpipe_length_m": 0.94,
+    "duct_length_m": 1.5264041186744304,
+    "body_length_m": 2.2685093818323248,
+    "fineness_ratio": 9.170569841449824,
+    "frontal_area_m2": 0.04805940562174412,
+    "frontal_area_change_vs_v3a": 0.20638250344233144
+  },
+  "verified_mission": {
+    "note": "Nothing is verified yet. Engine-level evidence only: out_medium_model/v3b_cliff.json measured 149.2 N at M 0.15 / 60 m for this duct (FP pulsejet, n=200) vs V3a's 123.6 N, with the sustain cliff bracketed at t/D 3.60 dead / 3.70 alive. No FP flight has been run."
+  },
+  "change": "Chamber 214.0 -> 235.0 mm (body 225.217 -> 247.368 mm, +20.6% frontal area), throat 121.617 -> 133.579 mm at the same 0.2916 area fraction, tail/chamber-dia 4.80 -> 4.00 (throat_length_m 1.2423 -> 1.1371 m). Body 2307.3 -> 2268.5 mm, fineness 10.25 -> 9.17. Chamber length, wing, and the frozen climb-dive trajectory are unchanged. Dry mass recomputed from geometry (see optimizer_results.provenance); V3a's own block is stale -- it was copied from docs/v3_frozen without rerunning after the 553 mm tail extension."
+}

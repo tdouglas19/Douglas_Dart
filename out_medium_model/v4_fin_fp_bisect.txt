@@ -1,0 +1,12 @@
+V4 + tail sensitivity -- FIRST-PRINCIPLES engines, build-up drag
+fin: AR 1.2, t/c 0.04, sweep 35.0 deg, areal mass 6.0 kg/m^2
+wet mass is FIXED at 22.680 kg, so fin mass comes out of the 4.683 kg payload margin and does NOT change the flight
+
+  area 0.120 m^2 -> peak M 1.100  cutoff True   fuel 2.715/2.764  margin 3.963 kg
+  area 0.160 m^2 -> peak M 1.099  cutoff False  fuel 2.766/2.764  margin 3.723 kg
+
+ fin m^2  fin kg payload kg  peak M  cutoff  fuel kg  dry?  strip D  trav g      dM
+   0.120    0.72      3.963   1.100    True    2.715 False    380.4  -0.059  +0.000
+   0.160    0.96      3.723   1.099   False    2.766  True    514.1  -0.063  -0.001
+
+wrote C:\Users\dougl\Documents\GitHub\Douglas_Dart\out_medium_model\v4_fin_sensitivity_fp.json

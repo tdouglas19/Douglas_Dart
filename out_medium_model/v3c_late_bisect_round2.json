@@ -1,0 +1,130 @@
+[
+  {
+    "climb": 12.0,
+    "dive": 20.0,
+    "gate": 0.42,
+    "traverse": 0.3985272100342253,
+    "powered": 0.011528798537924404,
+    "margin": 1.0268831815542292,
+    "fuel_kg": 1.746734551253266,
+    "peak_mach": 1.1002533869529922,
+    "cutoff": true,
+    "fp_runs": 73,
+    "passes": true,
+    "events": [
+      "66.4s ramjet_lit_M0.420_alt312_phi0.863"
+    ]
+  },
+  {
+    "climb": 14.0,
+    "dive": 20.0,
+    "gate": 0.44,
+    "traverse": 0.38471877773496754,
+    "powered": 0.005979531705853208,
+    "margin": 1.0135159399167606,
+    "fuel_kg": 1.8314841260834225,
+    "peak_mach": 1.100505543758738,
+    "cutoff": true,
+    "fp_runs": 75,
+    "passes": true,
+    "events": [
+      "75.1s ramjet_lit_M0.440_alt138_phi0.855"
+    ]
+  },
+  {
+    "climb": 10.0,
+    "dive": 20.0,
+    "gate": 0.42,
+    "traverse": 0.3749250968121704,
+    "powered": 0.0073827836308432175,
+    "margin": 1.0170899427176947,
+    "fuel_kg": 1.7223260070954005,
+    "peak_mach": 1.1001560910616064,
+    "cutoff": true,
+    "fp_runs": 72,
+    "passes": true,
+    "events": [
+      "65.7s ramjet_lit_M0.420_alt393_phi0.863"
+    ]
+  },
+  {
+    "climb": 14.0,
+    "dive": 20.0,
+    "gate": 0.43,
+    "traverse": 0.39824138665975967,
+    "powered": 0.005979531705853208,
+    "margin": 1.0135159399167606,
+    "fuel_kg": 1.8120325620395143,
+    "peak_mach": 1.1001277081872283,
+    "cutoff": true,
+    "fp_runs": 74,
+    "passes": true,
+    "events": [
+      "74.2s ramjet_lit_M0.430_alt184_phi0.855"
+    ]
+  },
+  {
+    "climb": 12.0,
+    "dive": 18.0,
+    "gate": 0.42,
+    "traverse": 0.3702738078753306,
+    "powered": 0.021869619886477405,
+    "margin": 1.0510384551561358,
+    "fuel_kg": 1.7464167197872866,
+    "peak_mach": 1.1001561774589466,
+    "cutoff": true,
+    "fp_runs": 72,
+    "passes": true,
+    "events": [
+      "65.6s ramjet_lit_M0.420_alt296_phi0.863"
+    ]
+  },
+  {
+    "climb": 12.0,
+    "dive": 20.0,
+    "gate": 0.44,
+    "traverse": 0.368458096283153,
+    "powered": 0.011528798537924404,
+    "margin": 1.0268831815542292,
+    "fuel_kg": 1.7585936795802126,
+    "peak_mach": 1.1000898356955549,
+    "cutoff": true,
+    "fp_runs": 74,
+    "passes": true,
+    "events": [
+      "68.2s ramjet_lit_M0.440_alt220_phi0.855"
+    ]
+  },
+  {
+    "climb": 10.0,
+    "dive": 18.0,
+    "gate": 0.42,
+    "traverse": 0.3580125559999879,
+    "powered": 0.02402408242396759,
+    "margin": 1.0556841119519602,
+    "fuel_kg": 1.7560873780793065,
+    "peak_mach": 1.1000693245595612,
+    "cutoff": true,
+    "fp_runs": 62,
+    "passes": true,
+    "events": [
+      "64.6s ramjet_lit_M0.420_alt380_phi0.863"
+    ]
+  },
+  {
+    "climb": 12.0,
+    "dive": 20.0,
+    "gate": 0.43,
+    "traverse": 0.385517293514317,
+    "powered": 0.011528798537924404,
+    "margin": 1.0268831815542292,
+    "fuel_kg": 1.7572258554982418,
+    "peak_mach": 1.1001787407511183,
+    "cutoff": true,
+    "fp_runs": 73,
+    "passes": true,
+    "events": [
+      "67.3s ramjet_lit_M0.430_alt268_phi0.870"
+    ]
+  }
+]

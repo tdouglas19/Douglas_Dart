@@ -1,0 +1,5 @@
+surface,material,aspect_ratio,thickness_to_chord,attachment_factor,flutter_mach,required_mach,margin,verdict
+Wing_Panel,cfrp,0.6579,0.04,0.85,4.4749,1.1,4.0681,PASS
+Fin_1,cfrp,2.1,0.08,0.85,2.9209,1.1,2.6553,PASS
+Fin_2,cfrp,2.1,0.08,0.85,2.9209,1.1,2.6553,PASS
+ROLL,,,,,,,-1.600648,Cl_p; tau=0.052s; 119.4 deg/s at 0.25 deg misalign

@@ -1,0 +1,40 @@
+[
+ {
+  "cd0": 0.1,
+  "profile": "v3_climb_dive",
+  "vehicle": {
+   "feasible": true,
+   "max_thrust_to_weight": 6.577437997019874,
+   "score": 1.3507127377692438,
+   "dry_mass_kg": 12.925850247874886,
+   "mass_margin_kg": 7.189855263542382,
+   "fuel_loaded_kg": 2.5639129885827323,
+   "candidate": {
+    "diameter_m": 0.22521729709177246,
+    "throat_diameter_m": 0.12161734042955713,
+    "chamber_length_m": 0.38930734448088206,
+    "throat_length_m": 0.6891921330491245,
+    "wingspan_m": 0.8033145899324761,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane",
+    "initial_climb_angle_deg": 16.657202241425463,
+    "dive_angle_deg": 9.890058542648028,
+    "floor_altitude_m": 133.1432273621529
+   }
+  },
+  "wing": {
+   "feasible": true,
+   "max_thrust_to_weight": 6.610537114545433,
+   "score": 1.3179175424911405,
+   "min_powered_thrust_margin": 1.153951789852036,
+   "mass_margin_kg": 7.4167464526123235,
+   "wing": {
+    "span_m": 0.532526287202532,
+    "aspect_ratio": 1.8595845502152375,
+    "taper_ratio": 0.5120481632935137,
+    "sweep_deg": 13.4220600837535,
+    "airfoil_key": "thin_cambered"
+   }
+  }
+ }
+]

@@ -1,0 +1,37 @@
+[
+ {
+  "cd0": 0.1,
+  "accel_gate_g": 0.25,
+  "vehicle": {
+   "feasible": true,
+   "max_thrust_to_weight": 10.095636631109128,
+   "score": 1.8077402623040972,
+   "dry_mass_kg": 14.819774502019603,
+   "mass_margin_kg": 5.835223210449074,
+   "fuel_loaded_kg": 2.024620787531322,
+   "candidate": {
+    "diameter_m": 0.2798870135842943,
+    "throat_diameter_m": 0.15113898733551892,
+    "chamber_length_m": 0.3417673628514488,
+    "throat_length_m": 0.6798077564160785,
+    "wingspan_m": 0.8126242801268353,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane"
+   }
+  },
+  "wing": {
+   "feasible": true,
+   "max_thrust_to_weight": 10.078708651535168,
+   "score": 1.784834359317316,
+   "min_powered_thrust_margin": 1.3558420112328369,
+   "mass_margin_kg": 5.848996176228489,
+   "wing": {
+    "span_m": 0.6535259924064454,
+    "aspect_ratio": 1.9640479608874135,
+    "taper_ratio": 0.782376087935199,
+    "sweep_deg": 9.239978166031012,
+    "airfoil_key": "flat_plate"
+   }
+  }
+ }
+]

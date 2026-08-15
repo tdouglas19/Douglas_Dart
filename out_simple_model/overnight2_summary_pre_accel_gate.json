@@ -1,0 +1,106 @@
+[
+  {
+    "cd0": 0.25,
+    "vehicle": {
+      "feasible": false,
+      "error": "No feasible candidate found in 60000 random draws -- no sampled geometry both reached motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or increase n_random."
+    },
+    "vehicle_wall_s": 637
+  },
+  {
+    "cd0": 0.2,
+    "vehicle": {
+      "feasible": false,
+      "error": "No feasible candidate found in 60000 random draws -- no sampled geometry both reached motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or increase n_random."
+    },
+    "vehicle_wall_s": 646
+  },
+  {
+    "cd0": 0.175,
+    "vehicle": {
+      "feasible": false,
+      "error": "No feasible candidate found in 60000 random draws -- no sampled geometry both reached motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or increase n_random."
+    },
+    "vehicle_wall_s": 657
+  },
+  {
+    "cd0": 0.15,
+    "vehicle": {
+      "feasible": false,
+      "error": "No feasible candidate found in 60000 random draws -- no sampled geometry both reached motor cutoff and completed a safe flare-to-stall-speed landing. Widen the search bounds or increase n_random."
+    },
+    "vehicle_wall_s": 651
+  },
+  {
+    "cd0": 0.125,
+    "vehicle": {
+      "feasible": true,
+      "max_thrust_to_weight": 10.506794163739277,
+      "score": 1.8873929513294354,
+      "dry_mass_kg": 16.95078155085035,
+      "mass_margin_kg": 3.3267201669814708,
+      "fuel_loaded_kg": 2.402116782168178,
+      "candidate": {
+        "diameter_m": 0.2832625311078345,
+        "throat_diameter_m": 0.15296176679823065,
+        "chamber_length_m": 0.3816775617538864,
+        "throat_length_m": 0.913651086293895,
+        "wingspan_m": 0.8039652560842209,
+        "climb_angle_deg": 1.0,
+        "fuel_key": "gasoline"
+      }
+    },
+    "vehicle_wall_s": 659,
+    "wing": {
+      "feasible": true,
+      "max_thrust_to_weight": 10.510102799601535,
+      "score": 1.847586480507629,
+      "min_powered_thrust_margin": 1.15530578794037,
+      "mass_margin_kg": 3.7415130081428987,
+      "wing": {
+        "span_m": 0.502935248023979,
+        "aspect_ratio": 1.7292881853781474,
+        "taper_ratio": 0.6947199791204374,
+        "sweep_deg": 7.341940371199227,
+        "airfoil_key": "thin_cambered"
+      }
+    },
+    "wing_wall_s": 509
+  },
+  {
+    "cd0": 0.1,
+    "vehicle": {
+      "feasible": true,
+      "max_thrust_to_weight": 6.903442311810827,
+      "score": 1.4118485414476496,
+      "dry_mass_kg": 13.685444670882383,
+      "mass_margin_kg": 6.620765427575792,
+      "fuel_loaded_kg": 2.373408401541825,
+      "candidate": {
+        "diameter_m": 0.23370640074309698,
+        "throat_diameter_m": 0.12469632402140302,
+        "chamber_length_m": 0.3618987624301182,
+        "throat_length_m": 0.8113651911158316,
+        "wingspan_m": 0.8030074775128235,
+        "climb_angle_deg": 1.0,
+        "fuel_key": "propane"
+      }
+    },
+    "vehicle_wall_s": 656,
+    "wing": {
+      "feasible": true,
+      "max_thrust_to_weight": 6.8882619739590165,
+      "score": 1.3852410656733245,
+      "min_powered_thrust_margin": 1.2115384724204354,
+      "mass_margin_kg": 7.174372022521397,
+      "wing": {
+        "span_m": 0.6148366625942419,
+        "aspect_ratio": 2.6934082141034885,
+        "taper_ratio": 0.6202380076801469,
+        "sweep_deg": 5.900217413842163,
+        "airfoil_key": "thin_cambered"
+      }
+    },
+    "wing_wall_s": 398
+  }
+]

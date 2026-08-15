@@ -1,0 +1,122 @@
+[
+ {
+  "design": "V3a",
+  "mach": 0.35,
+  "alt_m": 300.0,
+  "fp_thrust_n": 114.92381457950039,
+  "hz": 85.29526146727167,
+  "mdot_fuel": 0.007239636348357804,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "V3a",
+  "mach": 0.45,
+  "alt_m": 300.0,
+  "fp_thrust_n": 111.5509567121709,
+  "hz": 85.59682216433926,
+  "mdot_fuel": 0.007201787304057702,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "V3a",
+  "mach": 0.54,
+  "alt_m": 300.0,
+  "fp_thrust_n": 108.28272324736218,
+  "hz": 85.91551364602027,
+  "mdot_fuel": 0.007159983041246399,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "V3a",
+  "mach": 0.6,
+  "alt_m": 300.0,
+  "fp_thrust_n": 106.0264959709544,
+  "hz": 86.14797375669104,
+  "mdot_fuel": 0.007126827262399932,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "V3a",
+  "mach": 0.4,
+  "alt_m": 900.0,
+  "fp_thrust_n": 94.0715936328071,
+  "hz": 85.86275213451088,
+  "mdot_fuel": 0.005818305780981316,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "V3a",
+  "mach": 0.54,
+  "alt_m": 900.0,
+  "fp_thrust_n": 89.42334711165472,
+  "hz": 86.29540116581848,
+  "mdot_fuel": 0.005739206466926943,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "235mm",
+  "mach": 0.35,
+  "alt_m": 300.0,
+  "fp_thrust_n": 0.9545646456516168,
+  "hz": 76.05897257564715,
+  "mdot_fuel": 0.0,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "235mm",
+  "mach": 0.45,
+  "alt_m": 300.0,
+  "fp_thrust_n": 0.9568988810823906,
+  "hz": 77.01838734422579,
+  "mdot_fuel": 0.0,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "235mm",
+  "mach": 0.54,
+  "alt_m": 300.0,
+  "fp_thrust_n": 1.0951539460655761,
+  "hz": 77.53551597882078,
+  "mdot_fuel": 0.0,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "235mm",
+  "mach": 0.6,
+  "alt_m": 300.0,
+  "fp_thrust_n": 1.0685033916125326,
+  "hz": 78.19726092624407,
+  "mdot_fuel": 0.0,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "235mm",
+  "mach": 0.4,
+  "alt_m": 900.0,
+  "fp_thrust_n": 0.8844463134777132,
+  "hz": 76.57405232703866,
+  "mdot_fuel": 0.0,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ },
+ {
+  "design": "235mm",
+  "mach": 0.54,
+  "alt_m": 900.0,
+  "fp_thrust_n": 1.3583107273981967,
+  "hz": 77.51488156507402,
+  "mdot_fuel": 0.0,
+  "status": "converged",
+  "cf_error": "AttributeError(\"'PulsejetResult' object has no attribute 'thrust_n'\")"
+ }
+]

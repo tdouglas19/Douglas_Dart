@@ -1,0 +1,104 @@
+{
+  "design_limits_stated_in_the_trajectory": {
+    "pullout_nominal_g": 3.0,
+    "pullout_limiter_g": 6.0,
+    "return_loop_g": 6.0,
+    "gate_used_in_the_reports_g": 4.0
+  },
+  "WARNING_worst_load_is_not_the_pullout": "The unpowered return half-loop pulls a fixed 6 g by construction and total |n| there reaches 9.14 g -- higher than any powered phase. peak_load_n_total in the mission summary tracks POWERED steps ONLY (deliberately: the loop is a fixed constant of the landing profile, not something the trajectory search controls). For STRUCTURE, the loop is the sizing case. Read loads_envelope.csv, not peak_load_n_total.",
+  "peak_load_n_total_powered_g": 3.648,
+  "peak_load_n_yaw_powered_g": 3.5817,
+  "peak_load_n_roll_powered_g": 1.8568,
+  "peak_load_phase_powered": "v4_pullout",
+  "peak_load_n_total_whole_flight_g": 9.1361,
+  "peak_dynamic_pressure_pa": 83849.7,
+  "peak_axial_force_n": 1388.8,
+  "peak_axial_force_lbf": 312.21,
+  "peak_normal_force_n": 1209.4,
+  "peak_normal_force_lbf": 271.89,
+  "per_phase": [
+    {
+      "phase": "loop",
+      "powered": false,
+      "peak_load_n_total_g": 9.1361,
+      "mach_start": 1.1,
+      "mach_end": 0.3522,
+      "altitude_start_m": 196.2029,
+      "altitude_end_m": 1482.2596,
+      "duration_s": 10.82
+    },
+    {
+      "phase": "v4_pullout",
+      "powered": true,
+      "peak_load_n_total_g": 3.648,
+      "mach_start": 0.4881,
+      "mach_end": 0.5421,
+      "altitude_start_m": 163.4763,
+      "altitude_end_m": 121.9274,
+      "duration_s": 2.12
+    },
+    {
+      "phase": "drag_strip",
+      "powered": true,
+      "peak_load_n_total_g": 2.1089,
+      "mach_start": 0.5426,
+      "mach_end": 1.0996,
+      "altitude_start_m": 121.9851,
+      "altitude_end_m": 196.0726,
+      "duration_s": 15.2
+    },
+    {
+      "phase": "return",
+      "powered": false,
+      "peak_load_n_total_g": 1.3467,
+      "mach_start": 0.3512,
+      "mach_end": 0.0662,
+      "altitude_start_m": 1482.2802,
+      "altitude_end_m": 585.0766,
+      "duration_s": 80.42
+    },
+    {
+      "phase": "v3_climb",
+      "powered": true,
+      "peak_load_n_total_g": 1.1971,
+      "mach_start": 0.1175,
+      "mach_end": 0.2844,
+      "altitude_start_m": 0.0,
+      "altitude_end_m": 1099.9201,
+      "duration_s": 106.7
+    },
+    {
+      "phase": "v3_dive",
+      "powered": true,
+      "peak_load_n_total_g": 1.0152,
+      "mach_start": 0.3134,
+      "mach_end": 0.488,
+      "altitude_start_m": 1073.1975,
+      "altitude_end_m": 164.2784,
+      "duration_s": 27.4
+    },
+    {
+      "phase": "v4_pushover",
+      "powered": true,
+      "peak_load_n_total_g": 0.2196,
+      "mach_start": 0.2844,
+      "mach_end": 0.3132,
+      "altitude_start_m": 1100.1199,
+      "altitude_end_m": 1073.7063,
+      "duration_s": 3.56
+    }
+  ],
+  "reference_weight": {
+    "wet_mass_kg": 22.6796185,
+    "wet_weight_n": 222.41108076302498,
+    "wet_weight_lbf": 50.0,
+    "note": "load factor x wet weight = force, for a mass that only drops ~2 kg over the powered flight"
+  },
+  "not_modelled": [
+    "distributed aerodynamic loads (this is a point-mass model -- there is no spanwise or longitudinal load distribution)",
+    "centre of gravity, moments of inertia, static margin",
+    "any structural response: no stress, no buckling, no flutter, no margins of safety",
+    "landing/ground loads beyond a touchdown speed",
+    "thermal loads from the duct (the chamber IS the body skin here)"
+  ]
+}

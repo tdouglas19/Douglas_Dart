@@ -1,0 +1,88 @@
+[
+  {
+    "climb": 12.0,
+    "dive": 30.0,
+    "gate": 0.5,
+    "traverse": -0.045897563107098985,
+    "powered": -0.045897563107098985,
+    "margin": 0.9163115929227325,
+    "fuel_kg": 2.423998145897868,
+    "peak_mach": 0.469559041532471,
+    "cutoff": false,
+    "fp_runs": 30,
+    "passes": false,
+    "events": []
+  },
+  {
+    "climb": 12.0,
+    "dive": 28.0,
+    "gate": 0.5,
+    "traverse": -0.04183295537207493,
+    "powered": -0.04183295537207493,
+    "margin": 0.9197680175059502,
+    "fuel_kg": 2.4239873439395647,
+    "peak_mach": 0.46769204922926216,
+    "cutoff": false,
+    "fp_runs": 30,
+    "passes": false,
+    "events": []
+  },
+  {
+    "climb": 12.0,
+    "dive": 30.0,
+    "gate": 0.49,
+    "traverse": -0.045897563107098985,
+    "powered": -0.045897563107098985,
+    "margin": 0.9163115929227325,
+    "fuel_kg": 2.423998145897868,
+    "peak_mach": 0.469559041532471,
+    "cutoff": false,
+    "fp_runs": 30,
+    "passes": false,
+    "events": []
+  },
+  {
+    "climb": 12.0,
+    "dive": 25.0,
+    "gate": 0.48,
+    "traverse": -0.041184830400284915,
+    "powered": -0.041184830400284915,
+    "margin": 0.909664393767627,
+    "fuel_kg": 2.4239710780136074,
+    "peak_mach": 0.464481445798664,
+    "cutoff": false,
+    "fp_runs": 28,
+    "passes": false,
+    "events": []
+  },
+  {
+    "climb": 12.0,
+    "dive": 22.0,
+    "gate": 0.47,
+    "traverse": -0.03537531299152153,
+    "powered": -0.03537531299152153,
+    "margin": 0.9235725119536332,
+    "fuel_kg": 2.4239488735825585,
+    "peak_mach": 0.4612420386608721,
+    "cutoff": false,
+    "fp_runs": 28,
+    "passes": false,
+    "events": []
+  },
+  {
+    "climb": 12.0,
+    "dive": 25.0,
+    "gate": 0.46,
+    "traverse": 0.09234240109759746,
+    "powered": 0.011528798537924404,
+    "margin": 0.9818510699935192,
+    "fuel_kg": 2.025863597307745,
+    "peak_mach": 1.1000508629216987,
+    "cutoff": true,
+    "fp_runs": 72,
+    "passes": false,
+    "events": [
+      "71.2s ramjet_lit_M0.460_alt147_phi0.863"
+    ]
+  }
+]

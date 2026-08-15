@@ -1,0 +1,53 @@
+{
+  "name": "V3 climb-dive design",
+  "frozen_utc_date": "2026-08-13",
+  "git_sha": "df6b5d9e3d977d17821bf49ccaf564950d001aa4",
+  "how_to_refly": "SIMPLE_MODEL_CD0_FRONTAL=<constants_at_freeze.CD0_FRONTAL>, then optimize.Candidate(**vehicle_candidate) -> .to_climb_dive() and flight_sim.run_flight(..., return_to_launch=True, climb_dive=...). Locked by tests/test_v3_frozen.py via scripts/fly_frozen_v3.py.",
+  "vehicle_candidate": {
+    "diameter_m": 0.22521729709177246,
+    "throat_diameter_m": 0.12161734042955713,
+    "chamber_length_m": 0.38930734448088206,
+    "throat_length_m": 0.6891921330491245,
+    "wingspan_m": 0.8033145899324761,
+    "climb_angle_deg": 1.0,
+    "fuel_key": "propane",
+    "initial_climb_angle_deg": 16.657202241425463,
+    "dive_angle_deg": 9.890058542648028,
+    "floor_altitude_m": 133.1432273621529
+  },
+  "wing_concept": {
+    "span_m": 0.532526287202532,
+    "aspect_ratio": 1.8595845502152375,
+    "taper_ratio": 0.5120481632935137,
+    "sweep_deg": 13.4220600837535,
+    "airfoil_key": "thin_cambered"
+  },
+  "constants_at_freeze": {
+    "CD0_FRONTAL": 0.1,
+    "MIN_POWERED_ACCELERATION_G": 0.25,
+    "MIN_POWERED_THRUST_MARGIN_FRACTION": 0.15,
+    "PULSEJET_MAX_THROAT_AREA_FRACTION": 0.3,
+    "RAMJET_MIN_LIGHTOFF_MACH": 0.45,
+    "V3_FLOOR_ALTITUDE_M": 121.92,
+    "OBJECTIVE_WEIGHT_TW": 1.0,
+    "OBJECTIVE_WEIGHT_DIAMETER": 0.5,
+    "OBJECTIVE_WEIGHT_LENGTH": 0.3,
+    "OBJECTIVE_WEIGHT_SPAN": 0.2
+  },
+  "optimizer_results": {
+    "vehicle_score": 1.3507127377692438,
+    "wing_score": 1.3179175424911405,
+    "dry_mass_kg": 12.569615400692696,
+    "mass_margin_kg": 7.4167464526123235
+  },
+  "verified_mission": {
+    "peak_thrust_to_weight": 6.6105,
+    "min_traverse_accel_g": 0.261,
+    "min_traverse_accel_mach": 0.45,
+    "min_powered_accel_g": 0.0739,
+    "min_powered_thrust_margin": 1.154,
+    "climb_dive_top_altitude_m": 589.204,
+    "rule_violated": false,
+    "lands_from_launch_m": 2.0
+  }
+}

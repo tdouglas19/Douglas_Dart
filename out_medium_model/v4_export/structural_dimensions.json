@@ -1,0 +1,283 @@
+{
+  "provenance": {
+    "source": "docs/v4_medium_frozen/design.json",
+    "git_sha": "d7b0670c8c39b05c40feed913a652614adf33134",
+    "units": "SI throughout (m, kg, N, s, Pa, deg). Imperial companions are given where a shop drawing wants them."
+  },
+  "body": {
+    "diameter_m": 0.214,
+    "radius_m": 0.107,
+    "diameter_in": 8.425196850393702,
+    "overall_length_m": 2.273607344480882,
+    "overall_length_in": 89.51210017641269,
+    "fineness_ratio": 10.624333385424684,
+    "frontal_area_m2": 0.03596809429094954,
+    "nose_fairing_length_m": 0.428,
+    "nose_fairing_length_diameters": 2.0,
+    "constant_diameter_barrel_length_m": 1.6316073444808823,
+    "boattail_length_m": 0.214,
+    "boattail_length_diameters": 1.0,
+    "boattail_exit_diameter_m": 0.15384852274737645,
+    "boattail_base_outer_diameter_m": 0.15384852274737645,
+    "boattail_half_angle_deg": 8.0,
+    "nozzle_flow_diameter_m": 0.11563805016503446,
+    "annular_base_area_engine_on_m2": 0.008087409276720844,
+    "annular_base_area_engine_off_m2": 0.018589878117925798,
+    "aft_body_note": "The aft end closes from the full body diameter to 153.85 mm over the 214 mm boattail -- exactly 8.0 deg, which is the attached-flow limit the drag model assumes and applies. It does NOT close onto the nozzle: an annulus of 80.87 cm2 (engine on) remains as base area between the boattail base and the nozzle flow diameter, and base drag on it is a real term in the flown build-up.",
+    "wetted_area_m2_cylinder_approx": 1.5285480999417527
+  },
+  "stations_from_nose_tip_m": {
+    "nose_tip": 0.0,
+    "nose_fairing_end__barrel_start": 0.428,
+    "combustion_chamber_start": 0.428,
+    "combustion_chamber_end__tailpipe_start": 0.817307344480882,
+    "tailpipe_end": 2.059607344480882,
+    "boattail_start": 2.0596073444808822,
+    "nozzle_exit__body_end": 2.273607344480882
+  },
+  "internal_flowpath": {
+    "chamber_diameter_m": 0.214,
+    "chamber_length_m": 0.38930734448088206,
+    "chamber_volume_m3": 0.01400264327444754,
+    "tailpipe_diameter_m": 0.11563805016503446,
+    "tailpipe_length_m": 1.2423,
+    "nozzle_exit_diameter_m": 0.11563805016503446,
+    "throat_to_body_area_fraction": 0.2919940310501141,
+    "operability_cap_on_that_fraction": 0.3,
+    "note": "The chamber IS the body diameter -- V4 deleted the annular gap (user directive). The mass model treats the tailpipe as a CONSTANT-diameter pipe at the nozzle diameter, i.e. the chamber-to-tailpipe cone has zero length in the model. Give it a real length in CAD; the model does not tell you what it should be."
+  },
+  "wing": {
+    "span_m": 0.532526287202532,
+    "aspect_ratio": 1.8595845502152375,
+    "taper_ratio_tip_over_root": 0.5120481632935137,
+    "reference_area_m2": 0.1524987108162897,
+    "root_chord_m": 0.37878213897622365,
+    "tip_chord_m": 0.19395469855116376,
+    "mean_aerodynamic_chord_m": 0.2963093376685434,
+    "mac_spanwise_station_from_centreline_m": 0.11881064460603848,
+    "leading_edge_sweep_deg": 13.4220600837535,
+    "quarter_chord_sweep_deg": 3.724824297852366,
+    "airfoil_key": "thin_cambered",
+    "thickness_to_chord": 0.04,
+    "root_thickness_m": 0.015151285559048946,
+    "cl_max_2d": 1.2,
+    "cl_max_sweep_effective": 1.1353430154730477,
+    "oswald_efficiency": 0.8469013663472374,
+    "note": "Planform only. The model has NO stability, CG or moment-arm terms, so the wing's LONGITUDINAL POSITION on the body is not an output of this repo -- it is yours to choose. Likewise dihedral, incidence and twist, all of which are zero here because they are unmodelled, not because they were chosen."
+  },
+  "tail_surfaces": {
+    "note": "NOT MODELLED. There are no tail/fin surfaces anywhere in this repo -- no area, no volume coefficient, no drag term. A real vehicle needs them and their mass and drag are absent from every number here."
+  },
+  "materials_and_gauges": {
+    "duct_material": "steel",
+    "duct_wall_thickness_m": 0.001,
+    "duct_wall_thickness_mm": 1.0,
+    "duct_wall_driver": "max(hoop stress at pulsejet peak pressure, minimum manufacturable gauge)",
+    "steel_density_kg_m3": 7850.0,
+    "steel_allowable_stress_pa": 125000000.0,
+    "steel_min_gauge_m": 0.001,
+    "pulsejet_peak_pressure_ratio": 2.16,
+    "pulsejet_peak_gauge_pressure_pa": 117537.00000000001,
+    "skin_material": "CFRP",
+    "skin_gauge_m": 0.0015,
+    "cfrp_density_kg_m3": 1600.0,
+    "structural_overhead_fraction": 0.35,
+    "wing_areal_mass_kg_m2": 6.0
+  },
+  "fuel_system": {
+    "fuel": "Propane representative",
+    "fuel_density_kg_m3": 493.0,
+    "tank_geometry": "annulus between the tailpipe OD and the body ID over the tailpipe length",
+    "annulus_volume_m3": 0.0316359464962177,
+    "usable_volume_fraction_of_annulus": 0.5,
+    "tank_capacity_kg": 7.798260811317662,
+    "fuel_loaded_kg": 3.071018500000001,
+    "reserve_margin": 0.25,
+    "burn_limit_kg": 2.763916650000001,
+    "burn_limit_rule": "90% of LOADED fuel; the last 10% is trapped/unusable",
+    "fuel_actually_burned_kg": 2.1248,
+    "annulus_volume_note": "This is the MODEL's tank volume: flow diameter to body diameter over the tailpipe length, ignoring wall thickness and treating the chamber-to-tailpipe cone as zero-length. The 2D propulsion section measured the as-drawn annulus at 28.036 L / 6.911 kg capacity, 11.4% lower. That correction does not threaten the mission -- 6.911 kg still covers the 3.071 kg loaded 2.25x over -- so the model's number is left as flown and the corrected one is stated here.",
+    "as_drawn_annulus_volume_m3": 0.028036,
+    "as_drawn_tank_capacity_kg": 6.911
+  },
+  "inlet": {
+    "architecture": null,
+    "architecture_note": "NOT MODELLED. The repo has no inlet geometry: no capture area, no lip station, no diffuser, no centrebody. What it does have is the flow the engine consumed, below.",
+    "required_air_mass_flow_kg_s_max": 1.75437,
+    "at_mach": 1.0916,
+    "at_altitude_m": 194.0,
+    "implied_capture_area_m2": 0.0039365,
+    "implied_capture_diameter_m": 0.07079623907984073,
+    "capture_area_as_fraction_of_throat_area": 0.3748166321194592,
+    "derivation": "mdot_air = mdot_fuel * (A/F)_stoich / phi, using the FP ramjet's own phi and fuel flow and propane's (A/F)_stoich = 15.7. Full stream-tube capture assumed for the area (no spillage, no strut blockage), so the area is a FLOOR.",
+    "operating_points": [
+      {
+        "mach": 0.4881,
+        "altitude_m": 163.5,
+        "required_air_mass_flow_kg_s": 0.75236,
+        "implied_capture_area_m2": 0.0037634
+      },
+      {
+        "mach": 0.5361,
+        "altitude_m": 121.8,
+        "required_air_mass_flow_kg_s": 0.75236,
+        "implied_capture_area_m2": 0.0034111
+      },
+      {
+        "mach": 0.5382,
+        "altitude_m": 121.7,
+        "required_air_mass_flow_kg_s": 0.84585,
+        "implied_capture_area_m2": 0.0038195
+      },
+      {
+        "mach": 0.5862,
+        "altitude_m": 127.1,
+        "required_air_mass_flow_kg_s": 0.84585,
+        "implied_capture_area_m2": 0.0035091
+      },
+      {
+        "mach": 0.5884,
+        "altitude_m": 127.4,
+        "required_air_mass_flow_kg_s": 0.92456,
+        "implied_capture_area_m2": 0.0038216
+      },
+      {
+        "mach": 0.6363,
+        "altitude_m": 132.8,
+        "required_air_mass_flow_kg_s": 0.92456,
+        "implied_capture_area_m2": 0.0035355
+      },
+      {
+        "mach": 0.6387,
+        "altitude_m": 133.1,
+        "required_air_mass_flow_kg_s": 0.99714,
+        "implied_capture_area_m2": 0.0037989
+      },
+      {
+        "mach": 0.6869,
+        "altitude_m": 138.5,
+        "required_air_mass_flow_kg_s": 0.99714,
+        "implied_capture_area_m2": 0.0035345
+      },
+      {
+        "mach": 0.6889,
+        "altitude_m": 138.7,
+        "required_air_mass_flow_kg_s": 1.07258,
+        "implied_capture_area_m2": 0.0037911
+      },
+      {
+        "mach": 0.7373,
+        "altitude_m": 144.1,
+        "required_air_mass_flow_kg_s": 1.07258,
+        "implied_capture_area_m2": 0.0035441
+      },
+      {
+        "mach": 0.7395,
+        "altitude_m": 144.4,
+        "required_air_mass_flow_kg_s": 1.14981,
+        "implied_capture_area_m2": 0.0037884
+      },
+      {
+        "mach": 0.7874,
+        "altitude_m": 149.5,
+        "required_air_mass_flow_kg_s": 1.14981,
+        "implied_capture_area_m2": 0.0035598
+      },
+      {
+        "mach": 0.7898,
+        "altitude_m": 149.7,
+        "required_air_mass_flow_kg_s": 1.24502,
+        "implied_capture_area_m2": 0.0038429
+      },
+      {
+        "mach": 0.8377,
+        "altitude_m": 154.8,
+        "required_air_mass_flow_kg_s": 1.24502,
+        "implied_capture_area_m2": 0.0036253
+      },
+      {
+        "mach": 0.8402,
+        "altitude_m": 155.1,
+        "required_air_mass_flow_kg_s": 1.30863,
+        "implied_capture_area_m2": 0.0037992
+      },
+      {
+        "mach": 0.8881,
+        "altitude_m": 160.2,
+        "required_air_mass_flow_kg_s": 1.30863,
+        "implied_capture_area_m2": 0.0035961
+      },
+      {
+        "mach": 0.8907,
+        "altitude_m": 160.5,
+        "required_air_mass_flow_kg_s": 1.38403,
+        "implied_capture_area_m2": 0.0037923
+      },
+      {
+        "mach": 0.9384,
+        "altitude_m": 165.9,
+        "required_air_mass_flow_kg_s": 1.38403,
+        "implied_capture_area_m2": 0.0036016
+      },
+      {
+        "mach": 0.9409,
+        "altitude_m": 166.3,
+        "required_air_mass_flow_kg_s": 1.45061,
+        "implied_capture_area_m2": 0.003765
+      },
+      {
+        "mach": 0.9891,
+        "altitude_m": 172.5,
+        "required_air_mass_flow_kg_s": 1.45061,
+        "implied_capture_area_m2": 0.003584
+      },
+      {
+        "mach": 0.9913,
+        "altitude_m": 172.8,
+        "required_air_mass_flow_kg_s": 1.54833,
+        "implied_capture_area_m2": 0.0038171
+      },
+      {
+        "mach": 1.0395,
+        "altitude_m": 180.5,
+        "required_air_mass_flow_kg_s": 1.54833,
+        "implied_capture_area_m2": 0.0036433
+      },
+      {
+        "mach": 1.0416,
+        "altitude_m": 181.0,
+        "required_air_mass_flow_kg_s": 1.65255,
+        "implied_capture_area_m2": 0.0038807
+      },
+      {
+        "mach": 1.0896,
+        "altitude_m": 193.0,
+        "required_air_mass_flow_kg_s": 1.65255,
+        "implied_capture_area_m2": 0.0037147
+      },
+      {
+        "mach": 1.0916,
+        "altitude_m": 194.0,
+        "required_air_mass_flow_kg_s": 1.75437,
+        "implied_capture_area_m2": 0.0039365
+      }
+    ]
+  },
+  "design_point": {
+    "release_velocity_m_s": 40.0,
+    "ramjet_light_mach": 0.4881,
+    "ramjet_light_altitude_m": 163.4763,
+    "top_altitude_m": 1100.0,
+    "cutoff_mach": 1.1,
+    "peak_mach_flown": 1.1,
+    "combustor_total_pressure_ratio": null,
+    "combustor_total_pressure_note": "NOT EXPORTED BY THE PROPULSION MODEL. FpPropulsion's trace records thrust, fuel flow and equivalence ratio per re-convergence; combustor p0 is internal to ramjet-fp and is not surfaced. Getting it means adding it to the trace and re-flying (~35 min), which is doable on request."
+  },
+  "payload_and_avionics": {
+    "avionics_mass_kg": 2.0,
+    "payload_ballast_margin_kg": 4.683064531232887,
+    "avionics_volume_m3": null,
+    "avionics_longitudinal_constraint": null,
+    "note": "The model carries avionics as a FIXED MASS ALLOWANCE and nothing else -- no volume, no station, no shape. There is no repo answer to give; both are free design variables. Same for the payload/ballast margin, which is by definition the slack left in the mass budget and can be placed anywhere."
+  }
+}

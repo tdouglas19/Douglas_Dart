@@ -1,0 +1,5 @@
+[wing search] 2000/8256, best_score=1.8814238339168856
+[wing search] 4000/8256, best_score=1.8814238339168856
+[wing search] 6000/8256, best_score=1.8814238339168856
+[wing search] 8000/8256, best_score=1.8601410827272022
+RESULT_JSON:{"feasible": true, "max_thrust_to_weight": 10.510102799601535, "score": 1.847586480507629, "min_powered_thrust_margin": 1.15530578794037, "mass_margin_kg": 3.7415130081428987, "wing": {"span_m": 0.502935248023979, "aspect_ratio": 1.7292881853781474, "taper_ratio": 0.6947199791204374, "sweep_deg": 7.341940371199227, "airfoil_key": "thin_cambered"}}

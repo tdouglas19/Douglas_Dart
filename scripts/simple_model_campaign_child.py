@@ -1,0 +1,92 @@
+"""One optimization campaign (real file so Windows multiprocessing spawn can
+re-import __main__). CD0 arrives via SIMPLE_MODEL_CD0_FRONTAL (read at
+import time by simple_model.constants); optional size overrides via
+SIMPLE_MODEL_N_RANDOM / SIMPLE_MODEL_N_REFINE for smoke tests."""
+from __future__ import annotations
+
+import dataclasses
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _corner_seeds():
+    """Hand-derived warm-start grid around the known feasible corner (large
+    diameter, max operable throat, narrow landable span band, near-level
+    climb) -- see optimize()'s seed_candidates note for why random draws
+    alone cannot find a ~4e-6-volume corner."""
+    import itertools
+
+    from simple_model.constants import FUELS
+    from simple_model.optimize import Candidate
+
+    from simple_model.optimize import V3_ENABLED, V3_FLOOR_ALTITUDE_M
+
+    seeds = []
+    # widened 2026-08-12: the mass budget + thrust margin + composite score
+    # move the optimum away from the pure max-diameter corner, so the seed
+    # grid brackets both the old corner and the smaller-diameter direction.
+    for D, frac, ch, tube, span, climb, fuel in itertools.product(
+        (0.18, 0.22, 0.26, 0.30), (0.46, 0.54), (0.35, 0.55), (0.80, 1.00),
+        (0.70, 0.85, 1.00), (1.0, 3.0), FUELS.keys(),
+    ):
+        seeds.append(Candidate(
+            diameter_m=D, throat_diameter_m=D * frac, chamber_length_m=ch,
+            throat_length_m=tube, wingspan_m=span, climb_angle_deg=climb,
+            fuel_key=fuel,
+        ))
+    if not V3_ENABLED:
+        return seeds
+
+    # V3: re-seed the SAME corner with climb/dive/floor variants, plus a
+    # smaller-diameter sweep the dive is expected to unlock (the whole point
+    # of V3 is that gravity covers the lightoff notch, so a smaller engine
+    # should now pass the acceleration gate). The 7-field seeds above are
+    # kept: a V3 campaign should still be able to choose NOT to dive.
+    v3_seeds = []
+    for D, frac, ch, tube, span, fuel, (v3_climb, v3_dive), floor_ft in itertools.product(
+        (0.20, 0.24, 0.28, 0.30), (0.50, 0.54), (0.35, 0.55), (0.70, 0.90),
+        (0.70, 0.85), ("propane", "jet_a"),
+        ((12.0, 6.0), (18.0, 10.0), (25.0, 15.0), (30.0, 20.0)),
+        (400.0, 800.0),
+    ):
+        v3_seeds.append(Candidate(
+            diameter_m=D, throat_diameter_m=D * frac, chamber_length_m=ch,
+            throat_length_m=tube, wingspan_m=span, climb_angle_deg=1.0,
+            fuel_key=fuel, initial_climb_angle_deg=v3_climb,
+            dive_angle_deg=v3_dive,
+            floor_altitude_m=max(floor_ft * 0.3048, V3_FLOOR_ALTITUDE_M),
+        ))
+    return seeds + v3_seeds
+
+
+def main() -> None:
+    from simple_model.optimize import optimize
+
+    kwargs = {"seed_candidates": _corner_seeds()}
+    if os.environ.get("SIMPLE_MODEL_N_RANDOM"):
+        kwargs["n_random"] = int(os.environ["SIMPLE_MODEL_N_RANDOM"])
+    if os.environ.get("SIMPLE_MODEL_N_REFINE"):
+        kwargs["n_refine"] = int(os.environ["SIMPLE_MODEL_N_REFINE"])
+    try:
+        best = optimize(log=lambda *a, **k: print(*a, flush=True, **k), **kwargs)
+    except RuntimeError as exc:
+        print("RESULT_JSON:" + json.dumps({"feasible": False, "error": str(exc)[:400]}))
+        return
+    c = best.candidate
+    cand = dataclasses.asdict(c) if dataclasses.is_dataclass(c) else c._asdict()
+    print("RESULT_JSON:" + json.dumps({
+        "feasible": best.feasible,
+        "max_thrust_to_weight": best.max_thrust_to_weight,
+        "score": best.score,
+        "dry_mass_kg": best.dry_mass_kg,
+        "mass_margin_kg": best.mass_margin_kg,
+        "fuel_loaded_kg": best.fuel_loaded_kg,
+        "candidate": cand,
+    }, default=str))
+
+
+if __name__ == "__main__":
+    main()

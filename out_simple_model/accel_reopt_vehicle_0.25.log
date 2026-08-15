@@ -1,0 +1,58 @@
+[random search, 11 workers] 500/20000 candidates, 0 feasible yet
+[random search, 11 workers] 1000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 1500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 2000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 2500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 3000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 3500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 4000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 4500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 5000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 5500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 6000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 6500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 7000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 7500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 8000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 8500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 9000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 9500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 10000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 10500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 11000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 11500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 12000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 12500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 13000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 13500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 14000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 14500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 15000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 15500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 16000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 16500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 17000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 17500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 18000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 18500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 19000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 19500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 20000/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+[random search, 11 workers] 20500/20000 candidates, 28 feasible at search resolution, best max T/W=11.36
+Random search done: 28 feasible at search resolution. Validating top candidates at final resolution (dt=0.02s)...
+Verified starting point after checking 1 candidate(s): max T/W=11.37, fuel_loaded=4.40 lb
+[refine, final dt, batch=11] round 1/13, best max T/W=11.41
+[refine, final dt, batch=11] round 2/13, best max T/W=11.14
+[refine, final dt, batch=11] round 3/13, best max T/W=10.90
+[refine, final dt, batch=11] round 4/13, best max T/W=10.61
+[refine, final dt, batch=11] round 5/13, best max T/W=10.41
+[refine, final dt, batch=11] round 6/13, best max T/W=10.41
+[refine, final dt, batch=11] round 7/13, best max T/W=10.10
+[refine, final dt, batch=11] round 8/13, best max T/W=10.10
+[refine, final dt, batch=11] round 9/13, best max T/W=10.10
+[refine, final dt, batch=11] round 10/13, best max T/W=10.10
+[refine, final dt, batch=11] round 11/13, best max T/W=10.10
+[refine, final dt, batch=11] round 12/13, best max T/W=10.10
+[refine, final dt, batch=11] round 13/13, best max T/W=10.10
+Local refinement done: best max T/W=10.10 (fuel_loaded=4.46 lb), validated throughout at final dt
+RESULT_JSON:{"feasible": true, "max_thrust_to_weight": 10.095636631109128, "score": 1.8077402623040972, "dry_mass_kg": 14.819774502019603, "mass_margin_kg": 5.835223210449074, "fuel_loaded_kg": 2.024620787531322, "candidate": {"diameter_m": 0.2798870135842943, "throat_diameter_m": 0.15113898733551892, "chamber_length_m": 0.3417673628514488, "throat_length_m": 0.6798077564160785, "wingspan_m": 0.8126242801268353, "climb_angle_deg": 1.0, "fuel_key": "propane"}}

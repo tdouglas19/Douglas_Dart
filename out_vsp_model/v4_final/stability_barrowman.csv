@@ -1,0 +1,5 @@
+condition,axis,cg_x_m,x_cp_m,cn_alpha_total,static_margin_calibres,stable
+release,pitch,0.94629,1.58972,9.625008,3.006683,True
+release,yaw,0.94629,1.505666,5.591441,2.613908,True
+burnout,pitch,0.869209,1.58972,9.625008,3.366875,True
+burnout,yaw,0.869209,1.505666,5.591441,2.974101,True

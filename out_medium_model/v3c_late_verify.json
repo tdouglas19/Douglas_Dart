@@ -1,0 +1,32 @@
+[
+  {
+    "climb": 14.0,
+    "dive": 20.0,
+    "gate": 0.5,
+    "traverse": -0.039763149147357124,
+    "powered": -0.039763149147357124,
+    "margin": 0.913813140008862,
+    "fuel_kg": 2.424023818606821,
+    "peak_mach": 0.45321847265637905,
+    "cutoff": false,
+    "fp_runs": 28,
+    "passes": false,
+    "events": []
+  },
+  {
+    "climb": 14.0,
+    "dive": 20.0,
+    "gate": 0.45,
+    "traverse": 0.00628977966652356,
+    "powered": 0.005979531705853208,
+    "margin": 1.0122927213864545,
+    "fuel_kg": 1.9495351846270157,
+    "peak_mach": 1.1000695472635706,
+    "cutoff": true,
+    "fp_runs": 73,
+    "passes": false,
+    "events": [
+      "97.2s ramjet_lit_M0.450_alt179_phi0.863"
+    ]
+  }
+]

@@ -160,6 +160,26 @@ reviewed -- **never** "the code executed" or "unit tests are green" alone.
   because ram drag scales with Mach while its gross thrust (still ~8x low
   per pulsejet-km's own architecture.md Section 50) does not keep pace --
   expected given the known gap, not a new bug in this integration.
+  **2026-08-12: ramjet-fp became RAMJET_MODE's guarded primary.** The
+  sibling first-principles unsteady ramjet model (`ramjet-fp`, vendor-free
+  clean-room: Rankine-Hugoniot inlet instead of the MIL-E-5008B schedule,
+  emergent Damkohler flameholder blow-off instead of an assumed-lit
+  combustor, derived choking instead of discharge coefficients) is
+  dispatched first by `_ramjet_point` via `ramjet_fp_bridge.py`, guarded
+  by `ramjet_fp_result_is_usable`, falling back to the native 0D cycle
+  visibly (`ramjet_fp_primary_rejected_fell_back_to_native`); kill-switch
+  `DOUGLAS_DART_DISABLE_RAMJET_FP=1` (legacy suite sets it in conftest).
+  The map now carries the flame-stability answer per point
+  (`self_sustaining_status` is a computed fact, `blown_off` points report
+  cold-throughflow drag with flags) and the achieved total-pressure
+  recovery as a derived OUTPUT. Headline model finding the map now
+  surfaces: at the candidate configs' ramjet
+  `target_equivalence_ratio: 0.60`, the fully-premixed flame holds at NO
+  Mach -- near-stoich fueling is required (see
+  `docs/design_convergence.md` 2026-08-12 and
+  `ramjet-fp/docs/findings.md` for the phi schedule, the M 0.6-0.9
+  oscillation pinch, and the altitude-dependent relight corridor).
+
 - **Gate 3 -- Nominal fast-mission feasibility.** A candidate completes the
   mission in the point-mass solver without violating lift, stall, fuel,
   dynamic-pressure, mass, packaging, or rule constraints. *(Still not met --
@@ -168,7 +188,14 @@ reviewed -- **never** "the code executed" or "unit tests are green" alone.
   time below its own 1g stall speed), confirming at the full mission-
   integration level the same Gate 1 finding from
   `docs/level0_feasibility_bounds.md`, not a new, separate problem. Load-
-  factor and trim-drag checks are still missing.)*
+  factor and trim-drag checks are still missing. **2026-08-12:** the
+  mission solver's ramjet phases now read the first-principles ramjet-fp
+  lazy table (thrust AND flame stability; see Gate 2 note above), so Gate
+  3 additionally fails, honestly, wherever the configured phi=0.60 ramjet
+  cannot hold a flame -- `ramjet_fp_flame_unstable_during_ramjet_phase`
+  in the run status. The physics-backed fix directions are a near-stoich
+  phi schedule and a low-altitude transonic crossing followed by a lit
+  climb; both are design decisions, not solver settings.)*
 - **Gate 4 -- Robust fast-mission feasibility.** At least one candidate
   retains acceptable margins under named conservative cases; adverse cases
   may stay informational but their meaning must be explicit. *(Not met --
