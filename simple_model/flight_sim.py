@@ -66,7 +66,7 @@ as flying into the ground still too fast, not a proper touchdown.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import asin, cos, pi, radians, sin
+from math import asin, cos, pi, radians, sin, sqrt, tan
 from typing import NamedTuple
 
 from douglas_dart.atmosphere import standard_atmosphere
@@ -232,6 +232,83 @@ V3_RULE_MACH_HI = 1.10
 # infeasible -- rather than the sizing pass exploding.
 V3_MAX_TOP_ALTITUDE_M = 4000.0
 
+# --- V4 pitch arcs and body loading (2026-08-13, user requirement) ---------
+# V3 switched flight path angle from climb to dive, and from dive to the drag
+# strip, in a SINGLE TIMESTEP -- no arc, no radius, no load factor anywhere in
+# the phase machine (docs/v3_learnings_for_v4.md section 3.6 flags this as an
+# unmodelled gap; load factor never exceeded 1 in any V3 flight). V4 flies
+# both transitions as real constant-load-factor circular arcs:
+#
+#   gamma_dot = g0 * (n - cos gamma) / V        turn rate
+#   R         = V / |gamma_dot| = V^2 / (g0 |n - cos gamma|)   arc radius
+#
+# and the altitude the pull-out arc costs is charged against the hard floor:
+# the dive now has to END high enough that the arc BOTTOMS OUT at the floor,
+# rather than the old behaviour of diving to the floor and teleporting level.
+# For a pull-up from -theta to level, dh/dgamma = R sin(gamma), so the drop is
+# R*(1 - cos theta) -- ~20 m at 3 g for V3's 9.89 deg dive at M 0.48.
+#
+# PUSHOVER at 0 g (user choice, 2026-08-13): the fastest altitude-neutral
+# nose-over that never unloads the airframe in reverse. Propane feed at 0 g is
+# a flagged hardware caveat, not a modelled violation.
+# PULL-OUT at 3 g (user choice): 667 N (150 lbf) through the wing joint on a
+# 22.68 kg airframe, far under the ~15 g aerodynamic CL_max ceiling. Nothing
+# in this repo models structure, so this is a DESIGN LIMIT, not a capability.
+V4_PUSHOVER_LOAD_FACTOR = 0.0
+V4_PULLOUT_LOAD_FACTOR = 3.0
+# The floor is a HARD constraint and the load factor is what gives.
+#
+# A fixed-g arc triggered off a predicted drop does not work here, and the
+# failure is not subtle: the ramjet lights mid-dive, so the vehicle is
+# accelerating hard THROUGH the pull-out, the radius runs larger than
+# whatever was predicted at entry, and the arc bottoms out below the floor.
+# Measured directly -- 632 of 1350 campaign flights busted the floor with a
+# 1.15 safety factor on the predicted drop.
+#
+# So the pull-out is flown the way it would actually be flown: hold the
+# nominal load factor, and if the arc is no longer going to make the floor,
+# pull harder -- up to a hard limit. The dive therefore runs until the
+# NOMINAL-g arc can just barely still make the floor (which is the longest
+# legal dive, i.e. the most Mach available for lightoff), and any shortfall
+# after that shows up as load factor, which is a reported output. If even
+# the limit cannot hold the floor, floor_violated says so.
+V4_PULLOUT_MAX_LOAD_FACTOR = 6.0
+# Explicit-Euler discretization allowance on the floor check. A dt=0.02 s step
+# at ~190 m/s covers ~3.8 m of flight path, so an arc commanded to bottom out
+# exactly ON the floor lands a few millimetres either side of it -- measured
+# 121.9078 m against a 121.92 m floor, a 12 mm shortfall that an exact-1e-6
+# tolerance reported as a floor bust on 561 of 1350 flights. The flown minimum
+# is reported as min_powered_altitude_m regardless, so this hides nothing.
+# SPIRAL CLIMB (user, 2026-08-13). V4 wants a high top of climb -- that is
+# the one lever that actually moves the dive-exit Mach -- but a straight
+# climb to 1000 m at 8 deg spends 7.1 km of GROUND track getting there, and
+# the return-to-launch glide then lands 4-6 km short of home (measured: every
+# configuration in the campaign box failed its landing for this reason and
+# this reason only; the powered mission itself closed).
+#
+# A helical climb over the launch point fixes it exactly: identical air path,
+# speed, flight path angle, drag and fuel -- only the ground track changes,
+# from a straight line to a circle. The point-mass model represents that by
+# zeroing the downrange rate, which is the same device the unpowered "spiral"
+# mode already uses.
+#
+# What a spiral is NOT free of, and is charged here: the bank needed to turn.
+# A climbing turn at bank phi carries load factor n = cos(gamma)/cos(phi),
+# which feeds the maneuvering-lift path and therefore the induced drag, and
+# shows up in the body-load trace. 30 deg is a standard climbing-turn bank
+# (n = 1.15). What is NOT modelled: the roll-in/roll-out, and the heading
+# alignment at the top before the pushover.
+V4_SPIRAL_BANK_DEG = 30.0
+
+V4_FLOOR_TOLERANCE_M = 1.0
+# 1 - cos(1.5 deg): below this the pull-out arc is finished for all practical
+# purposes (the altitude still to be lost getting from 1.5 deg to level is
+# ~0.3 m at 190 m/s and 3 g), so the floor-holding load demand is switched off
+# to avoid the 0/0 at the bottom of the arc. See required_pullout_load_factor.
+_PULLOUT_ARC_DONE_SHAPE = 3.4e-4
+# Guard on the 1/cos(gamma) in the maneuvering-lift conversion below.
+_MIN_COS_GAMMA = 0.1
+
 RETURN_LOOP_LOAD_FACTOR = 6.0
 # Matched to the airframe's actual best glide slope (~L/D 5.5-6.5 for the
 # 615 mm wing at ~70 m/s): shallower angles have an equilibrium speed
@@ -268,6 +345,116 @@ class ClimbDiveProfile:
     dive_start_mach: float = V3_DIVE_START_MACH
     dive_end_mach: float = V3_DIVE_END_MACH
     top_altitude_m: float | None = None
+    # V4 pitch arcs. pullout_load_factor=None keeps the V3 behaviour exactly
+    # (one-timestep gamma switch, no arc, no radius) so docs/v3_frozen re-flies
+    # bit-identical; set it to a load factor to fly both transitions as arcs.
+    pullout_load_factor: float | None = None
+    pushover_load_factor: float = V4_PUSHOVER_LOAD_FACTOR
+    pullout_max_load_factor: float = V4_PULLOUT_MAX_LOAD_FACTOR
+    # Spiral (helical) climb: same air path, same speed, same flight path
+    # angle, same fuel -- but the GROUND track is a circle, so the climb
+    # spends no net downrange. See the V4 constant block.
+    spiral_climb: bool = False
+    spiral_bank_deg: float = V4_SPIRAL_BANK_DEG
+
+    @property
+    def uses_arcs(self) -> bool:
+        return self.pullout_load_factor is not None
+
+
+@dataclass(frozen=True)
+class RamjetStart:
+    """When to light the ramjet -- a POLICY, not a scalar constant.
+
+    docs/v3_learnings_for_v4.md section 3.3: a Mach gate's consequence is
+    positional, because it decides *where in the trajectory* the ramjet
+    lights, and the same gate is worth 0.052 g or 0.331 g depending only on
+    whether it fires mid-climb or just past the top. A bare
+    RAMJET_MIN_LIGHTOFF_MACH cannot express "light it in the dive."
+
+    gate_mach          -- overrides RAMJET_MIN_LIGHTOFF_MACH for this flight.
+    require_descending -- veto the light while the flight path angle is still
+                          positive, i.e. the ramjet can only come alive once
+                          the vehicle has pushed over (user requirement,
+                          2026-08-13: V4 lights the ramjet in the dive).
+    Once lit, it stays lit -- a real flameholder does not blow out because
+    the vehicle pulled level again."""
+
+    gate_mach: float
+    require_descending: bool = True
+    light_at_pullout: bool = False
+    """Last-chance override (user, 2026-08-13): if the ramjet is still unlit
+    when the PULL-OUT begins, light it there regardless of Mach.
+
+    Why it exists. The gate is a *goal*, not a physical threshold -- the dive
+    is supposed to deliver `gate_mach` and hand a lit engine to the drag
+    strip. If the dive under-delivers, the pure-gate policy does the worst
+    possible thing: it keeps waiting for a Mach the vehicle is never going to
+    see unpowered, and the vehicle coasts to a stop with an unlit ramjet
+    (medium_model at first-principles fidelity, 2026-08-13: peak Mach 0.488
+    against a 0.50 gate, ramjet never even asked, whole tank burnt at
+    M ~0.44). The pull-out is the last moment the decision still matters, so
+    it is where the gate is waived.
+
+    LATCHED once the pull-out starts, so the waiver survives into the drag
+    strip -- otherwise the Mach gate would re-arm and put the engine out
+    again the instant it was lit.
+
+    In this closed-form model the waiver IS the light: `ramjet_simple` has no
+    opinion beyond the gate. In `medium_model` against the first-principles
+    engines it only means the ramjet is ASKED at the pull-out instead of
+    never, and the FP model keeps the right to refuse.
+
+    Defaults to False, so every V2/V3/V4 re-fly is unchanged."""
+
+
+def pullout_arc_drop_m(
+    velocity_m_per_s: float,
+    dive_angle_deg: float,
+    load_factor: float,
+) -> float:
+    """Altitude a constant-load-factor pull-up from -dive_angle to level
+    costs: R*(1 - cos theta), R = V^2/(g0*(n - cos gamma)).
+
+    cos(gamma) is taken as 1 (its value at the top of the arc, where the
+    turn is loosest) rather than cos(dive_angle) -- that is the conservative
+    end of the arc, so the drop is never under-estimated. Single closed-form
+    expression, no integration."""
+    if dive_angle_deg <= 0.0:
+        return 0.0
+    n = max(load_factor, 1.05)   # n <= 1 cannot pull out at all
+    radius_m = velocity_m_per_s * velocity_m_per_s / (G0_M_PER_S2 * (n - 1.0))
+    return radius_m * (1.0 - cos(radians(dive_angle_deg)))
+
+
+def required_pullout_load_factor(
+    velocity_m_per_s: float,
+    flight_path_angle_rad: float,
+    altitude_m: float,
+    floor_altitude_m: float,
+) -> float:
+    """The load factor whose arc bottoms out EXACTLY at the floor from the
+    state given -- the inverse of pullout_arc_drop_m.
+
+    Setting R*(1 - cos gamma) equal to the altitude still in hand and solving
+    n = 1 + V^2/(g0*R). cos(gamma) is taken as 1 at the top of the arc, the
+    same conservative end used in pullout_arc_drop_m, so the two agree.
+    Returns inf once the floor is already gone (nothing can hold it)."""
+    drop_shape = 1.0 - cos(flight_path_angle_rad)
+    if drop_shape <= _PULLOUT_ARC_DONE_SHAPE:
+        # Effectively level -- there is no arc left to fly, so there is
+        # nothing left to demand. Guarding on this matters: at the bottom of
+        # the arc the angle and the remaining altitude go to zero TOGETHER,
+        # and the 0/0 spiked the commanded load factor to the 6 g limiter on
+        # the final step of every flight while the load actually carried
+        # through the arc was ~3.4 g. That artifact is what the peak-load
+        # gate was reading.
+        return 1.0
+    remaining_m = altitude_m - floor_altitude_m
+    if remaining_m <= 0.0:
+        return float("inf")
+    radius_m = remaining_m / drop_shape
+    return 1.0 + velocity_m_per_s * velocity_m_per_s / (G0_M_PER_S2 * radius_m)
 
 
 def derive_top_altitude(
@@ -290,11 +477,23 @@ def derive_top_altitude(
     if sin_dive <= 0.0 or profile.dive_end_mach <= profile.dive_start_mach:
         return profile.floor_altitude_m
 
-    max_drop = max(V3_MAX_TOP_ALTITUDE_M - profile.floor_altitude_m, 0.0)
+    # V4: the dive no longer ends AT the floor -- it ends where the pull-out
+    # arc can still bottom out at the floor, so the arc's drop is part of the
+    # altitude the climb has to buy. Sized at the dive-exit speed evaluated
+    # at the floor (the fastest, hence deepest-arcing, case).
+    base_altitude_m = profile.floor_altitude_m
+    if profile.uses_arcs:
+        floor_atmosphere = standard_atmosphere(profile.floor_altitude_m)
+        base_altitude_m += pullout_arc_drop_m(
+            profile.dive_end_mach * floor_atmosphere.speed_of_sound_m_per_s,
+            profile.dive_angle_deg, profile.pullout_load_factor,
+        )
+
+    max_drop = max(V3_MAX_TOP_ALTITUDE_M - base_altitude_m, 0.0)
     step = (profile.dive_end_mach - profile.dive_start_mach) / n_steps
     drop = 0.0
     for _pass in range(2):
-        reference_alt = min(profile.floor_altitude_m + 0.5 * drop,
+        reference_alt = min(base_altitude_m + 0.5 * drop,
                             V3_MAX_TOP_ALTITUDE_M)
         drop = 0.0
         for i in range(n_steps):
@@ -325,7 +524,7 @@ def derive_top_altitude(
             if accel <= 0.0:
                 # cannot sustain the dive band; fall back to whatever the
                 # partial integration bought (the floor still binds in flight)
-                return profile.floor_altitude_m + min(drop, max_drop)
+                return base_altitude_m + min(drop, max_drop)
             dv = step * a_sound
             dt = dv / accel
             drop += (v + 0.5 * dv) * dt * sin_dive
@@ -354,6 +553,23 @@ class FlightState(NamedTuple):
     thrust_to_weight: float
     specific_impulse_s: float
     stall_speed_m_per_s: float
+    # --- V4 additions (defaulted, so nothing that reads the first 14 fields
+    # positionally changes) -------------------------------------------------
+    flight_path_angle_rad: float = 0.0
+    load_n_roll: float = 0.0
+    """Body ROLL-axis (axial) specific force in g: (T - D)/(m*g0). This is
+    what an accelerometer on the longitudinal axis reads -- gravity is NOT
+    included, which is why it differs from acceleration_m_per_s2 (that one
+    does include the weight-along-path term). 2-D trajectory, so roll and yaw
+    are the only two axes carrying load."""
+    load_n_yaw: float = 0.0
+    """Body YAW-axis (normal, in the trajectory plane) load factor:
+    cos(gamma) + V*gamma_dot/g0. Equals the commanded load factor during a
+    pitch arc and cos(gamma) on any straight leg."""
+    load_n_total: float = 0.0
+    """sqrt(roll^2 + yaw^2) -- total specific force the airframe carries."""
+    turn_radius_m: float = 0.0
+    """Instantaneous pitch-arc radius V/|gamma_dot|; 0.0 on a straight leg."""
 
 
 @dataclass(frozen=True)
@@ -391,6 +607,43 @@ class FlightResult:
     V3_RULE_MACH_LO..HI. Gated by the optimizer; see the V3 constant block."""
     rule_violation_mach: float | None = None
 
+    # --- V4: pitch arcs, body loading, ramjet start -------------------------
+    peak_load_n_total: float = 0.0
+    peak_load_n_yaw: float = 0.0
+    peak_load_n_roll: float = 0.0
+    peak_load_mode: str = ""
+    """Phase in which the worst total body load occurred."""
+    pushover_radius_m: float = 0.0
+    pullout_radius_m: float = 0.0
+    spiral_radius_m: float = 0.0
+    """Ground-track turn radius of the spiral climb, 0.0 if not spiralling."""
+    """Representative (entry) pitch-arc radii. 0.0 when arcs are disabled."""
+    pushover_duration_s: float = 0.0
+    pullout_duration_s: float = 0.0
+    pullout_entry_altitude_m: float = 0.0
+    pullout_entry_mach: float = 0.0
+    min_powered_altitude_m: float = float("inf")
+    """Lowest altitude reached under power -- the MEASURED bottom of the
+    pull-out arc, which is what the 400 ft floor is actually checked against
+    (the trigger only predicts it)."""
+    floor_violated: bool = False
+    dive_exit_mach: float = 0.0
+    """Mach at the moment the dive hands off to the pull-out. With a Mach
+    gate for the ramjet, the headroom between the gate and THIS is the whole
+    margin -- see docs/v3_learnings_for_v4.md section 4.1 on why 'can it
+    reach X' must never be trusted from a closed-form screen alone."""
+    ramjet_lightoff_mach: float | None = None
+    ramjet_lightoff_altitude_m: float | None = None
+    ramjet_lightoff_time_s: float | None = None
+    ramjet_lightoff_mode: str = ""
+    ramjet_lit_in_dive: bool = False
+    """True only if the ramjet came alive during the pushover or the dive --
+    the V4 requirement (user, 2026-08-13). A gate that fires in the climb or
+    after the pull-out satisfies the Mach test and fails the mission."""
+    min_pushover_accel_g: float = float("inf")
+    """Reported separately rather than folded into the traverse figure, so
+    excluding the commanded pushover from the gate cannot hide a problem."""
+
 
 def _concept_drag(diameter_m, wing_concept, v, rho, m, gamma_rad, mach):
     from math import cos as _c
@@ -416,7 +669,12 @@ def run_flight(
     max_fuel_burn_kg: float | None = None,
     return_to_launch: bool = False,
     climb_dive: ClimbDiveProfile | None = None,
+    ramjet_start: RamjetStart | None = None,
 ) -> FlightResult:
+    # ramjet_start (V4): policy object deciding WHEN the ramjet lights, not
+    # just at what Mach -- see RamjetStart. None keeps the pre-V4 behaviour
+    # (bare RAMJET_MIN_LIGHTOFF_MACH, lights wherever it happens to fire),
+    # which is what docs/v2_frozen and docs/v3_frozen re-fly under.
     # max_fuel_burn_kg: physical usable-fuel limit (tank capacity minus
     # reserve). Exceeding it is a FLAMEOUT: engine off wherever the flight
     # is, cutoff NOT credited. Without this cap, marginal designs could
@@ -453,6 +711,29 @@ def run_flight(
     v3_dive_done = False
     rule_violated = False
     rule_violation_mach: float | None = None
+
+    # V4 arc state. v4_arcs is False for every V2/V3 flight (pullout_load_factor
+    # defaults to None), in which case the phase machine below reduces exactly
+    # to V3's two-boolean latch.
+    v4_arcs = climb_dive is not None and climb_dive.uses_arcs
+    v4_phase = "climb"
+    v4_gamma_rad = radians(climb_dive.initial_climb_angle_deg) if v4_arcs else 0.0
+    strip_gamma_rad = climb_angle_rad
+    peak_load_n_total = peak_load_n_yaw = peak_load_n_roll = 0.0
+    peak_load_mode = ""
+    pushover_radius_m = pullout_radius_m = spiral_radius_m = 0.0
+    pushover_duration_s = pullout_duration_s = 0.0
+    pullout_entry_altitude_m = pullout_entry_mach = 0.0
+    min_powered_altitude_m = float("inf")
+    dive_exit_mach = 0.0
+    min_pushover_accel_g = float("inf")
+    ramjet_lit = False
+    pullout_light_override = False
+    ramjet_lightoff_mach: float | None = None
+    ramjet_lightoff_altitude_m: float | None = None
+    ramjet_lightoff_time_s: float | None = None
+    ramjet_lightoff_mode = ""
+    ramjet_lit_in_dive = False
 
     # Local aliases for the hot loop below: geometry is fixed for the whole
     # flight, but Python attribute lookups (geometry.diameter_m) are slower
@@ -595,7 +876,142 @@ def run_flight(
                     diameter_m, wing_concept, v, atmosphere.density_kg_per_m3,
                     drag_mass_kg, gamma_rad, mach,
                 )
+            # Unpowered body loading. The return half-loop is the one
+            # unpowered maneuver that pulls g (a fixed RETURN_LOOP_LOAD_FACTOR
+            # by construction, not a searched quantity); every other unpowered
+            # leg is straight, so n_yaw = cos(gamma).
+            v4_gamma_dot = 0.0
+            turn_radius_m = 0.0
+            if mode == "loop":
+                n_yaw = RETURN_LOOP_LOAD_FACTOR
+                loop_gamma_dot = G0_M_PER_S2 * (n_yaw - cos_gamma) / max(v, 1.0)
+                if abs(loop_gamma_dot) > 1e-9:
+                    turn_radius_m = abs(v / loop_gamma_dot)
+            else:
+                n_yaw = cos_gamma
         else:
+            # ORDER NOTE (V4): the trajectory phase is resolved BEFORE the
+            # engines are called, because the ramjet-start policy needs to
+            # know whether the vehicle is descending yet ("light it in the
+            # dive"). Nothing in the phase machine reads an engine result and
+            # nothing in the engine calls read gamma, so this reordering is
+            # bit-identical for every pre-V4 flight (locked by
+            # tests/test_v2_frozen.py and tests/test_v3_frozen.py).
+            phase_mode: str | None = None
+            gamma_rad = climb_angle_rad
+            sin_gamma, cos_gamma = sin_climb, cos_climb
+            x_rate = cos_climb
+            n_yaw_cmd: float | None = None   # None -> straight leg, n = cos(gamma)
+            turn_radius_m = 0.0
+            if climb_dive is not None:
+                # Phase machine. Latched (not re-tested) so a phase never
+                # re-opens: climb to the derived top, push over, dive through
+                # the lightoff notch, pull out onto the drag strip. With
+                # pullout_load_factor=None (V2/V3) the two arc phases are
+                # skipped entirely and this reduces to V3's two-boolean latch.
+                if not v3_climb_done and h >= v3_top_altitude_m:
+                    v3_climb_done = True
+                    v4_phase = "pushover" if v4_arcs else "dive"
+                if v4_arcs and v4_phase == "pushover" and v4_gamma_rad <= v3_dive_rad:
+                    v4_gamma_rad = v3_dive_rad
+                    v4_phase = "dive"
+                # The dive ends when the NOMINAL-g arc can only just still
+                # make the floor -- the latest possible pull-out, hence the
+                # longest dive and the most Mach available for lightoff. The
+                # arc's drop is real altitude the dive does not get to use.
+                if v4_arcs:
+                    pullout_due = required_pullout_load_factor(
+                        v, v3_dive_rad, h, climb_dive.floor_altitude_m
+                    ) >= climb_dive.pullout_load_factor
+                else:
+                    pullout_due = h <= climb_dive.floor_altitude_m
+                if not v3_dive_done and v3_climb_done and (
+                        v4_phase in ("dive", "pushover")) and (
+                        mach >= climb_dive.dive_end_mach or pullout_due):
+                    v3_dive_done = True
+                    dive_exit_mach = mach
+                    if v4_arcs:
+                        v4_phase = "pullout"
+                        pullout_entry_altitude_m = h
+                        pullout_entry_mach = mach
+                    else:
+                        v4_phase = "strip"
+                if v4_arcs and v4_phase == "pullout" and v4_gamma_rad >= strip_gamma_rad:
+                    v4_gamma_rad = strip_gamma_rad
+                    v4_phase = "strip"
+
+                if not v3_climb_done:
+                    phase_mode = "v3_climb"
+                    gamma_rad = v3_climb_rad
+                    sin_gamma, cos_gamma = sin_v3climb, cos_v3climb
+                    if climb_dive.spiral_climb:
+                        # Helical: the air path is unchanged, the ground
+                        # track closes into a circle. Bank is charged as
+                        # load factor (hence induced drag), not assumed free.
+                        n_yaw_cmd = cos_gamma / cos(radians(climb_dive.spiral_bank_deg))
+                elif v4_arcs and v4_phase == "pushover":
+                    phase_mode = "v4_pushover"
+                    gamma_rad = v4_gamma_rad
+                    sin_gamma, cos_gamma = sin(gamma_rad), cos(gamma_rad)
+                    n_yaw_cmd = climb_dive.pushover_load_factor
+                elif not v3_dive_done:
+                    phase_mode = "v3_dive"
+                    gamma_rad = v3_dive_rad
+                    sin_gamma, cos_gamma = sin_v3dive, cos_v3dive
+                elif v4_arcs and v4_phase == "pullout":
+                    phase_mode = "v4_pullout"
+                    gamma_rad = v4_gamma_rad
+                    sin_gamma, cos_gamma = sin(gamma_rad), cos(gamma_rad)
+                    # Hold the nominal g; pull harder only if the arc is no
+                    # longer going to make the floor, and never past the
+                    # limit. What actually gets flown is reported as
+                    # peak_load_n_yaw -- it is an output, not an assumption.
+                    n_yaw_cmd = min(
+                        max(climb_dive.pullout_load_factor,
+                            required_pullout_load_factor(
+                                v, gamma_rad, h, climb_dive.floor_altitude_m)),
+                        climb_dive.pullout_max_load_factor,
+                    )
+                else:
+                    phase_mode = "drag_strip"
+                x_rate = 0.0 if phase_mode == "v3_climb" and climb_dive.spiral_climb \
+                    else cos_gamma
+                # the rule (gamma >= 0 from M 0.80 through cutoff) is checked
+                # on what is actually flown, not assumed from the schedule
+                if (V3_RULE_MACH_LO <= mach <= V3_RULE_MACH_HI
+                        and sin_gamma < -1e-9 and not rule_violated):
+                    rule_violated = True
+                    rule_violation_mach = mach
+
+            # --- Ramjet start policy (V4) -------------------------------
+            # Latched: once the flameholder is alive it stays alive even
+            # after the vehicle pulls level again.
+            if ramjet_start is None:
+                allow_light = True
+                gate_mach = None
+            else:
+                # Last-chance override: the pull-out is where the Mach gate
+                # stops being a goal worth waiting for. Latched, so it does
+                # not lapse when the vehicle levels out (see RamjetStart).
+                if (ramjet_start.light_at_pullout and not ramjet_lit
+                        and phase_mode == "v4_pullout"):
+                    pullout_light_override = True
+                gate_mach = ramjet_start.gate_mach
+                if ramjet_lit:
+                    allow_light = True
+                elif pullout_light_override:
+                    # Gate waived entirely -- "no matter what speed you are
+                    # at". Deliberately NOT applied on the merely-already-lit
+                    # path above, where the lightoff ramp is still doing real
+                    # work (waiving it there would step the ramjet to full
+                    # thrust at lightoff and change the V4 re-fly).
+                    allow_light = True
+                    gate_mach = 0.0
+                elif ramjet_start.require_descending:
+                    allow_light = sin_gamma < 0.0
+                else:
+                    allow_light = True
+
             # BOTH engines run through the transition (2026-08-12): the
             # pulsejet keeps pulsing while the ramjet duct lights -- the
             # first-principles model shows the side-inlet pulsejet operating
@@ -606,7 +1022,8 @@ def run_flight(
             # a single engine exactly where drag peaks. Total = simple sum;
             # crossover_mach still reports where the ramjet first dominates.
             ramjet_result = ramjet_thrust(
-                diameter_m, throat_diameter_m, mach, h, fuel, atmosphere=atmosphere
+                diameter_m, throat_diameter_m, mach, h, fuel, atmosphere=atmosphere,
+                lightoff_mach=gate_mach, allow_light=allow_light,
             )
             pulsejet_result = pulsejet_thrust(
                 diameter_m, chamber_length_m, throat_diameter_m, throat_length_m, mach, h, fuel,
@@ -623,53 +1040,92 @@ def run_flight(
             )
             weight_flow = fuel_mdot_kg_per_s * G0_M_PER_S2
             specific_impulse_s = thrust_n / weight_flow if weight_flow > 0.0 else 0.0
-            mode = "ramjet" if on_ramjet else "pulsejet"
-            gamma_rad = climb_angle_rad
-            sin_gamma, cos_gamma = sin_climb, cos_climb
-            x_rate = cos_climb
-            if climb_dive is not None:
-                # V3 phase machine. Latched (not re-tested) so a phase never
-                # re-opens: climb to the derived top, dive through the
-                # lightoff notch, then run the drag strip at climb_angle_deg.
-                if not v3_climb_done and h >= v3_top_altitude_m:
-                    v3_climb_done = True
-                if not v3_dive_done and v3_climb_done and (
-                        mach >= climb_dive.dive_end_mach
-                        or h <= climb_dive.floor_altitude_m):
-                    v3_dive_done = True
-                if not v3_climb_done:
-                    mode = "v3_climb"
-                    gamma_rad = v3_climb_rad
-                    sin_gamma, cos_gamma = sin_v3climb, cos_v3climb
-                    x_rate = cos_v3climb
-                elif not v3_dive_done:
-                    mode = "v3_dive"
-                    gamma_rad = v3_dive_rad
-                    sin_gamma, cos_gamma = sin_v3dive, cos_v3dive
-                    x_rate = cos_v3dive
+            mode = phase_mode if phase_mode is not None else (
+                "ramjet" if on_ramjet else "pulsejet")
+
+            if not ramjet_lit and ramjet_result.lit and ramjet_result.net_thrust_n > 0.0:
+                ramjet_lit = True
+                ramjet_lightoff_mach = mach
+                ramjet_lightoff_altitude_m = h
+                ramjet_lightoff_time_s = t
+                ramjet_lightoff_mode = mode
+                ramjet_lit_in_dive = mode in ("v3_dive", "v4_pushover")
+
+            # Maneuvering lift: during a pitch arc the wing carries n*W, not
+            # W*cos(gamma), and induced drag goes as lift^2 -- charging only
+            # the straight-flight lift would make a hard pull-out free. The
+            # drag calls take a MASS, so the load factor is converted back
+            # through cos(gamma); on any straight leg n_yaw == cos(gamma) and
+            # this collapses to exactly `m`, which is what keeps V2/V3
+            # bit-identical.
+            n_yaw = cos_gamma if n_yaw_cmd is None else n_yaw_cmd
+            v4_gamma_dot = 0.0
+            if n_yaw_cmd is None:
+                drag_mass_kg = m
+            else:
+                drag_mass_kg = m * n_yaw / max(cos_gamma, _MIN_COS_GAMMA)
+            if phase_mode in ("v4_pushover", "v4_pullout"):
+                # PITCH arc: the load factor curves the flight path in the
+                # vertical plane, so it integrates gamma.
+                v4_gamma_dot = G0_M_PER_S2 * (n_yaw - cos_gamma) / max(v, 1.0)
+                if abs(v4_gamma_dot) > 1e-9:
+                    turn_radius_m = abs(v / v4_gamma_dot)
+                if phase_mode == "v4_pushover":
+                    if pushover_radius_m == 0.0:
+                        pushover_radius_m = turn_radius_m
+                    pushover_duration_s += dt_s
                 else:
-                    mode = "drag_strip"
-                # the rule (gamma >= 0 from M 0.80 through cutoff) is checked
-                # on what is actually flown, not assumed from the schedule
-                if (V3_RULE_MACH_LO <= mach <= V3_RULE_MACH_HI
-                        and sin_gamma < -1e-9 and not rule_violated):
-                    rule_violated = True
-                    rule_violation_mach = mach
+                    if pullout_radius_m == 0.0:
+                        pullout_radius_m = turn_radius_m
+                    pullout_duration_s += dt_s
+            elif phase_mode == "v3_climb" and n_yaw_cmd is not None:
+                # SPIRAL climb: the load factor curves the ground track in
+                # the HORIZONTAL plane, so gamma is untouched and the radius
+                # reported is the turn circle, R = V^2/(g0 tan(bank)).
+                tan_bank = tan(radians(climb_dive.spiral_bank_deg))
+                if tan_bank > 1e-9:
+                    turn_radius_m = v * v / (G0_M_PER_S2 * tan_bank)
+                    spiral_radius_m = turn_radius_m
             if wing_concept is None:
                 drag_result = total_drag_n(
-                    diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3, m,
-                    gamma_rad, G0_M_PER_S2, mach=mach,
+                    diameter_m, wingspan_m, v, atmosphere.density_kg_per_m3,
+                    drag_mass_kg, gamma_rad, G0_M_PER_S2, mach=mach,
                 )
             else:
                 drag_result = _concept_drag(
                     diameter_m, wing_concept, v, atmosphere.density_kg_per_m3,
-                    m, gamma_rad, mach,
+                    drag_mass_kg, gamma_rad, mach,
                 )
 
         weight_n = m * G0_M_PER_S2
         thrust_to_weight = thrust_n / weight_n
         weight_along_path_n = weight_n * sin_gamma
         acceleration_m_per_s2 = (thrust_n - drag_result.total_n - weight_along_path_n) / m
+        # --- Body loading (V4) ------------------------------------------
+        # Accelerometer convention: specific force, gravity EXCLUDED. That is
+        # why load_n_roll is not acceleration_m_per_s2/g0 -- the latter
+        # includes the weight-along-path term, which an accelerometer riding
+        # the vehicle cannot feel. 2-D trajectory, so roll (axial) and yaw
+        # (normal, in the trajectory plane) carry all of it.
+        load_n_roll = (thrust_n - drag_result.total_n) / weight_n
+        load_n_yaw = n_yaw
+        load_n_total = sqrt(load_n_roll * load_n_roll + load_n_yaw * load_n_yaw)
+        if not engine_off:
+            # Peaks tracked over POWERED steps only: the return half-loop's
+            # 6 g is a fixed constant of the landing profile, not something
+            # the V4 trajectory search controls, and letting it dominate
+            # would mask the pull-out it is meant to measure.
+            if load_n_total > peak_load_n_total:
+                peak_load_n_total = load_n_total
+                peak_load_mode = mode
+            peak_load_n_yaw = max(peak_load_n_yaw, abs(load_n_yaw))
+            peak_load_n_roll = max(peak_load_n_roll, abs(load_n_roll))
+            # Only meaningful once the vehicle is over the top and coming
+            # DOWN. The flight starts at h = 0, which is below the 400 ft
+            # floor by definition, so tracking from launch flags every single
+            # flight as a floor bust (it did -- 646 of 1350).
+            if v3_climb_done:
+                min_powered_altitude_m = min(min_powered_altitude_m, h)
         if not engine_off:
             # ENGINE-ONLY margin (2026-08-12, V3): the gravity term is
             # clamped at zero so a dive cannot inflate the margin. In a dive
@@ -698,7 +1154,14 @@ def run_flight(
             # so those are what get gated. (The engine-only thrust margin
             # above still applies to every powered step, climb included, so
             # an underpowered engine cannot hide inside the climb.)
-            if mode != "v3_climb" and accel_g < min_traverse_accel_g:
+            # The V4 pushover is excluded on the same reasoning as the climb:
+            # it is a commanded maneuver the vehicle can abandon at any
+            # instant, not a regime it can be stranded in. Excluding it
+            # cannot hide anything, because its own worst acceleration is
+            # reported separately as min_pushover_accel_g.
+            if mode == "v4_pushover":
+                min_pushover_accel_g = min(min_pushover_accel_g, accel_g)
+            elif mode != "v3_climb" and accel_g < min_traverse_accel_g:
                 min_traverse_accel_g = accel_g
                 min_traverse_accel_mach = mach
 
@@ -706,6 +1169,7 @@ def run_flight(
             FlightState(
                 t, h, x, v, mach, m, fuel_burned_kg, mode, thrust_n, drag_result.total_n,
                 acceleration_m_per_s2, thrust_to_weight, specific_impulse_s, stall_speed,
+                gamma_rad, load_n_roll, load_n_yaw, load_n_total, turn_radius_m,
             )
         )
 
@@ -742,15 +1206,30 @@ def run_flight(
                            / max(v, 1.0)) * dt_s
             if loop_gamma >= pi:
                 heading_reversed = True
+        if v4_gamma_dot != 0.0:
+            v4_gamma_rad += v4_gamma_dot * dt_s
         fuel_step_kg = fuel_mdot_kg_per_s * dt_s
         fuel_burned_kg += fuel_step_kg
         m = max(m - fuel_step_kg, MASS_FLOOR_KG)
         t += dt_s
 
+    floor_violated = (
+        climb_dive is not None
+        and min_powered_altitude_m
+        < climb_dive.floor_altitude_m - V4_FLOOR_TOLERANCE_M
+    )
     return FlightResult(
         states, motor_cutoff_reached, landed, safe_landing, hit_mass_floor,
         stalled, crossover_mach, min_powered_thrust_margin, min_margin_mach,
         min_powered_accel_g, min_accel_mach,
         min_traverse_accel_g, min_traverse_accel_mach, v3_top_altitude_m,
         rule_violated, rule_violation_mach,
+        peak_load_n_total, peak_load_n_yaw, peak_load_n_roll, peak_load_mode,
+        pushover_radius_m, pullout_radius_m, spiral_radius_m,
+        pushover_duration_s, pullout_duration_s,
+        pullout_entry_altitude_m, pullout_entry_mach,
+        min_powered_altitude_m, floor_violated, dive_exit_mach,
+        ramjet_lightoff_mach, ramjet_lightoff_altitude_m,
+        ramjet_lightoff_time_s, ramjet_lightoff_mode, ramjet_lit_in_dive,
+        min_pushover_accel_g,
     )
