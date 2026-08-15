@@ -112,7 +112,7 @@ peak T/W 6.89, margin 1.21 @ M1.10. Full table + plots:
   DOUGLAS_DART_DISABLE_PULSEJET_FP=1 DOUGLAS_DART_DISABLE_RAMJET_FP=1 \
     .venv/Scripts/python -m unittest discover tests
   ```
-  Green = `Ran 254 tests ... OK (skipped=2)`, ~1150 s (verified 2026-08-14;
+  Green = `Ran 278 tests ... OK (skipped=2)`, ~1040 s (verified 2026-08-14;
   was 152/~814 s on 2026-08-12 — the count grows, so treat it as a floor, not
   an equality). Never pipe the run through `tail` — the pipeline exit code is
   `tail`'s, not Python's, and it masks failures. Redirect to a file and
@@ -224,6 +224,39 @@ peak T/W 6.89, margin 1.21 @ M1.10. Full table + plots:
   duct-inside-OML containment, the capture rule against the export's own
   mass-flow figure, provenance tagging, and the viewer's interactive paths
   headless.
+
+## Translating-inlet shut-off (config B, 2026-08-14)
+
+- **`scripts/propulsion_2d_full_drawing.py` is the current design drawing.**
+  It imports config A's kernel but builds its own contours; a test asserts it
+  cannot mutate A, and A's five files stay byte-identical to freeze `8df8b12`.
+- Purpose (user directive): shut the ramjet intake while the pulsejet runs.
+  **Why it works**: for fixed capture area `h ~ A/2πR`, so moving the annulus
+  outboard thins it, and `stroke = h/tan(θ_seal)` — both levers multiply.
+  Closing stroke **28.22 → 7.88 mm**.
+- Architecture, with the **OML fixed** (user directive): fixed nose fairing on
+  a spar carries the avionics (no harness across a moving joint); annular slot
+  at its shoulder is the capture plane; a sleeve rides the spar and telescopes
+  forward, its 45° cone seating on the cowl lip. Nothing outside the cowl moves.
+- Final: slot 300 mm at r 83.46, gap/stroke 7.88 mm, **95.4 cm² faying**
+  (12 mm land), nose volume 1.79 L, diffuser 128 mm, **dump 4.18×**. Plus a
+  160×10 mm pitot-static boom, an annular V-gutter flameholder (x 537 mm,
+  29% blockage) and 2×57 mm reed-valve side runners (51 cm², 15% of chamber,
+  drawn OUTBOARD — they do not fit in a 214 mm skin).
+- **Two faults the automated checks caught, both now guarded**: (1) the duct
+  left the OML by ~2.5 mm over x 300–315 because the sleeve rises 7.88 mm
+  where the cowl only grew 1.3 — fixed with a fast lip + hard clamp; (2) the
+  faying land **necked the duct to 15.8 cm²**, 40% of capture, because when
+  retracted the land sits in the open flow path — fixed by pulling the lip
+  0.86 → 0.78 of body radius. Both checks print every run.
+- Trade still open: 124 cm² faying at `--lip-frac 0.74 --faying-mm 16`, costing
+  8.35 mm stroke and more nose volume.
+- **Final report: `docs/propulsion_2d_final_report.md`** — includes a
+  which-numbers-you-may-lean-on table. Short version: the model has **no inlet,
+  no diffuser and no duct forward of the chamber at all**, so every area
+  forward of x=428 is invented to satisfy one flown number (capture 39.4 cm²,
+  itself an *implied* floor back-calculated from FP mass flow).
+- Tests: `tests/test_translating_inlet.py` (24, ~10 s).
 
 ## Repo layout notes
 
